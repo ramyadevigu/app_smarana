@@ -95,7 +95,12 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
           ? null
           : _descriptionController.text.trim(),
       dateTime: dateTime,
-      recurrence: _recurrence,
+      recurrenceRule: RecurrenceRule(
+        type: _recurrence,
+        dayOfMonth: _recurrence == RecurrenceType.monthly
+            ? _selectedDate.day
+            : null,
+      ),
       enabled: true,
       createdAt: DateTime.now(),
     );
@@ -127,23 +132,45 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
     switch (type) {
       case RecurrenceType.none:
         return 'Does not repeat';
+
       case RecurrenceType.daily:
         return 'Every day';
+
       case RecurrenceType.weekly:
         return 'Every week';
+
       case RecurrenceType.monthly:
-        return 'Every month';
+        return 'Every month on the ${_ordinal(_selectedDate.day)}';
+
       case RecurrenceType.yearly:
         return 'Every year';
+    }
+  }
+
+  String _ordinal(int number) {
+    if (number >= 11 && number <= 13) {
+      return '${number}th';
+    }
+
+    switch (number % 10) {
+      case 1:
+        return '${number}st';
+
+      case 2:
+        return '${number}nd';
+
+      case 3:
+        return '${number}rd';
+
+      default:
+        return '${number}th';
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Add Reminder'),
-      ),
+      appBar: AppBar(title: const Text('Add Reminder')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -243,9 +270,7 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
                     ? const SizedBox(
                         width: 22,
                         height: 22,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                        ),
+                        child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Text('Save Reminder'),
               ),

@@ -10,7 +10,7 @@ void main() {
       id: 'reminder',
       title: 'Reminder',
       dateTime: dateTime,
-      recurrence: recurrence,
+      recurrenceRule: RecurrenceRule(type: recurrence),
       createdAt: DateTime(2026),
     );
   }

@@ -4,7 +4,7 @@ class RecurrenceService {
   DateTime? nextOccurrence(Reminder reminder, {required DateTime after}) {
     final start = reminder.dateTime;
 
-    switch (reminder.recurrence) {
+    switch (reminder.recurrenceRule.type) {
       case RecurrenceType.none:
         return null;
       case RecurrenceType.daily:

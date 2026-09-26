@@ -72,7 +72,7 @@ class _RemindersScreenState extends State<RemindersScreen> {
   }
 
   Future<void> _completeReminder(Reminder reminder) async {
-    if (reminder.recurrence == RecurrenceType.none) {
+    if (reminder.recurrenceRule.type == RecurrenceType.none) {
       await _updateReminder(reminder.copyWith(isCompleted: true));
       return;
     }
@@ -262,15 +262,18 @@ class _RemindersScreenState extends State<RemindersScreen> {
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
-                              if (reminder.recurrence != RecurrenceType.none ||
+                              if (reminder.recurrenceRule.type !=
+                                      RecurrenceType.none ||
                                   !reminder.enabled)
                                 Padding(
                                   padding: const EdgeInsets.only(top: 4),
                                   child: Text(
                                     [
-                                      if (reminder.recurrence !=
+                                      if (reminder.recurrenceRule.type !=
                                           RecurrenceType.none)
-                                        _recurrenceLabel(reminder.recurrence),
+                                        _recurrenceLabel(
+                                          reminder.recurrenceRule.type,
+                                        ),
                                       if (!reminder.enabled) 'Disabled',
                                     ].join(' · '),
                                     style: Theme.of(context)
@@ -350,7 +353,7 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
 
       _selectedTime = TimeOfDay.fromDateTime(reminder.dateTime);
 
-      _recurrence = reminder.recurrence;
+      _recurrence = reminder.recurrenceRule.type;
       _enabled = reminder.enabled;
     } else {
       // Creating a new reminder.
@@ -507,7 +510,7 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
           ? null
           : _descriptionController.text.trim(),
       dateTime: dateTime,
-      recurrence: _recurrence,
+      recurrenceRule: RecurrenceRule(type: _recurrence),
       enabled: _enabled,
       isCompleted: widget.reminder?.isCompleted ?? false,
       createdAt: widget.reminder?.createdAt ?? DateTime.now(),
