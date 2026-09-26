@@ -1,10 +1,4 @@
-enum RecurrenceType {
-  none,
-  daily,
-  weekly,
-  monthly,
-  yearly,
-}
+enum RecurrenceType { none, daily, weekly, monthly, yearly }
 
 class Reminder {
   final String id;
@@ -13,6 +7,7 @@ class Reminder {
   final DateTime dateTime;
   final RecurrenceType recurrence;
   final bool enabled;
+  final bool isCompleted;
   final DateTime createdAt;
 
   const Reminder({
@@ -22,8 +17,22 @@ class Reminder {
     required this.dateTime,
     this.recurrence = RecurrenceType.none,
     this.enabled = true,
+    this.isCompleted = false,
     required this.createdAt,
   });
+
+  Reminder copyWith({DateTime? dateTime, bool? enabled, bool? isCompleted}) {
+    return Reminder(
+      id: id,
+      title: title,
+      description: description,
+      dateTime: dateTime ?? this.dateTime,
+      recurrence: recurrence,
+      enabled: enabled ?? this.enabled,
+      isCompleted: isCompleted ?? this.isCompleted,
+      createdAt: createdAt,
+    );
+  }
 
   Map<String, dynamic> toJson() {
     return {
@@ -33,6 +42,7 @@ class Reminder {
       'dateTime': dateTime.toIso8601String(),
       'recurrence': recurrence.name,
       'enabled': enabled,
+      'isCompleted': isCompleted,
       'createdAt': createdAt.toIso8601String(),
     };
   }
@@ -48,6 +58,7 @@ class Reminder {
         orElse: () => RecurrenceType.none,
       ),
       enabled: json['enabled'] ?? true,
+      isCompleted: json['isCompleted'] ?? false,
       createdAt: DateTime.parse(json['createdAt']),
     );
   }
