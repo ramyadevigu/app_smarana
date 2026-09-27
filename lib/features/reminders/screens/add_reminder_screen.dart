@@ -23,6 +23,8 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
 
   RecurrenceType _recurrence = RecurrenceType.none;
 
+  int? _selectedDayOfWeek;
+
   bool _isSaving = false;
 
   @override
@@ -46,6 +48,12 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
 
     setState(() {
       _selectedDate = date;
+
+      // If weekly recurrence is already selected,
+      // update the weekday to match the selected date.
+      if (_recurrence == RecurrenceType.weekly) {
+        _selectedDayOfWeek = date.weekday;
+      }
     });
   }
 
@@ -64,6 +72,79 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
     });
   }
 
+  Future<void> _selectRecurrence() async {
+    final selected = await showModalBottomSheet<RecurrenceType>(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: RecurrenceType.values.map((type) {
+              return ListTile(
+                leading: Icon(_recurrenceIcon(type)),
+                title: Text(_recurrenceLabel(type)),
+                trailing: type == _recurrence
+                    ? const Icon(Icons.check)
+                    : null,
+                onTap: () {
+                  Navigator.pop(context, type);
+                },
+              );
+            }).toList(),
+          ),
+        );
+      },
+    );
+
+    if (selected == null) {
+      return;
+    }
+
+    setState(() {
+      _recurrence = selected;
+
+      if (selected == RecurrenceType.weekly) {
+        _selectedDayOfWeek = _selectedDayOfWeek ?? _selectedDate.weekday;
+      }
+    });
+
+    if (selected == RecurrenceType.weekly) {
+      await _selectWeekday();
+    }
+  }
+
+  Future<void> _selectWeekday() async {
+    final selected = await showModalBottomSheet<int>(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: List.generate(7, (index) {
+              final day = index + 1;
+
+              return ListTile(
+                title: Text(_weekdayName(day)),
+                trailing: day == _selectedDayOfWeek
+                    ? const Icon(Icons.check)
+                    : null,
+                onTap: () {
+                  Navigator.pop(context, day);
+                },
+              );
+            }),
+          ),
+        );
+      },
+    );
+
+    if (selected != null) {
+      setState(() {
+        _selectedDayOfWeek = selected;
+      });
+    }
+  }
+
   Future<void> _saveReminder() async {
     final title = _titleController.text.trim();
 
@@ -71,6 +152,16 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please enter a reminder title.'),
+        ),
+      );
+      return;
+    }
+
+    if (_recurrence == RecurrenceType.weekly &&
+        _selectedDayOfWeek == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select a weekday.'),
         ),
       );
       return;
@@ -99,6 +190,9 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
         type: _recurrence,
         dayOfMonth: _recurrence == RecurrenceType.monthly
             ? _selectedDate.day
+            : null,
+        dayOfWeek: _recurrence == RecurrenceType.weekly
+            ? _selectedDayOfWeek
             : null,
       ),
       enabled: true,
@@ -137,13 +231,61 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
         return 'Every day';
 
       case RecurrenceType.weekly:
-        return 'Every week';
+        final day = _selectedDayOfWeek ?? _selectedDate.weekday;
+        return 'Every ${_weekdayName(day)}';
 
       case RecurrenceType.monthly:
         return 'Every month on the ${_ordinal(_selectedDate.day)}';
 
       case RecurrenceType.yearly:
         return 'Every year';
+    }
+  }
+
+  IconData _recurrenceIcon(RecurrenceType type) {
+    switch (type) {
+      case RecurrenceType.none:
+        return Icons.event;
+
+      case RecurrenceType.daily:
+        return Icons.today;
+
+      case RecurrenceType.weekly:
+        return Icons.view_week;
+
+      case RecurrenceType.monthly:
+        return Icons.calendar_month;
+
+      case RecurrenceType.yearly:
+        return Icons.date_range;
+    }
+  }
+
+  String _weekdayName(int day) {
+    switch (day) {
+      case DateTime.monday:
+        return 'Monday';
+
+      case DateTime.tuesday:
+        return 'Tuesday';
+
+      case DateTime.wednesday:
+        return 'Wednesday';
+
+      case DateTime.thursday:
+        return 'Thursday';
+
+      case DateTime.friday:
+        return 'Friday';
+
+      case DateTime.saturday:
+        return 'Saturday';
+
+      case DateTime.sunday:
+        return 'Sunday';
+
+      default:
+        return '';
     }
   }
 
@@ -170,7 +312,9 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Add Reminder')),
+      appBar: AppBar(
+        title: const Text('Add Reminder'),
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -228,36 +372,25 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
               title: const Text('Repeat'),
               subtitle: Text(_recurrenceLabel(_recurrence)),
               trailing: const Icon(Icons.chevron_right),
-              onTap: () async {
-                final selected = await showModalBottomSheet<RecurrenceType>(
-                  context: context,
-                  builder: (context) {
-                    return SafeArea(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: RecurrenceType.values.map((type) {
-                          return ListTile(
-                            title: Text(_recurrenceLabel(type)),
-                            trailing: type == _recurrence
-                                ? const Icon(Icons.check)
-                                : null,
-                            onTap: () {
-                              Navigator.pop(context, type);
-                            },
-                          );
-                        }).toList(),
-                      ),
-                    );
-                  },
-                );
-
-                if (selected != null) {
-                  setState(() {
-                    _recurrence = selected;
-                  });
-                }
-              },
+              onTap: _selectRecurrence,
             ),
+
+            if (_recurrence == RecurrenceType.weekly) ...[
+              const Divider(),
+
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.calendar_view_week),
+                title: const Text('Weekday'),
+                subtitle: Text(
+                  _weekdayName(
+                    _selectedDayOfWeek ?? _selectedDate.weekday,
+                  ),
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: _selectWeekday,
+              ),
+            ],
 
             const SizedBox(height: 32),
 
@@ -270,7 +403,9 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
                     ? const SizedBox(
                         width: 22,
                         height: 22,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                        ),
                       )
                     : const Text('Save Reminder'),
               ),
