@@ -2,138 +2,251 @@
 applyTo: "**"
 description: "Project-wide instructions for the local-first Flutter reminder app"
 ---
+# Smaraṇa — Flutter Reminder App
 
-# Smarana Reminder App
+## Project Goal
 
-Build this Android-first Flutter app as a simple, reliable, offline-first reminder
-and calendar application. The highest-priority product requirement is that an
-active reminder triggers at its intended local date and time.
+Build a reliable Flutter reminder application called **Smaraṇa**.
 
-## Scope
+The application allows users to:
 
-Implement only these Version 1 capabilities unless the user explicitly expands
-the scope:
+* Create reminders
+* Edit reminders
+* Delete reminders
+* View reminders
+* Set a date and time
+* Add optional descriptions
+* Create recurring reminders
+* Support daily, weekly, monthly and yearly recurrence
+* Persist reminders locally
+* Schedule notifications
+* Trigger notifications even when the application is closed
+* Handle recurring reminders correctly
+* Display the next occurrence of recurring reminders
+* Avoid duplicate notifications
+* Provide a simple, clean and reliable UI
 
-- Calendar with month navigation, date selection, today, reminder indicators, and
-  reminders for the selected date
-- Create, read, edit, delete, enable/disable, and complete reminders
-- One-time, daily, weekly, monthly, yearly, and custom recurrence
-- Monthly recurrence on a specific day or the last day of the month
-- Normal notifications, alarm-style reminders, sound, vibration, permissions,
-  and snooze (5, 10, 15, 30 minutes, 1 hour, or custom)
-- Upcoming reminders grouped as Today, Tomorrow, and Upcoming
-- Local search over title and description
-- Basic notification, appearance (light/dark/system), and about settings
+## Technology
 
-Do not add accounts, cloud sync, backends, calendar integrations, AI, social
-features, payments, advertising, web support, or iOS support unless explicitly
-requested.
+* Flutter
+* Dart
+* Material 3
+* SharedPreferences for local persistence
+* flutter_local_notifications for notifications
+* timezone for timezone-aware scheduling
+* uuid for reminder IDs
 
-## Technology and Structure
+## Architecture
 
-Use the existing Flutter/Dart project and conventions. Prefer:
+Use a simple layered architecture:
 
-- Riverpod for focused state providers
-- Drift/SQLite as the local source of truth
-- `flutter_local_notifications` where appropriate
-- Isolated Android APIs for exact alarms, full-screen intents, and reboot recovery
-
-Keep responsibilities separate:
-
-```text
-UI -> Riverpod/ViewModel -> domain/services -> repository -> database
-```
-
-Do not put business logic or recurrence calculations in widgets. Keep
-notification and alarm scheduling in dedicated services. Do not add a dependency
-unless the SDK or an existing dependency cannot solve the problem.
-
-Follow the existing feature-oriented layout:
-
-```text
 lib/
-  main.dart
-  app/
-  core/
-  features/
-    calender/
-    reminders/
-    settings/
-```
+main.dart
+models/
+reminder.dart
+screens/
+reminders_screen.dart
+add_reminder_screen.dart
+services/
+reminder_storage.dart
+notification_service.dart
+utils/
+recurrence_utils.dart
 
-The current shell already contains Calendar, Reminders, and Settings, with
-Calendar as the initial screen. Preserve it unless the requested change requires
-otherwise.
+Keep UI, models, persistence, recurrence calculations and notification scheduling separate.
 
-## Data and Reliability Rules
+## Important Rules
 
-The database is the source of truth; scheduled notifications and alarms are
-derived state. Store canonical `DateTime` values, never formatted date strings.
-A reminder model should include:
+1. Do not rewrite working code unnecessarily.
+2. Before modifying a file, inspect the existing implementation.
+3. Preserve existing functionality.
+4. Do not introduce duplicate models or services.
+5. Do not create multiple competing implementations of the same feature.
+6. Use null-safe Dart.
+7. Avoid deprecated Flutter APIs.
+8. Do not use `print()` for production logging.
+9. Handle errors gracefully.
+10. Keep the UI simple.
+11. Do not add unnecessary packages.
+12. Run `flutter analyze` after significant changes.
+13. Run the application and test the changed functionality.
+14. Do not mark a feature complete until it has been tested.
+15. When a requirement is ambiguous, inspect the existing project before making assumptions.
 
-```text
-id, title, description, startDateTime, reminderType, recurrenceType,
-recurrenceData, isEnabled, isCompleted, createdAt, updatedAt
-```
+## Reminder Model
 
-Repositories must keep persistence separate from UI and support create, read by
-ID, list, update, and delete.
+A reminder must have:
 
-When a reminder is created, edited, deleted, enabled, disabled, completed, or
-snoozed, synchronize its schedule. Editing cancels the old schedule before
-creating the new one; deletion cancels it. Never leave obsolete schedules active.
+* id
+* title
+* description
+* scheduled date/time
+* recurrence type
+* recurrence configuration
+* enabled/active state
 
-Recurrence must correctly handle month lengths, leap years, local time, past
-occurrences, and clock/time-zone changes. A missing monthly date must follow one
-consistent, tested product rule. Keep recurrence rules unchanged by snooze.
-Completing a recurring reminder completes only the current occurrence and
-calculates the next one; it must not permanently complete the rule.
+Supported recurrence types:
 
-Account for app foreground/background/termination, locked devices, reboot,
-timezone changes, clock changes, notification permission, exact-alarm permission,
-and battery restrictions. Do not use a continuously running Flutter timer.
-After reboot, load active reminders from the database and reschedule them.
+* none
+* daily
+* weekly
+* monthly
+* yearly
 
-## Implementation Order
+Examples:
 
-Work incrementally and avoid jumping ahead without an explicit request:
+One-time:
 
-1. Local database
-2. Reminder model and repository CRUD
-3. Create/edit reminder UI
-4. Calendar and selected-date reminders
-5. Recurrence engine
-6. Notification/alarm scheduling
-7. Completion, recurring completion, and snooze
-8. Upcoming reminders and search
-9. Settings, reboot recovery, and timezone/clock handling
-10. Tests and UI refinement
+15 October 2026 at 09:30 AM
 
-## Coding and UX Standards
+Daily:
 
-- Follow the applicable Dart/Flutter instructions and existing project style.
-- Prefer strong types, immutable models, `const`, small widgets, meaningful
-  names, async/await, and clear error handling.
-- Avoid unnecessary abstractions, duplicate logic, giant widgets, and `dynamic`.
-- Keep the UI practical, uncluttered, and consistent with the existing shell.
-- Show simple user-facing errors; never silently discard database, scheduling,
-  permission, or validation failures, and never show stack traces.
-- Ask for clarification only when an ambiguity changes user-visible behavior;
-  otherwise make a conservative decision and test it.
-- Do not rewrite unrelated working code or remove existing user changes.
+Every day at 09:30 AM
 
-## Validation
+Weekly:
 
-After meaningful changes:
+Every Monday at 09:30 AM
 
-1. Format changed Dart files with `dart format`.
-2. Run `flutter analyze`.
-3. Run focused tests, then `flutter test` when appropriate.
+Monthly:
 
-Prioritize tests for CRUD, daily/weekly/monthly/yearly recurrence, specific and
-last-day monthly recurrence, leap years, recurring completion, snooze, past
-occurrences, and scheduling synchronization. Test notification/alarm behavior on
-a real Android device when practical.
+3rd day of every month at 09:30 AM
 
-Before finishing, confirm that the change is within scope, business logic is out
-of widgets, old schedules are cancelled, and the relevant validation passes.
+Yearly:
+
+15 October every year at 09:30 AM
+
+## Recurrence Requirements
+
+Monthly recurrence must correctly handle months with different numbers of days.
+
+For example:
+
+31st of every month
+
+If a month does not contain day 31, do not create an invalid date.
+
+The recurrence logic must be centralized in one utility/service.
+
+## Persistence
+
+All reminders must survive application restart.
+
+Saving, loading, updating and deleting reminders must use the same storage service.
+
+Storage format must be versionable and safely decoded.
+
+Corrupted stored data must not crash the application.
+
+## Notification Requirements
+
+Notifications must:
+
+* use a unique notification ID
+* contain reminder title
+* contain reminder description when available
+* respect the selected date/time
+* work when the application is closed
+* work for recurring reminders
+* avoid duplicate scheduling
+* be cancelled when a reminder is deleted
+* be rescheduled when a reminder is edited
+* be cancelled when a reminder is disabled
+
+## UI Requirements
+
+The application should have:
+
+### Reminders Screen
+
+Display:
+
+* application title
+* list of reminders
+* reminder title
+* description if available
+* scheduled date/time
+* recurrence information
+* enabled/disabled state
+* add button
+
+Tapping a reminder opens the edit screen.
+
+Long press or an appropriate menu can provide delete functionality.
+
+### Add/Edit Reminder Screen
+
+Fields:
+
+* Title
+* Description
+* Date
+* Time
+* Recurrence
+
+The same screen should support both creating and editing.
+
+Use clear validation.
+
+Title is required.
+
+## Code Quality
+
+Prefer small functions with one responsibility.
+
+Do not put storage, recurrence calculations or notification scheduling directly inside widgets.
+
+Before completing a task:
+
+1. Run `flutter analyze`.
+2. Fix all errors.
+3. Review warnings.
+4. Test the relevant user flow.
+5. Explain what changed.
+
+## Git Workflow
+
+Make changes in small logical stages.
+
+After each completed stage:
+
+* run analysis
+* test the application
+* review changed files
+* commit the changes
+
+Use meaningful commit messages.
+
+Example:
+
+feat: implement recurring reminder model
+
+fix: correct monthly recurrence calculation
+
+feat: add local notification scheduling
+
+## Completion Criteria
+
+The application is complete only when the following work:
+
+1. Create one-time reminder
+2. Edit reminder
+3. Delete reminder
+4. Persist reminder
+5. Restart application and retain reminder
+6. Create daily reminder
+7. Create weekly reminder
+8. Create monthly reminder
+9. Create yearly reminder
+10. Schedule notification
+11. Receive notification when app is closed
+12. Edit notification schedule
+13. Delete notification
+14. Disable notification
+15. Re-enable notification
+16. Handle invalid recurrence dates
+17. Handle application restart
+18. Handle corrupted local storage safely
+19. No duplicate notifications
+20. `flutter analyze` passes without errors
+
+Do not declare the project complete until all applicable requirements have been verified.
