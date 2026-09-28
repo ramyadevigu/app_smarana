@@ -5,27 +5,71 @@ import '../models/reminder.dart';
 import '../services/reminder_storage.dart';
 
 class AddReminderScreen extends StatefulWidget {
-  const AddReminderScreen({super.key});
+  final Reminder? reminder;
+
+  const AddReminderScreen({super.key, this.reminder});
+
+  bool get isEditing => reminder != null;
 
   @override
   State<AddReminderScreen> createState() => _AddReminderScreenState();
 }
 
 class _AddReminderScreenState extends State<AddReminderScreen> {
+  static const _monthNames = [
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
+  ];
+
+  final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
-
   final _storage = ReminderStorage();
   final _uuid = const Uuid();
 
-  DateTime _selectedDate = DateTime.now();
-  TimeOfDay _selectedTime = TimeOfDay.now();
-
+  DateTime? _selectedDate;
+  TimeOfDay? _selectedTime;
   RecurrenceType _recurrence = RecurrenceType.none;
-
-  int? _selectedDayOfWeek;
-
+  bool _enabled = true;
   bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+
+    final reminder = widget.reminder;
+    if (reminder != null) {
+      _titleController.text = reminder.title;
+      _descriptionController.text = reminder.description ?? '';
+      _selectedDate = DateTime(
+        reminder.dateTime.year,
+        reminder.dateTime.month,
+        reminder.dateTime.day,
+      );
+      _selectedTime = TimeOfDay.fromDateTime(reminder.dateTime);
+      _recurrence = reminder.recurrenceRule.type;
+      _enabled = reminder.enabled;
+      return;
+    }
+
+    final initialDateTime = DateTime.now().add(const Duration(minutes: 5));
+    _selectedDate = DateTime(
+      initialDateTime.year,
+      initialDateTime.month,
+      initialDateTime.day,
+    );
+    _selectedTime = TimeOfDay.fromDateTime(initialDateTime);
+  }
 
   @override
   void dispose() {
@@ -34,11 +78,15 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
     super.dispose();
   }
 
-  Future<void> _selectDate() async {
+  Future<void> _selectDate(FormFieldState<DateTime> field) async {
+    final today = DateTime.now();
+    final firstDate = widget.isEditing
+        ? DateTime(1900)
+        : DateTime(today.year, today.month, today.day);
     final date = await showDatePicker(
       context: context,
-      initialDate: _selectedDate,
-      firstDate: DateTime.now(),
+      initialDate: _selectedDate ?? today,
+      firstDate: firstDate,
       lastDate: DateTime(2100),
     );
 
@@ -48,19 +96,14 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
 
     setState(() {
       _selectedDate = date;
-
-      // If weekly recurrence is already selected,
-      // update the weekday to match the selected date.
-      if (_recurrence == RecurrenceType.weekly) {
-        _selectedDayOfWeek = date.weekday;
-      }
     });
+    field.didChange(date);
   }
 
-  Future<void> _selectTime() async {
+  Future<void> _selectTime(FormFieldState<TimeOfDay> field) async {
     final time = await showTimePicker(
       context: context,
-      initialTime: _selectedTime,
+      initialTime: _selectedTime ?? TimeOfDay.now(),
     );
 
     if (time == null) {
@@ -70,6 +113,7 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
     setState(() {
       _selectedTime = time;
     });
+    field.didChange(time);
   }
 
   Future<void> _selectRecurrence() async {
@@ -81,14 +125,11 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
             mainAxisSize: MainAxisSize.min,
             children: RecurrenceType.values.map((type) {
               return ListTile(
+                key: ValueKey('repeat-${type.name}'),
                 leading: Icon(_recurrenceIcon(type)),
-                title: Text(_recurrenceLabel(type)),
-                trailing: type == _recurrence
-                    ? const Icon(Icons.check)
-                    : null,
-                onTap: () {
-                  Navigator.pop(context, type);
-                },
+                title: Text(_recurrenceOptionLabel(type)),
+                trailing: type == _recurrence ? const Icon(Icons.check) : null,
+                onTap: () => Navigator.of(context).pop(type),
               );
             }).toList(),
           ),
@@ -96,197 +137,144 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
       },
     );
 
-    if (selected == null) {
+    if (selected == null || !mounted) {
       return;
     }
 
     setState(() {
       _recurrence = selected;
-
-      if (selected == RecurrenceType.weekly) {
-        _selectedDayOfWeek = _selectedDayOfWeek ?? _selectedDate.weekday;
-      }
     });
-
-    if (selected == RecurrenceType.weekly) {
-      await _selectWeekday();
-    }
-  }
-
-  Future<void> _selectWeekday() async {
-    final selected = await showModalBottomSheet<int>(
-      context: context,
-      builder: (context) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: List.generate(7, (index) {
-              final day = index + 1;
-
-              return ListTile(
-                title: Text(_weekdayName(day)),
-                trailing: day == _selectedDayOfWeek
-                    ? const Icon(Icons.check)
-                    : null,
-                onTap: () {
-                  Navigator.pop(context, day);
-                },
-              );
-            }),
-          ),
-        );
-      },
-    );
-
-    if (selected != null) {
-      setState(() {
-        _selectedDayOfWeek = selected;
-      });
-    }
   }
 
   Future<void> _saveReminder() async {
+    if (!(_formKey.currentState?.validate() ?? false)) {
+      return;
+    }
+
     final title = _titleController.text.trim();
-
-    if (title.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter a reminder title.'),
-        ),
-      );
+    final date = _selectedDate;
+    final time = _selectedTime;
+    if (date == null || time == null) {
       return;
     }
 
-    if (_recurrence == RecurrenceType.weekly &&
-        _selectedDayOfWeek == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select a weekday.'),
-        ),
-      );
-      return;
-    }
-
-    final dateTime = DateTime(
-      _selectedDate.year,
-      _selectedDate.month,
-      _selectedDate.day,
-      _selectedTime.hour,
-      _selectedTime.minute,
+    final existing = widget.reminder;
+    final reminder = Reminder(
+      id: existing?.id ?? _uuid.v4(),
+      title: title,
+      description: _descriptionController.text.trim().isEmpty
+          ? null
+          : _descriptionController.text.trim(),
+      dateTime: DateTime(
+        date.year,
+        date.month,
+        date.day,
+        time.hour,
+        time.minute,
+      ),
+      recurrenceRule: RecurrenceRule(
+        type: _recurrence,
+        dayOfMonth: _recurrence == RecurrenceType.monthly ? date.day : null,
+        dayOfWeek: _recurrence == RecurrenceType.weekly ? date.weekday : null,
+      ),
+      enabled: _enabled,
+      isCompleted: existing?.isCompleted ?? false,
+      createdAt: existing?.createdAt ?? DateTime.now(),
     );
 
     setState(() {
       _isSaving = true;
     });
 
-    final reminder = Reminder(
-      id: _uuid.v4(),
-      title: title,
-      description: _descriptionController.text.trim().isEmpty
-          ? null
-          : _descriptionController.text.trim(),
-      dateTime: dateTime,
-      recurrenceRule: RecurrenceRule(
-        type: _recurrence,
-        dayOfMonth: _recurrence == RecurrenceType.monthly
-            ? _selectedDate.day
-            : null,
-        dayOfWeek: _recurrence == RecurrenceType.weekly
-            ? _selectedDayOfWeek
-            : null,
-      ),
-      enabled: true,
-      createdAt: DateTime.now(),
-    );
+    try {
+      if (widget.isEditing) {
+        await _storage.updateReminder(reminder);
+      } else {
+        await _storage.addReminder(reminder);
+      }
 
-    await _storage.addReminder(reminder);
-
-    if (!mounted) {
-      return;
+      if (mounted) {
+        Navigator.of(context).pop(reminder);
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Unable to save the reminder.')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
+      }
     }
-
-    setState(() {
-      _isSaving = false;
-    });
-
-    Navigator.of(context).pop(reminder);
   }
 
-  String _formatDate() {
-    return '${_selectedDate.day.toString().padLeft(2, '0')}/'
-        '${_selectedDate.month.toString().padLeft(2, '0')}/'
-        '${_selectedDate.year}';
+  String _formatDate(BuildContext context, DateTime? date) {
+    return date == null
+        ? 'Select a date'
+        : MaterialLocalizations.of(context).formatMediumDate(date);
   }
 
-  String _formatTime() {
-    return _selectedTime.format(context);
+  String _formatTime(BuildContext context, TimeOfDay? time) {
+    return time?.format(context) ?? 'Select a time';
   }
 
-  String _recurrenceLabel(RecurrenceType type) {
-    switch (type) {
-      case RecurrenceType.none:
-        return 'Does not repeat';
+  String _recurrenceOptionLabel(RecurrenceType type) {
+    return switch (type) {
+      RecurrenceType.none => 'Does not repeat',
+      RecurrenceType.daily => 'Every day',
+      RecurrenceType.weekly => 'Every week',
+      RecurrenceType.monthly => 'Every month',
+      RecurrenceType.yearly => 'Every year',
+    };
+  }
 
-      case RecurrenceType.daily:
-        return 'Every day';
+  String _recurrenceSummary(BuildContext context) {
+    final time = _selectedTime?.format(context);
+    final timeSuffix = time == null ? '' : ' at $time';
 
-      case RecurrenceType.weekly:
-        final day = _selectedDayOfWeek ?? _selectedDate.weekday;
-        return 'Every ${_weekdayName(day)}';
+    return switch (_recurrence) {
+      RecurrenceType.none => 'Does not repeat',
+      RecurrenceType.daily => 'Every day$timeSuffix',
+      RecurrenceType.weekly =>
+        'Every ${_weekdayName(_selectedDate?.weekday ?? DateTime.now().weekday)}'
+            '$timeSuffix',
+      RecurrenceType.monthly =>
+        '${_ordinal(_selectedDate?.day ?? DateTime.now().day)} of every month'
+            '$timeSuffix',
+      RecurrenceType.yearly => _yearlySummary(timeSuffix),
+    };
+  }
 
-      case RecurrenceType.monthly:
-        return 'Every month on the ${_ordinal(_selectedDate.day)}';
-
-      case RecurrenceType.yearly:
-        return 'Every year';
-    }
+  String _yearlySummary(String timeSuffix) {
+    final date = _selectedDate ?? DateTime.now();
+    return 'Every year on ${date.day} ${_monthNames[date.month - 1]}'
+        '$timeSuffix';
   }
 
   IconData _recurrenceIcon(RecurrenceType type) {
-    switch (type) {
-      case RecurrenceType.none:
-        return Icons.event;
-
-      case RecurrenceType.daily:
-        return Icons.today;
-
-      case RecurrenceType.weekly:
-        return Icons.view_week;
-
-      case RecurrenceType.monthly:
-        return Icons.calendar_month;
-
-      case RecurrenceType.yearly:
-        return Icons.date_range;
-    }
+    return switch (type) {
+      RecurrenceType.none => Icons.event,
+      RecurrenceType.daily => Icons.today,
+      RecurrenceType.weekly => Icons.view_week,
+      RecurrenceType.monthly => Icons.calendar_month,
+      RecurrenceType.yearly => Icons.date_range,
+    };
   }
 
   String _weekdayName(int day) {
-    switch (day) {
-      case DateTime.monday:
-        return 'Monday';
-
-      case DateTime.tuesday:
-        return 'Tuesday';
-
-      case DateTime.wednesday:
-        return 'Wednesday';
-
-      case DateTime.thursday:
-        return 'Thursday';
-
-      case DateTime.friday:
-        return 'Friday';
-
-      case DateTime.saturday:
-        return 'Saturday';
-
-      case DateTime.sunday:
-        return 'Sunday';
-
-      default:
-        return '';
-    }
+    return switch (day) {
+      DateTime.monday => 'Monday',
+      DateTime.tuesday => 'Tuesday',
+      DateTime.wednesday => 'Wednesday',
+      DateTime.thursday => 'Thursday',
+      DateTime.friday => 'Friday',
+      DateTime.saturday => 'Saturday',
+      DateTime.sunday => 'Sunday',
+      _ => '',
+    };
   }
 
   String _ordinal(int number) {
@@ -294,123 +282,144 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
       return '${number}th';
     }
 
-    switch (number % 10) {
-      case 1:
-        return '${number}st';
+    return switch (number % 10) {
+      1 => '${number}st',
+      2 => '${number}nd',
+      3 => '${number}rd',
+      _ => '${number}th',
+    };
+  }
 
-      case 2:
-        return '${number}nd';
-
-      case 3:
-        return '${number}rd';
-
-      default:
-        return '${number}th';
+  Widget _fieldError(String? message) {
+    if (message == null) {
+      return const SizedBox.shrink();
     }
+
+    return Padding(
+      padding: const EdgeInsets.only(left: 16, top: 4),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Text(
+          message,
+          style: TextStyle(color: Theme.of(context).colorScheme.error),
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final screenTitle = widget.isEditing ? 'Edit Reminder' : 'Add Reminder';
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Add Reminder'),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TextField(
-              controller: _titleController,
-              textInputAction: TextInputAction.next,
-              decoration: const InputDecoration(
-                labelText: 'Reminder',
-                hintText: 'What do you want to remember?',
-                border: OutlineInputBorder(),
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            TextField(
-              controller: _descriptionController,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: 'Notes',
-                hintText: 'Optional notes',
-                border: OutlineInputBorder(),
-              ),
-            ),
-
-            const SizedBox(height: 24),
-
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.calendar_today),
-              title: const Text('Date'),
-              subtitle: Text(_formatDate()),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: _selectDate,
-            ),
-
-            const Divider(),
-
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.access_time),
-              title: const Text('Time'),
-              subtitle: Text(_formatTime()),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: _selectTime,
-            ),
-
-            const Divider(),
-
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.repeat),
-              title: const Text('Repeat'),
-              subtitle: Text(_recurrenceLabel(_recurrence)),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: _selectRecurrence,
-            ),
-
-            if (_recurrence == RecurrenceType.weekly) ...[
-              const Divider(),
-
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.calendar_view_week),
-                title: const Text('Weekday'),
-                subtitle: Text(
-                  _weekdayName(
-                    _selectedDayOfWeek ?? _selectedDate.weekday,
-                  ),
+      appBar: AppBar(title: Text(screenTitle)),
+      body: Form(
+        key: _formKey,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextFormField(
+                key: const ValueKey('title-field'),
+                controller: _titleController,
+                textInputAction: TextInputAction.next,
+                decoration: const InputDecoration(
+                  labelText: 'Title',
+                  hintText: 'What do you want to remember?',
+                  border: OutlineInputBorder(),
                 ),
+                validator: (value) => value == null || value.trim().isEmpty
+                    ? 'Title is required.'
+                    : null,
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                key: const ValueKey('description-field'),
+                controller: _descriptionController,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  labelText: 'Description',
+                  hintText: 'Optional details',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 24),
+              FormField<DateTime>(
+                initialValue: _selectedDate,
+                validator: (value) =>
+                    value == null ? 'Date is required.' : null,
+                builder: (field) => Column(
+                  children: [
+                    ListTile(
+                      key: const ValueKey('date-field'),
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.calendar_today),
+                      title: const Text('Date'),
+                      subtitle: Text(_formatDate(context, field.value)),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => _selectDate(field),
+                    ),
+                    _fieldError(field.errorText),
+                  ],
+                ),
+              ),
+              const Divider(),
+              FormField<TimeOfDay>(
+                initialValue: _selectedTime,
+                validator: (value) =>
+                    value == null ? 'Time is required.' : null,
+                builder: (field) => Column(
+                  children: [
+                    ListTile(
+                      key: const ValueKey('time-field'),
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.access_time),
+                      title: const Text('Time'),
+                      subtitle: Text(_formatTime(context, field.value)),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => _selectTime(field),
+                    ),
+                    _fieldError(field.errorText),
+                  ],
+                ),
+              ),
+              const Divider(),
+              ListTile(
+                key: const ValueKey('repeat-field'),
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.repeat),
+                title: const Text('Repeat'),
+                subtitle: Text(_recurrenceSummary(context)),
                 trailing: const Icon(Icons.chevron_right),
-                onTap: _selectWeekday,
+                onTap: _selectRecurrence,
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Enabled'),
+                value: _enabled,
+                onChanged: (value) => setState(() => _enabled = value),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: FilledButton(
+                  key: const ValueKey('save-reminder'),
+                  onPressed: _isSaving ? null : _saveReminder,
+                  child: _isSaving
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Text(
+                          widget.isEditing ? 'Save Changes' : 'Save Reminder',
+                        ),
+                ),
               ),
             ],
-
-            const SizedBox(height: 32),
-
-            SizedBox(
-              width: double.infinity,
-              height: 52,
-              child: FilledButton(
-                onPressed: _isSaving ? null : _saveReminder,
-                child: _isSaving
-                    ? const SizedBox(
-                        width: 22,
-                        height: 22,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                        ),
-                      )
-                    : const Text('Save Reminder'),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );

@@ -2,7 +2,7 @@
 name: app-developer
 target: vscode
 model: GPT-6 Luna (copilot)
-tools: [execute, read, agent, vscodeGeneral/rename, vscodeGeneral/usages, vscodeNotebooks/createJupyterNotebook, vscodeNotebooks/editNotebook, Dart-Code.dart-code/get_dtd_uri, Dart-Code.dart-code/dart_format, Dart-Code.dart-code/dart_fix, edit, search, web, todo]
+tools: [execute, read, agent, Dart-Code.dart-code/get_dtd_uri, Dart-Code.dart-code/dart_format, Dart-Code.dart-code/dart_fix, edit, search, web, browser, 'dart-sdk-mcp-server/*', todo]
 applyTo: "**"
 description: "Project-wide instructions for the Flutter Reminder application"
 ---

@@ -1,10 +1,4 @@
-enum RecurrenceType {
-  none,
-  daily,
-  weekly,
-  monthly,
-  yearly,
-}
+enum RecurrenceType { none, daily, weekly, monthly, yearly }
 
 class RecurrenceRule {
   final RecurrenceType type;
@@ -23,11 +17,7 @@ class RecurrenceRule {
   /// DateTime.sunday = 7
   final int? dayOfWeek;
 
-  const RecurrenceRule({
-    required this.type,
-    this.dayOfMonth,
-    this.dayOfWeek,
-  });
+  const RecurrenceRule({required this.type, this.dayOfMonth, this.dayOfWeek});
 
   Map<String, dynamic> toJson() {
     return {
@@ -37,20 +27,11 @@ class RecurrenceRule {
     };
   }
 
-  factory RecurrenceRule.fromJson(
-    Map<String, dynamic> json,
-  ) {
-    final typeName = json['type'] as String?;
-
-    final type = RecurrenceType.values.firstWhere(
-      (value) => value.name == typeName,
-      orElse: () => RecurrenceType.none,
-    );
-
+  factory RecurrenceRule.fromJson(Map<String, dynamic> json) {
     return RecurrenceRule(
-      type: type,
-      dayOfMonth: json['dayOfMonth'] as int?,
-      dayOfWeek: json['dayOfWeek'] as int?,
+      type: _recurrenceTypeFromJson(json['type']),
+      dayOfMonth: _readInteger(json['dayOfMonth'], minimum: 1, maximum: 31),
+      dayOfWeek: _readInteger(json['dayOfWeek'], minimum: 1, maximum: 7),
     );
   }
 
@@ -82,9 +63,7 @@ class Reminder {
     required this.title,
     this.description,
     required this.dateTime,
-    this.recurrenceRule = const RecurrenceRule(
-      type: RecurrenceType.none,
-    ),
+    this.recurrenceRule = const RecurrenceRule(type: RecurrenceType.none),
     this.enabled = true,
     this.isCompleted = false,
     required this.createdAt,
@@ -121,45 +100,57 @@ class Reminder {
     };
   }
 
-  factory Reminder.fromJson(
-    Map<String, dynamic> json,
-  ) {
+  factory Reminder.fromJson(Map<String, dynamic> json) {
     final recurrenceJson = json['recurrenceRule'];
-
-    RecurrenceRule recurrenceRule;
-
-    if (recurrenceJson is Map) {
-      recurrenceRule = RecurrenceRule.fromJson(
-        Map<String, dynamic>.from(recurrenceJson),
-      );
-    } else {
-      // Backward compatibility with reminders
-      // saved using the old recurrence format.
-      final oldRecurrence = json['recurrence'] as String?;
-
-      final oldType = RecurrenceType.values.firstWhere(
-        (value) => value.name == oldRecurrence,
-        orElse: () => RecurrenceType.none,
-      );
-
-      recurrenceRule = RecurrenceRule(
-        type: oldType,
-      );
-    }
+    final dateTime = _dateTimeFromJson(json['dateTime']) ?? DateTime(1970);
+    final recurrenceRule = recurrenceJson is Map
+        ? RecurrenceRule.fromJson(_stringKeyedMap(recurrenceJson))
+        : RecurrenceRule(type: _recurrenceTypeFromJson(json['recurrence']));
 
     return Reminder(
-      id: json['id'] as String,
-      title: json['title'] as String,
-      description: json['description'] as String?,
-      dateTime: DateTime.parse(
-        json['dateTime'] as String,
-      ),
+      id: json['id'] is String ? json['id'] as String : '',
+      title: json['title'] is String ? json['title'] as String : '',
+      description: json['description'] is String
+          ? json['description'] as String
+          : null,
+      dateTime: dateTime,
       recurrenceRule: recurrenceRule,
-      enabled: json['enabled'] as bool? ?? true,
-      isCompleted: json['isCompleted'] as bool? ?? false,
-      createdAt: DateTime.parse(
-        json['createdAt'] as String,
-      ),
+      enabled: json['enabled'] is bool ? json['enabled'] as bool : true,
+      isCompleted: json['isCompleted'] is bool
+          ? json['isCompleted'] as bool
+          : false,
+      createdAt: _dateTimeFromJson(json['createdAt']) ?? dateTime,
     );
   }
+}
+
+RecurrenceType _recurrenceTypeFromJson(Object? value) {
+  if (value is! String) {
+    return RecurrenceType.none;
+  }
+
+  return RecurrenceType.values.firstWhere(
+    (type) => type.name == value,
+    orElse: () => RecurrenceType.none,
+  );
+}
+
+int? _readInteger(Object? value, {required int minimum, required int maximum}) {
+  if (value is! num || !value.isFinite || value != value.roundToDouble()) {
+    return null;
+  }
+
+  final integer = value.toInt();
+  return integer >= minimum && integer <= maximum ? integer : null;
+}
+
+DateTime? _dateTimeFromJson(Object? value) {
+  return value is String ? DateTime.tryParse(value) : null;
+}
+
+Map<String, dynamic> _stringKeyedMap(Map<dynamic, dynamic> value) {
+  return {
+    for (final entry in value.entries)
+      if (entry.key is String) entry.key as String: entry.value,
+  };
 }

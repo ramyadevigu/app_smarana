@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
@@ -6,73 +7,119 @@ import '../models/reminder.dart';
 
 class ReminderStorage {
   static const String _key = 'reminders';
+  static Future<void> _operationQueue = Future<void>.value();
 
-  Future<List<Reminder>> getReminders() async {
+  Future<List<Reminder>> getReminders() {
+    return _runSerialized(_readReminders);
+  }
+
+  Future<void> saveReminders(List<Reminder> reminders) {
+    return _runSerialized(() => _writeReminders(reminders));
+  }
+
+  Future<void> addReminder(Reminder reminder) {
+    return _runSerialized(() async {
+      if (reminder.id.isEmpty) {
+        throw ArgumentError.value(reminder.id, 'reminder.id');
+      }
+
+      final reminders = await _readReminders();
+      if (reminders.any((existing) => existing.id == reminder.id)) {
+        throw StateError('A reminder with ID "${reminder.id}" already exists.');
+      }
+
+      reminders.add(reminder);
+      await _writeReminders(reminders);
+    });
+  }
+
+  Future<void> updateReminder(Reminder reminder) {
+    return _runSerialized(() async {
+      final reminders = await _readReminders();
+      final index = reminders.indexWhere((item) => item.id == reminder.id);
+
+      if (index == -1) {
+        return;
+      }
+
+      reminders[index] = reminder;
+      await _writeReminders(reminders);
+    });
+  }
+
+  Future<void> deleteReminder(String id) {
+    return _runSerialized(() async {
+      final reminders = await _readReminders();
+      reminders.removeWhere((reminder) => reminder.id == id);
+      await _writeReminders(reminders);
+    });
+  }
+
+  Future<List<Reminder>> _readReminders() async {
     final preferences = await SharedPreferences.getInstance();
-
-    final jsonString = preferences.getString(_key);
-
-    if (jsonString == null || jsonString.isEmpty) {
+    final storedValue = preferences.get(_key);
+    if (storedValue is! String || storedValue.isEmpty) {
       return [];
     }
 
-    final List<dynamic> jsonList = jsonDecode(jsonString);
-
-    return jsonList
-        .map(
-          (json) => Reminder.fromJson(
-            Map<String, dynamic>.from(json),
-          ),
-        )
-        .toList();
-  }
-
-  Future<void> saveReminders(List<Reminder> reminders) async {
-    final preferences = await SharedPreferences.getInstance();
-
-    final jsonList = reminders
-        .map((reminder) => reminder.toJson())
-        .toList();
-
-    final jsonString = jsonEncode(jsonList);
-
-    await preferences.setString(
-      _key,
-      jsonString,
-    );
-  }
-
-  Future<void> addReminder(Reminder reminder) async {
-    final reminders = await getReminders();
-
-    reminders.add(reminder);
-
-    await saveReminders(reminders);
-  }
-
-  Future<void> updateReminder(Reminder reminder) async {
-    final reminders = await getReminders();
-
-    final index = reminders.indexWhere(
-      (item) => item.id == reminder.id,
-    );
-
-    if (index == -1) {
-      return;
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(storedValue);
+    } on FormatException {
+      return [];
     }
 
-    reminders[index] = reminder;
+    if (decoded is! List) {
+      return [];
+    }
 
-    await saveReminders(reminders);
+    final reminders = <Reminder>[];
+    final reminderIds = <String>{};
+    for (final item in decoded) {
+      if (item is! Map) {
+        continue;
+      }
+
+      final json = <String, dynamic>{
+        for (final entry in item.entries)
+          if (entry.key is String) entry.key as String: entry.value,
+      };
+      final reminder = Reminder.fromJson(json);
+      if (reminder.id.isEmpty || !reminderIds.add(reminder.id)) {
+        continue;
+      }
+      reminders.add(reminder);
+    }
+
+    return reminders;
   }
 
-  Future<void> deleteReminder(String id) async {
-    final reminders = await getReminders();
+  Future<void> _writeReminders(List<Reminder> reminders) async {
+    final reminderIds = <String>{};
+    for (final reminder in reminders) {
+      if (reminder.id.isEmpty) {
+        throw ArgumentError.value(reminder.id, 'reminder.id');
+      }
+      if (!reminderIds.add(reminder.id)) {
+        throw StateError('A reminder with ID "${reminder.id}" already exists.');
+      }
+    }
 
-    reminders.removeWhere(
-      (reminder) => reminder.id == id,
+    final preferences = await SharedPreferences.getInstance();
+    final jsonList = reminders.map((reminder) => reminder.toJson()).toList();
+    final jsonString = jsonEncode(jsonList);
+    final saved = await preferences.setString(_key, jsonString);
+    if (!saved) {
+      throw StateError('Unable to save reminders.');
+    }
+  }
+
+  Future<T> _runSerialized<T>(Future<T> Function() operation) {
+    final result = _operationQueue.then((_) => operation());
+    _operationQueue = result.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
     );
-
-    await saveReminders(reminders);
+    return result;
   }
 }
