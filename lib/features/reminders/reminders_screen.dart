@@ -46,6 +46,10 @@ class _RemindersScreenState extends State<RemindersScreen> {
     _reminders = _storage.getReminders();
   }
 
+  void _retryLoadingReminders() {
+    setState(_loadReminders);
+  }
+
   Future<void> _openAddReminder() async {
     final Reminder? reminder = await Navigator.of(context).push<Reminder>(
       MaterialPageRoute<Reminder>(
@@ -72,6 +76,31 @@ class _RemindersScreenState extends State<RemindersScreen> {
           const SnackBar(content: Text('Unable to delete the reminder.')),
         );
       }
+    }
+  }
+
+  Future<void> _confirmDeleteReminder(Reminder reminder) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: const Icon(Icons.delete_outline),
+        title: const Text('Delete reminder?'),
+        content: Text('Delete "${reminder.title}"? This cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      await _deleteReminder(reminder);
     }
   }
 
@@ -110,10 +139,8 @@ class _RemindersScreenState extends State<RemindersScreen> {
   Future<void> _openEditReminder(Reminder reminder) async {
     final updatedReminder = await Navigator.of(context).push<Reminder>(
       MaterialPageRoute<Reminder>(
-        builder: (_) => AddReminderScreen(
-          reminder: reminder,
-          storage: _storage,
-        ),
+        builder: (_) =>
+            AddReminderScreen(reminder: reminder, storage: _storage),
       ),
     );
 
@@ -163,6 +190,269 @@ class _RemindersScreenState extends State<RemindersScreen> {
     };
   }
 
+  Widget _buildLoadingState() {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const CircularProgressIndicator(),
+          const SizedBox(height: 16),
+          Text(
+            'Loading reminders...',
+            style: Theme.of(context).textTheme.bodyLarge,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorState() {
+    final theme = Theme.of(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 360),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.error_outline,
+                size: 44,
+                color: theme.colorScheme.error,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Unable to load reminders',
+                style: theme.textTheme.titleMedium,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Your reminders are still saved. Try loading them again.',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 20),
+              FilledButton.icon(
+                key: const ValueKey('retry-reminders'),
+                onPressed: _retryLoadingReminders,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Try again'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState({required bool completed}) {
+    final theme = Theme.of(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 360),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                completed ? Icons.task_alt : Icons.notifications_none,
+                size: 48,
+                color: theme.colorScheme.primary,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                completed ? 'No completed reminders' : 'No reminders yet',
+                style: theme.textTheme.titleMedium,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                completed
+                    ? 'Completed reminders will appear here.'
+                    : 'Your reminders will appear here.',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              if (!completed) ...[
+                const SizedBox(height: 20),
+                FilledButton.icon(
+                  onPressed: _openAddReminder,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Add reminder'),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReminderCard(Reminder reminder) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final dateText = MaterialLocalizations.of(context)
+        .formatMediumDate(reminder.dateTime);
+    final timeText = TimeOfDay.fromDateTime(reminder.dateTime).format(context);
+    final description = reminder.description?.trim();
+
+    return Card(
+      margin: EdgeInsets.zero,
+      elevation: 0,
+      color: colorScheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: () => _openEditReminder(reminder),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Checkbox(
+                    value: reminder.isCompleted,
+                    semanticLabel: reminder.isCompleted
+                        ? 'Mark ${reminder.title} active'
+                        : 'Mark ${reminder.title} complete',
+                    onChanged: (value) {
+                      if (value == null) {
+                        return;
+                      }
+                      if (value) {
+                        _completeReminder(reminder);
+                      } else {
+                        _updateReminder(reminder.copyWith(isCompleted: false));
+                      }
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          reminder.title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            decoration: reminder.isCompleted
+                                ? TextDecoration.lineThrough
+                                : null,
+                          ),
+                        ),
+                        if (description != null && description.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            description,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  PopupMenuButton<String>(
+                    key: ValueKey('reminder-menu-${reminder.id}'),
+                    tooltip: 'More actions for ${reminder.title}',
+                    onSelected: (action) {
+                      if (action == 'edit') {
+                        _openEditReminder(reminder);
+                      } else if (action == 'delete') {
+                        _confirmDeleteReminder(reminder);
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem<String>(
+                        value: 'edit',
+                        child: ListTile(
+                          leading: Icon(Icons.edit_outlined),
+                          title: Text('Edit'),
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
+                      PopupMenuItem<String>(
+                        key: ValueKey('delete-reminder-${reminder.id}'),
+                        value: 'delete',
+                        child: const ListTile(
+                          leading: Icon(Icons.delete_outline),
+                          title: Text('Delete'),
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 16,
+                runSpacing: 8,
+                children: [
+                  _ReminderDetail(
+                    icon: Icons.calendar_today_outlined,
+                    label: dateText,
+                  ),
+                  _ReminderDetail(
+                    icon: Icons.schedule_outlined,
+                    label: timeText,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 12,
+                runSpacing: 8,
+                children: [
+                  _ReminderDetail(
+                    icon: Icons.repeat,
+                    label: _recurrenceLabel(reminder),
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                  Semantics(
+                    label: reminder.enabled
+                        ? 'Disable ${reminder.title}'
+                        : 'Enable ${reminder.title}',
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          reminder.enabled ? 'Enabled' : 'Disabled',
+                          style: theme.textTheme.labelLarge,
+                        ),
+                        const SizedBox(width: 4),
+                        Switch(
+                          value: reminder.enabled,
+                          onChanged: (value) {
+                            _updateReminder(reminder.copyWith(enabled: value));
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -171,11 +461,11 @@ class _RemindersScreenState extends State<RemindersScreen> {
         future: _reminders,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: Text('Loading reminders...'));
+            return _buildLoadingState();
           }
 
           if (snapshot.hasError) {
-            return const Center(child: Text('Unable to load reminders.'));
+            return _buildErrorState();
           }
 
           final remindersById = <String, Reminder>{};
@@ -184,7 +474,7 @@ class _RemindersScreenState extends State<RemindersScreen> {
           }
           final reminders = remindersById.values.toList();
           if (reminders.isEmpty) {
-            return const Center(child: Text('No reminders yet.'));
+            return _buildEmptyState(completed: false);
           }
 
           final visibleReminders =
@@ -194,167 +484,101 @@ class _RemindersScreenState extends State<RemindersScreen> {
                 ..sort(
                   (first, second) => first.dateTime.compareTo(second.dateTime),
                 );
-          final colorScheme = Theme.of(context).colorScheme;
-
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(bottom: 16),
-                child: SegmentedButton<bool>(
-                  segments: const [
-                    ButtonSegment<bool>(
-                      value: false,
-                      label: Text('Active'),
-                      icon: Icon(Icons.notifications_active_outlined),
-                    ),
-                    ButtonSegment<bool>(
-                      value: true,
-                      label: Text('Completed'),
-                      icon: Icon(Icons.check_circle_outline),
-                    ),
-                  ],
-                  selected: {_showCompleted},
-                  onSelectionChanged: (selection) {
-                    setState(() {
-                      _showCompleted = selection.first;
-                    });
-                  },
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(4, 0, 4, 12),
-                child: Row(
-                  children: [
-                    Text(
-                      _showCompleted
-                          ? 'Completed reminders'
-                          : 'Active reminders',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '${visibleReminders.length}',
-                      style: Theme.of(context).textTheme.labelMedium
-                          ?.copyWith(color: colorScheme.onSurfaceVariant),
-                    ),
-                  ],
-                ),
-              ),
-              if (visibleReminders.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 32),
-                  child: Center(
-                    child: Text(
-                      _showCompleted
-                          ? 'No completed reminders.'
-                          : 'No active reminders.',
-                    ),
+          return Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 760),
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 104),
+                children: [
+                  SegmentedButton<bool>(
+                    segments: const [
+                      ButtonSegment<bool>(
+                        value: false,
+                        label: Text('Active'),
+                        icon: Icon(Icons.notifications_active_outlined),
+                      ),
+                      ButtonSegment<bool>(
+                        value: true,
+                        label: Text('Completed'),
+                        icon: Icon(Icons.check_circle_outline),
+                      ),
+                    ],
+                    selected: {_showCompleted},
+                    onSelectionChanged: (selection) {
+                      setState(() {
+                        _showCompleted = selection.first;
+                      });
+                    },
                   ),
-                ),
-              for (final reminder in visibleReminders)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Dismissible(
-                    key: ValueKey(reminder.id),
-                    direction: DismissDirection.endToStart,
-                    onDismissed: (_) => _deleteReminder(reminder),
-                    background: Container(
-                      decoration: BoxDecoration(
-                        color: colorScheme.error,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      alignment: Alignment.centerRight,
-                      padding: const EdgeInsets.only(right: 20),
-                      child: const Icon(Icons.delete, color: Colors.white),
-                    ),
-                    child: Card(
-                      margin: EdgeInsets.zero,
-                      elevation: 0,
-                      color: colorScheme.surfaceContainerLow,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
-                        onTap: () => _openEditReminder(reminder),
-                        leading: Checkbox(
-                          value: reminder.isCompleted,
-                          onChanged: (value) {
-                            if (value != null) {
-                              if (value) {
-                                _completeReminder(reminder);
-                              } else {
-                                _updateReminder(
-                                  reminder.copyWith(isCompleted: false),
-                                );
-                              }
-                            }
-                          },
-                        ),
-                        title: Text(
-                          reminder.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: reminder.isCompleted
-                              ? const TextStyle(
-                                  decoration: TextDecoration.lineThrough,
-                                )
-                              : null,
-                        ),
-                        subtitle: Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '${MaterialLocalizations.of(context).formatMediumDate(reminder.dateTime)} · '
-                                '${TimeOfDay.fromDateTime(reminder.dateTime).format(context)}',
-                              ),
-                              if (reminder.description case final description?)
-                                Text(
-                                  description,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              Padding(
-                                padding: const EdgeInsets.only(top: 4),
-                                child: Text(
-                                  [
-                                    _recurrenceLabel(reminder),
-                                    if (!reminder.enabled) 'Disabled',
-                                  ].join(' · '),
-                                  style: Theme.of(context).textTheme.labelSmall
-                                      ?.copyWith(
-                                        color: colorScheme.onSurfaceVariant,
-                                      ),
-                                ),
-                              ),
-                            ],
+                  const SizedBox(height: 20),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(4, 0, 4, 12),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            _showCompleted
+                                ? 'Completed reminders'
+                                : 'Active reminders',
+                            style: Theme.of(context).textTheme.titleMedium,
                           ),
                         ),
-                        trailing: Switch(
-                          value: reminder.enabled,
-                          onChanged: (value) {
-                            _updateReminder(reminder.copyWith(enabled: value));
-                          },
+                        Text(
+                          '${visibleReminders.length}',
+                          style: Theme.of(context).textTheme.labelLarge
+                              ?.copyWith(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                              ),
                         ),
-                      ),
+                      ],
                     ),
                   ),
-                ),
-            ],
+                  if (visibleReminders.isEmpty)
+                    _buildEmptyState(completed: _showCompleted),
+                  for (final reminder in visibleReminders)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: _buildReminderCard(reminder),
+                    ),
+                ],
+              ),
+            ),
           );
         },
       ),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: FloatingActionButton.extended(
         onPressed: _openAddReminder,
         tooltip: 'Add reminder',
-        child: const Icon(Icons.add),
+        icon: const Icon(Icons.add),
+        label: const Text('Add reminder'),
       ),
+    );
+  }
+}
+
+class _ReminderDetail extends StatelessWidget {
+  const _ReminderDetail({required this.icon, required this.label, this.color});
+
+  final IconData icon;
+  final String label;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final effectiveColor = color ?? Theme.of(context).colorScheme.onSurface;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 18, color: effectiveColor),
+        const SizedBox(width: 8),
+        Text(
+          label,
+          style: Theme.of(context).textTheme.bodyMedium
+              ?.copyWith(color: effectiveColor),
+        ),
+      ],
     );
   }
 }
