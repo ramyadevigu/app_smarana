@@ -83,6 +83,46 @@ void main() {
     );
   });
 
+  test('handles monthly days 28 through 31 in common and leap February', () {
+    for (final day in [28, 29, 30, 31]) {
+      final reminder = _reminderAt(
+        DateTime(2026, 1, 1, 9, 30),
+        RecurrenceType.monthly,
+        dayOfMonth: day,
+      );
+      final commonFebruaryDay = day.clamp(1, 28);
+      expect(
+        nextOccurrence(reminder, after: DateTime(2026, 1, 31, 9, 30)),
+        DateTime(2026, 2, commonFebruaryDay, 9, 30),
+      );
+      expect(
+        nextOccurrence(
+          reminder,
+          after: DateTime(2026, 2, commonFebruaryDay, 9, 30),
+        ),
+        DateTime(2026, 3, day, 9, 30),
+      );
+
+      final leapReminder = _reminderAt(
+        DateTime(2028, 1, 1, 9, 30),
+        RecurrenceType.monthly,
+        dayOfMonth: day,
+      );
+      final leapFebruaryDay = day.clamp(1, 29);
+      expect(
+        nextOccurrence(leapReminder, after: DateTime(2028, 1, 31, 9, 30)),
+        DateTime(2028, 2, leapFebruaryDay, 9, 30),
+      );
+      expect(
+        nextOccurrence(
+          leapReminder,
+          after: DateTime(2028, 2, leapFebruaryDay, 9, 30),
+        ),
+        DateTime(2028, 3, day, 9, 30),
+      );
+    }
+  });
+
   test('advances yearly reminders across year boundaries', () {
     final reminder = _reminderAt(
       DateTime(2026, 12, 31, 9, 30),

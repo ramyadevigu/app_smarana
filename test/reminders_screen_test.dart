@@ -8,6 +8,39 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'helpers/fake_reminder_notification_scheduler.dart';
 
 void main() {
+  testWidgets('enables and disables reminders from the reminder list', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final scheduler = FakeReminderNotificationScheduler();
+    final storage = ReminderStorage(notificationScheduler: scheduler);
+    await storage.addReminder(
+      _reminder(
+        id: 'toggle',
+        title: 'Toggle reminder',
+        dateTime: DateTime(2026, 10, 1, 9),
+        enabled: false,
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: RemindersScreen(storage: storage)),
+    );
+    await tester.pumpAndSettle();
+    final reminderSwitch = find.byType(Switch);
+    expect(tester.widget<Switch>(reminderSwitch).value, isFalse);
+
+    await tester.tap(reminderSwitch);
+    await tester.pumpAndSettle();
+    expect((await storage.getReminders()).single.enabled, isTrue);
+    expect(scheduler.scheduledReminders.keys, contains('toggle'));
+
+    await tester.tap(reminderSwitch);
+    await tester.pumpAndSettle();
+    expect((await storage.getReminders()).single.enabled, isFalse);
+    expect(scheduler.scheduledReminders, isEmpty);
+  });
+
   testWidgets(
     'displays reminders and refreshes after create, edit, and delete',
     (tester) async {

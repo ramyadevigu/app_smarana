@@ -5,6 +5,86 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
+
+  test('schedules a future one-time notification without an alarm', () async {
+    final notifications = _FakeNotificationPlatform();
+    final alarms = _FakeRecurrenceAlarmPlatform();
+    final service = _service(
+      now: () => DateTime(2026, 9, 29, 8),
+      notifications: notifications,
+      alarms: alarms,
+    );
+    await service.initialize();
+    final reminder = _reminder(
+      'one-time',
+      DateTime(2026, 9, 29, 9),
+      RecurrenceType.none,
+    );
+
+    await service.scheduleReminder(reminder);
+
+    expect(notifications.scheduled.values.single.dateTime, reminder.dateTime);
+    expect(notifications.scheduled.values.single.payload, reminder.id);
+    expect(alarms.scheduled, isEmpty);
+  });
+
+  test(
+    'requests platform permissions during foreground initialization',
+    () async {
+      final notifications = _FakeNotificationPlatform();
+      final service = _service(
+        now: () => DateTime(2026, 9, 29, 8),
+        notifications: notifications,
+        alarms: _FakeRecurrenceAlarmPlatform(),
+      );
+
+      await service.initialize();
+
+      expect(notifications.permissionRequests, [true]);
+    },
+  );
+
+  test(
+    'distinct reminder IDs with the same hash get distinct schedules',
+    () async {
+      final notifications = _FakeNotificationPlatform();
+      final service = _service(
+        now: () => DateTime(2026, 9, 29, 8),
+        notifications: notifications,
+        alarms: _FakeRecurrenceAlarmPlatform(),
+      );
+      await service.initialize();
+      final first = _reminder(
+        '34fc4ed9ff04000368feade30b1638ed',
+        DateTime(2026, 9, 29, 9),
+        RecurrenceType.none,
+      );
+      final second = _reminder(
+        '3c60bbb3b7d9c2c42ebec1f1d13d56c8',
+        DateTime(2026, 9, 29, 10),
+        RecurrenceType.none,
+      );
+
+      await service.scheduleReminder(first);
+      await service.scheduleReminder(second);
+
+      expect(notifications.scheduled, hasLength(2));
+      expect(
+        notifications.scheduled.values.map(
+          (notification) => notification.payload,
+        ),
+        containsAll([first.id, second.id]),
+      );
+
+      await service.cancelReminder(second.id);
+      expect(notifications.scheduled, hasLength(1));
+      expect(notifications.scheduled.values.single.payload, first.id);
+    },
+  );
+
   group('recurring notification scheduling', () {
     test('schedules the next daily occurrence', () async {
       await _expectNextOccurrence(
@@ -271,9 +351,13 @@ Reminder _reminder(
 
 class _FakeNotificationPlatform implements NotificationPlatform {
   final scheduled = <int, _ScheduledNotification>{};
+  final permissionRequests = <bool>[];
 
   @override
-  Future<bool> initialize({required bool requestPermissions}) async => true;
+  Future<bool> initialize({required bool requestPermissions}) async {
+    permissionRequests.add(requestPermissions);
+    return true;
+  }
 
   @override
   Future<void> schedule({

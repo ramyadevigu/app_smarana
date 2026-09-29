@@ -1,7 +1,10 @@
+import 'dart:convert';
+
 import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest.dart' as timezone_data;
 import 'package:timezone/timezone.dart' as timezone;
 
@@ -76,6 +79,8 @@ class NotificationService implements ReminderNotificationScheduler {
   );
 
   static const _rearmDelay = Duration(seconds: 10);
+  static const _notificationIdsKey = 'reminderNotificationIds';
+  static Future<void> _notificationIdQueue = Future<void>.value();
 
   final NotificationPlatform _notificationPlatform;
   final RecurrenceAlarmPlatform _recurrenceAlarmPlatform;
@@ -106,7 +111,7 @@ class NotificationService implements ReminderNotificationScheduler {
   /// reconciliation rebuilds these schedules from persisted reminders.
   @override
   Future<void> scheduleReminder(Reminder reminder) async {
-    final id = _notificationIdFor(reminder.id);
+    final id = await _notificationIdFor(reminder.id);
     if (_isAndroid) {
       await _recurrenceAlarmPlatform.cancel(id);
     }
@@ -147,11 +152,14 @@ class NotificationService implements ReminderNotificationScheduler {
 
   @override
   Future<void> cancelReminder(String reminderId) async {
-    final id = _notificationIdFor(reminderId);
+    final id =
+        await _storedNotificationIdFor(reminderId) ??
+        _notificationIdHash(reminderId);
     await _notificationPlatform.cancel(id);
     if (_isAndroid) {
       await _recurrenceAlarmPlatform.cancel(id);
     }
+    await _releaseNotificationId(reminderId);
   }
 
   Future<void> _initializeTimezone() async {
@@ -161,7 +169,106 @@ class NotificationService implements ReminderNotificationScheduler {
     }
   }
 
-  int _notificationIdFor(String reminderId) {
+  Future<int> _notificationIdFor(String reminderId) {
+    return _runSerializedNotificationIdOperation(() async {
+      final preferences = await SharedPreferences.getInstance();
+      await preferences.reload();
+      final ids = _readNotificationIds(
+        preferences.getString(_notificationIdsKey),
+      );
+      final storedId = ids[reminderId];
+      if (storedId != null) {
+        return storedId;
+      }
+
+      final usedIds = ids.values.toSet();
+      var id = _notificationIdHash(reminderId);
+      while (usedIds.contains(id)) {
+        id = id == 0x7fffffff ? 1 : id + 1;
+      }
+      ids[reminderId] = id;
+      await _saveNotificationIds(preferences, ids);
+      return id;
+    });
+  }
+
+  Future<int?> _storedNotificationIdFor(String reminderId) {
+    return _runSerializedNotificationIdOperation(() async {
+      final preferences = await SharedPreferences.getInstance();
+      await preferences.reload();
+      return _readNotificationIds(
+        preferences.getString(_notificationIdsKey),
+      )[reminderId];
+    });
+  }
+
+  Future<void> _releaseNotificationId(String reminderId) {
+    return _runSerializedNotificationIdOperation(() async {
+      final preferences = await SharedPreferences.getInstance();
+      await preferences.reload();
+      final ids = _readNotificationIds(
+        preferences.getString(_notificationIdsKey),
+      );
+      if (ids.remove(reminderId) == null) {
+        return;
+      }
+      await _saveNotificationIds(preferences, ids);
+    });
+  }
+
+  Future<void> _saveNotificationIds(
+    SharedPreferences preferences,
+    Map<String, int> ids,
+  ) async {
+    final saved = ids.isEmpty
+        ? await preferences.remove(_notificationIdsKey)
+        : await preferences.setString(_notificationIdsKey, jsonEncode(ids));
+    if (!saved) {
+      throw StateError('Unable to save notification IDs.');
+    }
+  }
+
+  Map<String, int> _readNotificationIds(String? encodedIds) {
+    if (encodedIds == null || encodedIds.isEmpty) {
+      return {};
+    }
+
+    try {
+      final decoded = jsonDecode(encodedIds);
+      if (decoded is! Map) {
+        return {};
+      }
+
+      final ids = <String, int>{};
+      final usedIds = <int>{};
+      for (final entry in decoded.entries) {
+        final id = entry.value;
+        if (entry.key is String &&
+            id is int &&
+            id > 0 &&
+            id <= 0x7fffffff &&
+            usedIds.add(id)) {
+          ids[entry.key as String] = id;
+        }
+      }
+      return ids;
+    } on FormatException {
+      return {};
+    }
+  }
+
+  Future<T> _runSerializedNotificationIdOperation<T>(
+    Future<T> Function() operation,
+  ) {
+    final result = _notificationIdQueue.then((_) => operation());
+    _notificationIdQueue = result.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
+    );
+    return result;
+  }
+
+  int _notificationIdHash(String reminderId) {
     var hash = 0x811c9dc5;
     for (final codeUnit in reminderId.codeUnits) {
       hash = ((hash ^ codeUnit) * 0x01000193) & 0xffffffff;
