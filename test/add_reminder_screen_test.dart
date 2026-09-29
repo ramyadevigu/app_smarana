@@ -1,6 +1,7 @@
 import 'package:app_smarana/features/reminders/models/reminder.dart';
 import 'package:app_smarana/features/reminders/screens/add_reminder_screen.dart';
 import 'package:app_smarana/features/reminders/services/reminder_storage.dart';
+import 'package:app_smarana/features/settings/services/reminder_preferences_store.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -9,6 +10,43 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'helpers/fake_reminder_notification_scheduler.dart';
 
 void main() {
+  testWidgets('new reminders inherit configured notification defaults', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    const preferencesStore = ReminderPreferencesStore();
+    await preferencesStore.saveDefaults(
+      const ReminderDefaults(
+        notificationMode: ReminderNotificationMode.notificationOnly,
+        soundUri: 'content://alarms/default-tone',
+        soundName: 'Default tone',
+        snoozeDurationMinutes: 20,
+        vibrate: false,
+      ),
+    );
+    final storage = ReminderStorage(
+      notificationScheduler: FakeReminderNotificationScheduler(),
+    );
+
+    await _openForm(
+      tester,
+      storage: storage,
+      initialDate: DateTime(2030, 1, 15),
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('title-field')),
+      'Inherited settings',
+    );
+    await _saveForm(tester);
+
+    final saved = (await storage.getReminders()).single;
+    expect(saved.notificationMode, ReminderNotificationMode.notificationOnly);
+    expect(saved.soundUri, 'content://alarms/default-tone');
+    expect(saved.soundName, 'Default tone');
+    expect(saved.snoozeDurationMinutes, 20);
+    expect(saved.vibrate, isFalse);
+  });
+
   testWidgets('saves the requested fields and preserves edit metadata', (
     tester,
   ) async {

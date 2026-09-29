@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 import '../models/reminder.dart';
 import '../services/reminder_storage.dart';
 import '../../../services/notification_service.dart';
+import '../../settings/services/reminder_preferences_store.dart';
 
 const _monthLabels = [
   'January',
@@ -23,12 +24,14 @@ const _monthLabels = [
 class AddReminderScreen extends StatefulWidget {
   final Reminder? reminder;
   final ReminderStorage? storage;
+  final ReminderPreferencesStore? preferencesStore;
   final DateTime? initialDate;
 
   const AddReminderScreen({
     super.key,
     this.reminder,
     this.storage,
+    this.preferencesStore,
     this.initialDate,
   });
 
@@ -44,6 +47,7 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
   final _descriptionController = TextEditingController();
   final _uuid = const Uuid();
   late final ReminderStorage _storage;
+  late final ReminderPreferencesStore _preferencesStore;
 
   DateTime? _selectedDate;
   TimeOfDay? _selectedTime;
@@ -56,11 +60,14 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
   int _snoozeDurationMinutes = 10;
   List<ReminderSoundOption> _availableAlarmSounds = const [];
   bool _isSaving = false;
+  bool _defaultsReady = false;
 
   @override
   void initState() {
     super.initState();
     _storage = widget.storage ?? ReminderStorage();
+    _preferencesStore =
+      widget.preferencesStore ?? const ReminderPreferencesStore();
 
     final reminder = widget.reminder;
     _recurrenceRule =
@@ -75,6 +82,7 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
     _snoozeDurationMinutes = reminder?.snoozeDurationMinutes ?? 10;
     _loadAvailableAlarmSounds();
     if (reminder != null) {
+      _defaultsReady = true;
       _titleController.text = reminder.title;
       _descriptionController.text = reminder.description ?? '';
       _selectedDate = DateTime(
@@ -96,6 +104,28 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
       initialDate.day,
     );
     _selectedTime = TimeOfDay.fromDateTime(initialDateTime);
+    _loadReminderDefaults();
+  }
+
+  Future<void> _loadReminderDefaults() async {
+    try {
+      final defaults = await _preferencesStore.loadDefaults();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _notificationMode = defaults.notificationMode;
+        _soundUri = defaults.soundUri;
+        _soundName = defaults.soundName;
+        _snoozeDurationMinutes = defaults.snoozeDurationMinutes;
+        _vibrate = defaults.vibrate;
+        _defaultsReady = true;
+      });
+    } on Exception {
+      if (mounted) {
+        setState(() => _defaultsReady = true);
+      }
+    }
   }
 
   @override
@@ -394,7 +424,7 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
           height: 54,
           child: FilledButton(
             key: const ValueKey('save-reminder'),
-            onPressed: _isSaving ? null : _saveReminder,
+            onPressed: _isSaving || !_defaultsReady ? null : _saveReminder,
             child: _isSaving
                 ? const SizedBox(
                     width: 22,
