@@ -10,9 +10,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:app_smarana/app/app.dart';
 import 'package:app_smarana/features/calender/calender_screen.dart';
 import 'package:app_smarana/features/reminders/reminders_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   testWidgets('app starts on the calendar screen', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(const AppSmarana());
 
     expect(find.byType(CalendarScreen), findsOneWidget);
