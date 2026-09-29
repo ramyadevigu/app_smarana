@@ -6,8 +6,9 @@ import '../services/reminder_storage.dart';
 
 class AddReminderScreen extends StatefulWidget {
   final Reminder? reminder;
+  final ReminderStorage? storage;
 
-  const AddReminderScreen({super.key, this.reminder});
+  const AddReminderScreen({super.key, this.reminder, this.storage});
 
   bool get isEditing => reminder != null;
 
@@ -34,8 +35,8 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
-  final _storage = ReminderStorage();
   final _uuid = const Uuid();
+  late final ReminderStorage _storage;
 
   DateTime? _selectedDate;
   TimeOfDay? _selectedTime;
@@ -46,6 +47,7 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
   @override
   void initState() {
     super.initState();
+    _storage = widget.storage ?? ReminderStorage();
 
     final reminder = widget.reminder;
     if (reminder != null) {

@@ -3,11 +3,18 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../services/notification_service.dart';
 import '../models/reminder.dart';
 
 class ReminderStorage {
+  ReminderStorage({ReminderNotificationScheduler? notificationScheduler})
+    : _notificationScheduler =
+          notificationScheduler ?? NotificationService.instance;
+
   static const String _key = 'reminders';
   static Future<void> _operationQueue = Future<void>.value();
+
+  final ReminderNotificationScheduler _notificationScheduler;
 
   Future<List<Reminder>> getReminders() {
     return _runSerialized(_readReminders);
@@ -15,6 +22,17 @@ class ReminderStorage {
 
   Future<void> saveReminders(List<Reminder> reminders) {
     return _runSerialized(() => _writeReminders(reminders));
+  }
+
+  Future<void> rescheduleAllReminders() async {
+    final reminders = await getReminders();
+    for (final reminder in reminders) {
+      if (reminder.enabled && !reminder.isCompleted) {
+        await _notificationScheduler.scheduleReminder(reminder);
+      } else {
+        await _notificationScheduler.cancelReminder(reminder.id);
+      }
+    }
   }
 
   Future<void> addReminder(Reminder reminder) {
@@ -30,6 +48,7 @@ class ReminderStorage {
 
       reminders.add(reminder);
       await _writeReminders(reminders);
+      await _scheduleIfNeeded(reminder);
     });
   }
 
@@ -42,17 +61,26 @@ class ReminderStorage {
         return;
       }
 
+      await _notificationScheduler.cancelReminder(reminder.id);
       reminders[index] = reminder;
       await _writeReminders(reminders);
+      await _scheduleIfNeeded(reminder);
     });
   }
 
   Future<void> deleteReminder(String id) {
     return _runSerialized(() async {
+      await _notificationScheduler.cancelReminder(id);
       final reminders = await _readReminders();
       reminders.removeWhere((reminder) => reminder.id == id);
       await _writeReminders(reminders);
     });
+  }
+
+  Future<void> _scheduleIfNeeded(Reminder reminder) async {
+    if (reminder.enabled && !reminder.isCompleted) {
+      await _notificationScheduler.scheduleReminder(reminder);
+    }
   }
 
   Future<List<Reminder>> _readReminders() async {

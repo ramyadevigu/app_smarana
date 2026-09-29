@@ -250,3 +250,53 @@ The application is complete only when the following work:
 20. `flutter analyze` passes without errors
 
 Do not declare the project complete until all applicable requirements have been verified.
+
+Do not perform a broad package/dependency search.
+
+Do not search:
+
+* Flutter SDK
+* Pub cache
+* .dart_tool
+* build/
+* generated files
+* node_modules
+* system directories
+
+Only inspect the application's source code under:
+
+lib/
+test/
+pubspec.yaml
+android/
+
+Start with these files if they exist:
+
+lib/main.dart
+lib/models/reminder.dart
+lib/screens/reminders_screen.dart
+lib/screens/add_reminder_screen.dart
+lib/services/reminder_storage.dart
+
+Do not modify any files.
+
+Do not run rip_grep_packages.
+
+Do not perform a repository-wide dependency search.
+
+Run only:
+
+flutter analyze
+
+Then report:
+
+1. Current architecture
+2. Existing reminder model
+3. Existing storage implementation
+4. Existing AddReminderScreen
+5. Existing RemindersScreen
+6. Existing notification implementation
+7. Current errors
+8. What should be implemented next
+
+Keep the investigation focused and finish quickly.

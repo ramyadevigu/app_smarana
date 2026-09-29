@@ -3,6 +3,8 @@ import 'package:app_smarana/features/reminders/services/reminder_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'helpers/fake_reminder_notification_scheduler.dart';
+
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
@@ -22,7 +24,7 @@ void main() {
   test(
     'adds without replacing existing reminders and reloads persisted data',
     () async {
-      final storage = ReminderStorage();
+      final storage = _storage();
       await storage.addReminder(_reminder('first'));
       await storage.addReminder(_reminder('second'));
 
@@ -35,7 +37,7 @@ void main() {
   );
 
   test('updates an existing reminder without changing other records', () async {
-    final storage = ReminderStorage();
+    final storage = _storage();
     await storage.saveReminders([_reminder('first'), _reminder('second')]);
 
     await storage.updateReminder(
@@ -50,7 +52,7 @@ void main() {
   });
 
   test('deletes only the reminder with the requested ID', () async {
-    final storage = ReminderStorage();
+    final storage = _storage();
     await storage.saveReminders([_reminder('first'), _reminder('second')]);
 
     await storage.deleteReminder('first');
@@ -60,7 +62,7 @@ void main() {
   });
 
   test('rejects duplicate IDs and retains the original reminder', () async {
-    final storage = ReminderStorage();
+    final storage = _storage();
     await storage.addReminder(_reminder('same-id', title: 'Original'));
 
     await expectLater(
@@ -74,8 +76,8 @@ void main() {
   });
 
   test('serializes concurrent adds from separate storage instances', () async {
-    final firstStorage = ReminderStorage();
-    final secondStorage = ReminderStorage();
+    final firstStorage = _storage();
+    final secondStorage = _storage();
 
     await expectLater(
       Future.wait([
@@ -103,6 +105,37 @@ void main() {
     expect(loaded, hasLength(1));
     expect(loaded.single.title, 'Kept');
   });
+
+  test('keeps notification schedules synchronized with reminder CRUD', () async {
+    final scheduler = FakeReminderNotificationScheduler();
+    final storage = ReminderStorage(notificationScheduler: scheduler);
+
+    await storage.addReminder(_reminder('lifecycle'));
+    await storage.updateReminder(
+      _reminder('lifecycle', title: 'Edited reminder'),
+    );
+    await storage.updateReminder(_reminder('lifecycle', enabled: false));
+    await storage.updateReminder(_reminder('lifecycle', enabled: true));
+    await storage.deleteReminder('lifecycle');
+
+    expect(scheduler.operations, [
+      'schedule:lifecycle',
+      'cancel:lifecycle',
+      'schedule:lifecycle',
+      'cancel:lifecycle',
+      'cancel:lifecycle',
+      'schedule:lifecycle',
+      'cancel:lifecycle',
+    ]);
+    expect(scheduler.scheduledReminders, isEmpty);
+    expect(await storage.getReminders(), isEmpty);
+  });
+}
+
+ReminderStorage _storage() {
+  return ReminderStorage(
+    notificationScheduler: FakeReminderNotificationScheduler(),
+  );
 }
 
 Reminder _reminder(String id, {String? title, bool enabled = true}) {

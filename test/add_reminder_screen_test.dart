@@ -5,21 +5,26 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'helpers/fake_reminder_notification_scheduler.dart';
+
 void main() {
   testWidgets('creates and edits all recurrence types without duplicates', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
+    final storage = ReminderStorage(
+      notificationScheduler: FakeReminderNotificationScheduler(),
+    );
 
     for (var index = 0; index < RecurrenceType.values.length; index++) {
       final recurrence = RecurrenceType.values[index];
       if (index == 0) {
-        await _openForm(tester);
+        await _openForm(tester, storage: storage);
         await _saveForm(tester);
         expect(find.text('Title is required.'), findsOneWidget);
-        expect(await ReminderStorage().getReminders(), isEmpty);
+        expect(await storage.getReminders(), isEmpty);
       } else {
-        await _openForm(tester);
+        await _openForm(tester, storage: storage);
       }
 
       await tester.enterText(
@@ -36,7 +41,7 @@ void main() {
       }
       await _saveForm(tester);
 
-      final reminders = await ReminderStorage().getReminders();
+      final reminders = await storage.getReminders();
       expect(reminders, hasLength(index + 1));
       final saved = reminders[index];
       expect(saved.title, 'New ${recurrence.name} reminder');
@@ -56,7 +61,7 @@ void main() {
         expect(saved.dateTime.day, lessThanOrEqualTo(31));
       }
 
-      await _openForm(tester, reminder: saved);
+      await _openForm(tester, storage: storage, reminder: saved);
 
       expect(
         tester
@@ -71,7 +76,7 @@ void main() {
       );
       await _saveForm(tester);
 
-      final updatedReminders = await ReminderStorage().getReminders();
+      final updatedReminders = await storage.getReminders();
       expect(updatedReminders, hasLength(index + 1));
       final updated = updatedReminders[index];
       expect(updated.id, saved.id);
@@ -92,7 +97,11 @@ void main() {
   });
 }
 
-Future<void> _openForm(WidgetTester tester, {Reminder? reminder}) async {
+Future<void> _openForm(
+  WidgetTester tester, {
+  required ReminderStorage storage,
+  Reminder? reminder,
+}) async {
   await tester.pumpWidget(
     MaterialApp(
       home: Builder(
@@ -102,7 +111,10 @@ Future<void> _openForm(WidgetTester tester, {Reminder? reminder}) async {
             onPressed: () {
               Navigator.of(context).push<Reminder>(
                 MaterialPageRoute(
-                  builder: (_) => AddReminderScreen(reminder: reminder),
+                  builder: (_) => AddReminderScreen(
+                    reminder: reminder,
+                    storage: storage,
+                  ),
                 ),
               );
             },

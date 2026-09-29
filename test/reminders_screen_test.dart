@@ -5,12 +5,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'helpers/fake_reminder_notification_scheduler.dart';
+
 void main() {
   testWidgets(
     'displays reminders and refreshes after create, edit, and delete',
     (tester) async {
       SharedPreferences.setMockInitialValues({});
-      final storage = ReminderStorage();
+      final storage = ReminderStorage(
+        notificationScheduler: FakeReminderNotificationScheduler(),
+      );
       await storage.saveReminders([
         _reminder(
           id: 'weekly',
@@ -45,7 +49,9 @@ void main() {
         ),
       ]);
 
-      await tester.pumpWidget(const MaterialApp(home: RemindersScreen()));
+      await tester.pumpWidget(
+        MaterialApp(home: RemindersScreen(storage: storage)),
+      );
       await tester.pumpAndSettle();
 
       expect(find.text('Weekly check-in'), findsOneWidget);

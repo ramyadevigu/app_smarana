@@ -6,7 +6,9 @@ import 'services/recurrence_service.dart';
 import 'services/reminder_storage.dart';
 
 class RemindersScreen extends StatefulWidget {
-  const RemindersScreen({super.key});
+  final ReminderStorage? storage;
+
+  const RemindersScreen({super.key, this.storage});
 
   @override
   State<RemindersScreen> createState() => _RemindersScreenState();
@@ -28,14 +30,15 @@ class _RemindersScreenState extends State<RemindersScreen> {
     'December',
   ];
 
-  final ReminderStorage _storage = ReminderStorage();
   final RecurrenceService _recurrenceService = RecurrenceService();
+  late final ReminderStorage _storage;
   late Future<List<Reminder>> _reminders;
   bool _showCompleted = false;
 
   @override
   void initState() {
     super.initState();
+    _storage = widget.storage ?? ReminderStorage();
     _loadReminders();
   }
 
@@ -45,7 +48,9 @@ class _RemindersScreenState extends State<RemindersScreen> {
 
   Future<void> _openAddReminder() async {
     final Reminder? reminder = await Navigator.of(context).push<Reminder>(
-      MaterialPageRoute<Reminder>(builder: (_) => const AddReminderScreen()),
+      MaterialPageRoute<Reminder>(
+        builder: (_) => AddReminderScreen(storage: _storage),
+      ),
     );
 
     if (reminder != null && mounted) {
@@ -105,7 +110,10 @@ class _RemindersScreenState extends State<RemindersScreen> {
   Future<void> _openEditReminder(Reminder reminder) async {
     final updatedReminder = await Navigator.of(context).push<Reminder>(
       MaterialPageRoute<Reminder>(
-        builder: (_) => AddReminderScreen(reminder: reminder),
+        builder: (_) => AddReminderScreen(
+          reminder: reminder,
+          storage: _storage,
+        ),
       ),
     );
 
