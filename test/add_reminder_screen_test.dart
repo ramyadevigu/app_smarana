@@ -2,6 +2,7 @@ import 'package:app_smarana/features/reminders/models/reminder.dart';
 import 'package:app_smarana/features/reminders/screens/add_reminder_screen.dart';
 import 'package:app_smarana/features/reminders/services/reminder_storage.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -12,6 +13,14 @@ void main() {
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
+    const soundChannel = MethodChannel('smarana/reminder_sounds');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          soundChannel,
+          (call) async => [
+            {'name': 'Morning Bell', 'uri': 'content://alarms/morning-bell'},
+          ],
+        );
     final storage = ReminderStorage(
       notificationScheduler: FakeReminderNotificationScheduler(),
     );
@@ -30,6 +39,12 @@ void main() {
       find.byKey(const ValueKey('description-field')),
       'Bring the insurance card',
     );
+    final soundOption = find.byKey(const ValueKey('sound-option'));
+    await tester.ensureVisible(soundOption);
+    await tester.tap(soundOption);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Morning Bell').last);
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const ValueKey('date-field')));
     await tester.pumpAndSettle();
@@ -52,6 +67,30 @@ void main() {
       tester.element(find.byType(AddReminderScreen)),
     );
 
+    final notificationModeOption = find.byKey(
+      const ValueKey('notification-mode-option'),
+    );
+    await tester.ensureVisible(notificationModeOption);
+    await tester.tap(notificationModeOption);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Notification only'));
+    await tester.pumpAndSettle();
+
+    final snoozeOption = find.byKey(const ValueKey('snooze-option'));
+    await tester.ensureVisible(snoozeOption);
+    await tester.tap(snoozeOption);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('15 minutes'));
+    await tester.pumpAndSettle();
+
+    final vibrateSwitch = find.descendant(
+      of: find.byKey(const ValueKey('vibrate-option')),
+      matching: find.byType(Switch),
+    );
+    await tester.ensureVisible(vibrateSwitch);
+    await tester.tap(vibrateSwitch);
+    await tester.pumpAndSettle();
+
     await _saveForm(tester);
 
     final saved = (await storage.getReminders()).single;
@@ -67,6 +106,11 @@ void main() {
       timeLabel.data,
     );
     expect(saved.recurrenceRule.type, RecurrenceType.none);
+    expect(saved.soundName, 'Morning Bell');
+    expect(saved.soundUri, 'content://alarms/morning-bell');
+    expect(saved.notificationMode, ReminderNotificationMode.notificationOnly);
+    expect(saved.vibrate, isFalse);
+    expect(saved.snoozeDurationMinutes, 15);
 
     final recurring = saved.copyWith(
       recurrenceRule: const RecurrenceRule(
@@ -89,6 +133,11 @@ void main() {
     expect(updated.recurrenceRule.type, RecurrenceType.weekly);
     expect(updated.recurrenceRule.dayOfWeek, DateTime.tuesday);
     expect(updated.enabled, isFalse);
+    expect(updated.notificationMode, ReminderNotificationMode.notificationOnly);
+    expect(updated.soundName, 'Morning Bell');
+    expect(updated.soundUri, 'content://alarms/morning-bell');
+    expect(updated.vibrate, isFalse);
+    expect(updated.snoozeDurationMinutes, 15);
   });
 
   testWidgets('selects recurrence options and updates custom summary', (

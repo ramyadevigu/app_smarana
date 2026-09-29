@@ -28,7 +28,72 @@ void main() {
 
     expect(notifications.scheduled.values.single.dateTime, reminder.dateTime);
     expect(notifications.scheduled.values.single.payload, reminder.id);
+    expect(notifications.scheduled.values.single.soundUri, isNull);
+    expect(
+      notifications.scheduled.values.single.notificationMode,
+      ReminderNotificationMode.alarmAndNotification,
+    );
+    expect(notifications.scheduled.values.single.vibrate, isTrue);
     expect(alarms.scheduled, isEmpty);
+  });
+
+  test(
+    'notification-only reminders never use the selected alarm sound',
+    () async {
+      final notifications = _FakeNotificationPlatform();
+      final service = _service(
+        now: () => DateTime(2026, 9, 29, 8),
+        notifications: notifications,
+        alarms: _FakeRecurrenceAlarmPlatform(),
+      );
+      await service.initialize();
+      final reminder =
+          _reminder(
+            'notification-only',
+            DateTime(2026, 9, 29, 9),
+            RecurrenceType.none,
+          ).copyWith(
+            soundUri: 'content://alarms/custom-tone',
+            notificationMode: ReminderNotificationMode.notificationOnly,
+            vibrate: false,
+          );
+
+      await service.scheduleReminder(reminder);
+
+      final scheduled = notifications.scheduled.values.single;
+      expect(scheduled.soundUri, isNull);
+      expect(
+        scheduled.notificationMode,
+        ReminderNotificationMode.notificationOnly,
+      );
+      expect(scheduled.vibrate, isFalse);
+    },
+  );
+
+  test('a persisted snooze is scheduled before the next recurrence', () async {
+    final now = DateTime(2026, 9, 29, 8);
+    final snoozedUntil = now.add(const Duration(minutes: 15));
+    final notifications = _FakeNotificationPlatform();
+    final alarms = _FakeRecurrenceAlarmPlatform();
+    final service = _service(
+      now: () => now,
+      notifications: notifications,
+      alarms: alarms,
+    );
+    await service.initialize();
+    final reminder = _reminder(
+      'snoozed-daily',
+      DateTime(2026, 9, 28, 9),
+      RecurrenceType.daily,
+    ).copyWith(snoozedUntil: snoozedUntil);
+
+    await service.scheduleReminder(reminder);
+
+    expect(notifications.scheduled.values.single.dateTime, snoozedUntil);
+    expect(
+      alarms.scheduled.values.single,
+      snoozedUntil.add(const Duration(seconds: 10)),
+    );
   });
 
   test(
@@ -367,11 +432,17 @@ class _FakeNotificationPlatform implements NotificationPlatform {
     required String? body,
     required String payload,
     required bool exactAlarmAllowed,
+    required String? soundUri,
+    required ReminderNotificationMode notificationMode,
+    required bool vibrate,
   }) async {
     scheduled[id] = _ScheduledNotification(
       dateTime: dateTime,
       title: title,
       payload: payload,
+      soundUri: soundUri,
+      notificationMode: notificationMode,
+      vibrate: vibrate,
     );
   }
 
@@ -408,9 +479,15 @@ class _ScheduledNotification {
     required this.dateTime,
     required this.title,
     required this.payload,
+    required this.soundUri,
+    required this.notificationMode,
+    required this.vibrate,
   });
 
   final DateTime dateTime;
   final String title;
   final String payload;
+  final String? soundUri;
+  final ReminderNotificationMode notificationMode;
+  final bool vibrate;
 }

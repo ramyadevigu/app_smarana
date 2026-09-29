@@ -1,5 +1,7 @@
 enum RecurrenceType { none, daily, weekly, monthly, yearly }
 
+enum ReminderNotificationMode { alarmAndNotification, notificationOnly }
+
 class RecurrenceRule {
   final RecurrenceType type;
 
@@ -92,6 +94,12 @@ class Reminder {
   final RecurrenceRule recurrenceRule;
   final bool enabled;
   final bool isCompleted;
+  final String? soundUri;
+  final String soundName;
+  final ReminderNotificationMode notificationMode;
+  final bool vibrate;
+  final int snoozeDurationMinutes;
+  final DateTime? snoozedUntil;
   final DateTime createdAt;
 
   const Reminder({
@@ -102,6 +110,12 @@ class Reminder {
     this.recurrenceRule = const RecurrenceRule(type: RecurrenceType.none),
     this.enabled = true,
     this.isCompleted = false,
+    this.soundUri,
+    this.soundName = 'Default',
+    this.notificationMode = ReminderNotificationMode.alarmAndNotification,
+    this.vibrate = true,
+    this.snoozeDurationMinutes = 10,
+    this.snoozedUntil,
     required this.createdAt,
   });
 
@@ -110,6 +124,13 @@ class Reminder {
     RecurrenceRule? recurrenceRule,
     bool? enabled,
     bool? isCompleted,
+    String? soundUri,
+    String? soundName,
+    ReminderNotificationMode? notificationMode,
+    bool? vibrate,
+    int? snoozeDurationMinutes,
+    DateTime? snoozedUntil,
+    bool clearSnoozedUntil = false,
   }) {
     return Reminder(
       id: id,
@@ -119,6 +140,15 @@ class Reminder {
       recurrenceRule: recurrenceRule ?? this.recurrenceRule,
       enabled: enabled ?? this.enabled,
       isCompleted: isCompleted ?? this.isCompleted,
+        soundUri: soundUri ?? this.soundUri,
+        soundName: soundName ?? this.soundName,
+        notificationMode: notificationMode ?? this.notificationMode,
+        vibrate: vibrate ?? this.vibrate,
+        snoozeDurationMinutes:
+          snoozeDurationMinutes ?? this.snoozeDurationMinutes,
+        snoozedUntil: clearSnoozedUntil
+          ? null
+          : snoozedUntil ?? this.snoozedUntil,
       createdAt: createdAt,
     );
   }
@@ -132,6 +162,12 @@ class Reminder {
       'recurrenceRule': recurrenceRule.toJson(),
       'enabled': enabled,
       'isCompleted': isCompleted,
+      'soundUri': soundUri,
+      'soundName': soundName,
+      'notificationMode': notificationMode.name,
+      'vibrate': vibrate,
+      'snoozeDurationMinutes': snoozeDurationMinutes,
+      'snoozedUntil': snoozedUntil?.toIso8601String(),
       'createdAt': createdAt.toIso8601String(),
     };
   }
@@ -155,9 +191,30 @@ class Reminder {
       isCompleted: json['isCompleted'] is bool
           ? json['isCompleted'] as bool
           : false,
+        soundUri: json['soundUri'] is String ? json['soundUri'] as String : null,
+        soundName: json['soundName'] is String
+          ? json['soundName'] as String
+          : 'Default',
+        notificationMode: _notificationModeFromJson(json['notificationMode']),
+        vibrate: json['vibrate'] is bool ? json['vibrate'] as bool : true,
+        snoozeDurationMinutes:
+          _readInteger(json['snoozeDurationMinutes'], minimum: 1, maximum: 1440) ??
+          10,
+        snoozedUntil: _dateTimeFromJson(json['snoozedUntil']),
       createdAt: _dateTimeFromJson(json['createdAt']) ?? dateTime,
     );
   }
+}
+
+ReminderNotificationMode _notificationModeFromJson(Object? value) {
+  if (value is! String) {
+    return ReminderNotificationMode.alarmAndNotification;
+  }
+
+  return ReminderNotificationMode.values.firstWhere(
+    (mode) => mode.name == value,
+    orElse: () => ReminderNotificationMode.alarmAndNotification,
+  );
 }
 
 RecurrenceType _recurrenceTypeFromJson(Object? value) {

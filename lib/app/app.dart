@@ -1,11 +1,16 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
 
 import '../features/calender/calender_screen.dart';
 import '../features/notes/notes_screen.dart';
+import '../features/reminders/screens/add_reminder_screen.dart';
+import '../features/reminders/services/reminder_storage.dart';
 import '../features/reminders/reminders_screen.dart';
 import '../features/settings/settings_screen.dart';
+import '../services/notification_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/theme_preference_store.dart';
 
@@ -26,12 +31,69 @@ class AppSmarana extends StatefulWidget {
 }
 
 class _AppSmaranaState extends State<AppSmarana> {
+  final _navigatorKey = GlobalKey<NavigatorState>();
   late ThemeMode _themeMode;
+  StreamSubscription<String>? _notificationSubscription;
+  bool _openingNotificationReminder = false;
 
   @override
   void initState() {
     super.initState();
     _themeMode = widget.initialThemeMode;
+    final notifications = NotificationService.instance;
+    _notificationSubscription = notifications.openedReminderIds.listen(
+      _openReminderFromNotification,
+    );
+    final launchReminderId = notifications.takeInitialReminderId();
+    if (launchReminderId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _openReminderFromNotification(launchReminderId);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    final subscription = _notificationSubscription;
+    if (subscription != null) {
+      unawaited(subscription.cancel());
+    }
+    super.dispose();
+  }
+
+  Future<void> _openReminderFromNotification(String reminderId) async {
+    if (_openingNotificationReminder || !mounted) {
+      return;
+    }
+
+    final navigator = _navigatorKey.currentState;
+    if (navigator == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _openReminderFromNotification(reminderId);
+      });
+      return;
+    }
+
+    _openingNotificationReminder = true;
+    try {
+      final reminders = await ReminderStorage().getReminders();
+      for (final reminder in reminders) {
+        if (reminder.id == reminderId && mounted) {
+          await navigator.push<void>(
+            MaterialPageRoute<void>(
+              builder: (_) => AddReminderScreen(reminder: reminder),
+            ),
+          );
+          return;
+        }
+      }
+    } on Exception catch (error, stackTrace) {
+      FlutterError.reportError(
+        FlutterErrorDetails(exception: error, stack: stackTrace),
+      );
+    } finally {
+      _openingNotificationReminder = false;
+    }
   }
 
   Future<void> _changeThemeMode(ThemeMode themeMode) async {
@@ -48,6 +110,7 @@ class _AppSmaranaState extends State<AppSmarana> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: _navigatorKey,
       title: 'Smarana',
       debugShowCheckedModeBanner: false,
       theme: lightTheme,

@@ -14,6 +14,12 @@ void main() {
       ),
       enabled: false,
       isCompleted: true,
+      soundUri: 'content://alarms/tone/1',
+      soundName: 'Morning Bell',
+      notificationMode: ReminderNotificationMode.notificationOnly,
+      vibrate: false,
+      snoozeDurationMinutes: 15,
+      snoozedUntil: DateTime(2026, 10, 3, 9, 45),
       createdAt: DateTime(2026, 9, 1, 12),
     );
 
@@ -47,6 +53,14 @@ void main() {
     expect(reminder.recurrenceRule.dayOfWeek, isNull);
     expect(reminder.enabled, isTrue);
     expect(reminder.isCompleted, isFalse);
+    expect(
+      reminder.notificationMode,
+      ReminderNotificationMode.alarmAndNotification,
+    );
+    expect(reminder.soundName, 'Default');
+    expect(reminder.vibrate, isTrue);
+    expect(reminder.snoozeDurationMinutes, 10);
+    expect(reminder.snoozedUntil, isNull);
     expect(reminder.createdAt, DateTime(1970));
   });
 

@@ -3,6 +3,7 @@ import 'package:uuid/uuid.dart';
 
 import '../models/reminder.dart';
 import '../services/reminder_storage.dart';
+import '../../../services/notification_service.dart';
 
 const _monthLabels = [
   'January',
@@ -47,6 +48,13 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
   DateTime? _selectedDate;
   TimeOfDay? _selectedTime;
   late RecurrenceRule _recurrenceRule;
+  String? _soundUri;
+  String _soundName = 'Default';
+  ReminderNotificationMode _notificationMode =
+      ReminderNotificationMode.alarmAndNotification;
+  bool _vibrate = true;
+  int _snoozeDurationMinutes = 10;
+  List<ReminderSoundOption> _availableAlarmSounds = const [];
   bool _isSaving = false;
 
   @override
@@ -58,6 +66,14 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
     _recurrenceRule =
         reminder?.recurrenceRule ??
         const RecurrenceRule(type: RecurrenceType.none);
+    _soundUri = reminder?.soundUri;
+    _soundName = reminder?.soundName ?? 'Default';
+    _notificationMode =
+        reminder?.notificationMode ??
+        ReminderNotificationMode.alarmAndNotification;
+    _vibrate = reminder?.vibrate ?? true;
+    _snoozeDurationMinutes = reminder?.snoozeDurationMinutes ?? 10;
+    _loadAvailableAlarmSounds();
     if (reminder != null) {
       _titleController.text = reminder.title;
       _descriptionController.text = reminder.description ?? '';
@@ -156,6 +172,11 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
       recurrenceRule: _recurrenceRule,
       enabled: existing?.enabled ?? true,
       isCompleted: existing?.isCompleted ?? false,
+      soundUri: _soundUri,
+      soundName: _soundName,
+      notificationMode: _notificationMode,
+      vibrate: _vibrate,
+      snoozeDurationMinutes: _snoozeDurationMinutes,
       createdAt: existing?.createdAt ?? DateTime.now(),
     );
 
@@ -198,6 +219,11 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
     return time?.format(context) ?? 'Select a time';
   }
 
+  String get _notificationModeLabel => switch (_notificationMode) {
+    ReminderNotificationMode.alarmAndNotification => 'Alarm + Notification',
+    ReminderNotificationMode.notificationOnly => 'Notification only',
+  };
+
   Future<void> _selectRecurrence() async {
     final selection = await showModalBottomSheet<_RecurrenceSelection>(
       context: context,
@@ -218,6 +244,124 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
       _recurrenceRule = selection.rule;
       _selectedDate = selection.startDate;
     });
+  }
+
+  Future<void> _loadAvailableAlarmSounds() async {
+    final sounds = await NotificationService.instance.availableAlarmSounds();
+    if (mounted) {
+      setState(() => _availableAlarmSounds = sounds);
+    }
+  }
+
+  Future<void> _selectSound() async {
+    final choices = [
+      const ReminderSoundOption(name: 'Default', uri: null),
+      ..._availableAlarmSounds,
+    ];
+    final selection = await showModalBottomSheet<ReminderSoundOption>(
+      context: context,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (context) => ListView(
+        shrinkWrap: true,
+        padding: const EdgeInsets.only(bottom: 16),
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+            child: Text('Sound', style: Theme.of(context).textTheme.titleLarge),
+          ),
+          for (final sound in choices)
+            ListTile(
+              leading: Icon(
+                _soundUri == sound.uri && _soundName == sound.name
+                    ? Icons.radio_button_checked
+                    : Icons.radio_button_unchecked,
+              ),
+              title: Text(sound.name),
+              onTap: () => Navigator.of(context).pop(sound),
+            ),
+          if (_availableAlarmSounds.isEmpty)
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 0, 20, 16),
+              child: Text('No additional alarm sounds are available.'),
+            ),
+        ],
+      ),
+    );
+    if (selection != null && mounted) {
+      setState(() {
+        _soundUri = selection.uri;
+        _soundName = selection.name;
+      });
+    }
+  }
+
+  Future<void> _selectNotificationMode() async {
+    final selection = await showModalBottomSheet<ReminderNotificationMode>(
+      context: context,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (context) => ListView(
+        shrinkWrap: true,
+        padding: const EdgeInsets.only(bottom: 12),
+        children: [
+          ListTile(
+            title: const Text('Alarm + Notification'),
+            subtitle: const Text('Ringtone, snooze, and dismiss'),
+            trailing:
+                _notificationMode ==
+                    ReminderNotificationMode.alarmAndNotification
+                ? const Icon(Icons.check)
+                : null,
+            onTap: () =>
+                Navigator.of(context)
+                    .pop(ReminderNotificationMode.alarmAndNotification),
+          ),
+          ListTile(
+            title: const Text('Notification only'),
+            subtitle: const Text('No alarm ringtone'),
+            trailing:
+                _notificationMode == ReminderNotificationMode.notificationOnly
+                ? const Icon(Icons.check)
+                : null,
+            onTap: () =>
+                Navigator.of(context)
+                    .pop(ReminderNotificationMode.notificationOnly),
+          ),
+          const SizedBox(height: 12),
+        ],
+      ),
+    );
+    if (selection != null && mounted) {
+      setState(() => _notificationMode = selection);
+    }
+  }
+
+  Future<void> _selectSnoozeDuration() async {
+    const durations = [5, 10, 15, 30, 60];
+    final selection = await showModalBottomSheet<int>(
+      context: context,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (context) => ListView(
+        shrinkWrap: true,
+        padding: const EdgeInsets.only(bottom: 12),
+        children: [
+          for (final minutes in durations)
+            ListTile(
+              title: Text('$minutes minutes'),
+              trailing: _snoozeDurationMinutes == minutes
+                  ? const Icon(Icons.check)
+                  : null,
+              onTap: () => Navigator.of(context).pop(minutes),
+            ),
+          const SizedBox(height: 12),
+        ],
+      ),
+    );
+    if (selection != null && mounted) {
+      setState(() => _snoozeDurationMinutes = selection);
+    }
   }
 
   Widget _fieldError(String? message) {
@@ -364,6 +508,70 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
                           _fieldError(field.errorText),
                         ],
                       ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 28),
+              Text('ALERTS', style: Theme.of(context).textTheme.labelLarge),
+              const SizedBox(height: 10),
+              Material(
+                color: colorScheme.surfaceContainerLow,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(color: colorScheme.outlineVariant),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: Column(
+                  children: [
+                    ListTile(
+                      key: const ValueKey('sound-option'),
+                      leading: Icon(
+                        Icons.music_note_outlined,
+                        color: colorScheme.primary,
+                      ),
+                      title: const Text('Sound'),
+                      subtitle: Text(_soundName),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: _selectSound,
+                    ),
+                    Divider(height: 1, color: colorScheme.outlineVariant),
+                    ListTile(
+                      key: const ValueKey('vibrate-option'),
+                      leading: Icon(
+                        Icons.vibration_outlined,
+                        color: colorScheme.primary,
+                      ),
+                      title: const Text('Vibrate'),
+                      subtitle: Text(_vibrate ? 'On' : 'Off'),
+                      trailing: Switch(
+                        value: _vibrate,
+                        onChanged: (value) => setState(() => _vibrate = value),
+                      ),
+                    ),
+                    Divider(height: 1, color: colorScheme.outlineVariant),
+                    ListTile(
+                      key: const ValueKey('notification-mode-option'),
+                      leading: Icon(
+                        Icons.notifications_active_outlined,
+                        color: colorScheme.primary,
+                      ),
+                      title: const Text('Notification'),
+                      subtitle: Text(_notificationModeLabel),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: _selectNotificationMode,
+                    ),
+                    Divider(height: 1, color: colorScheme.outlineVariant),
+                    ListTile(
+                      key: const ValueKey('snooze-option'),
+                      leading: Icon(
+                        Icons.snooze_outlined,
+                        color: colorScheme.primary,
+                      ),
+                      title: const Text('Snooze'),
+                      subtitle: Text('$_snoozeDurationMinutes minutes'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: _selectSnoozeDuration,
                     ),
                   ],
                 ),

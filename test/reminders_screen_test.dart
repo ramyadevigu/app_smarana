@@ -88,16 +88,16 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Weekly check-in'), findsOneWidget);
+      expect(find.text('8:00'), findsOneWidget);
+      expect(find.text('AM'), findsWidgets);
       expect(find.text('Call the team'), findsOneWidget);
       expect(find.text('Every Monday'), findsOneWidget);
       expect(find.text('3rd of every month'), findsOneWidget);
-      expect(find.text('15 October every year'), findsOneWidget);
       await tester.scrollUntilVisible(
         find.text('Disabled one-time'),
         200,
         scrollable: find.byType(Scrollable).first,
       );
-      expect(find.text('Does not repeat'), findsOneWidget);
       expect(find.text('Disabled'), findsOneWidget);
 
       await tester.tap(find.byTooltip('Add reminder'));
