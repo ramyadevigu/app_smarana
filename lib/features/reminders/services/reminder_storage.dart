@@ -16,6 +16,10 @@ class ReminderStorage {
 
   final ReminderNotificationScheduler _notificationScheduler;
 
+  Future<void> initialize() async {
+    await SharedPreferences.getInstance();
+  }
+
   Future<List<Reminder>> getReminders() {
     return _runSerialized(_readReminders);
   }

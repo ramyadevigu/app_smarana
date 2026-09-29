@@ -111,13 +111,25 @@ void main() {
         RecurrenceType.monthly,
         dayOfMonth: 3,
       );
+      final disabledReminder = _reminder(
+        'disabled-restart',
+        DateTime(2026, 10, 3, 9, 30),
+        RecurrenceType.monthly,
+        dayOfMonth: 3,
+      ).copyWith(enabled: false);
+      final completedReminder = _reminder(
+        'completed-restart',
+        DateTime(2026, 10, 3, 9, 30),
+        RecurrenceType.monthly,
+        dayOfMonth: 3,
+      ).copyWith(isCompleted: true);
       await ReminderStorage(
         notificationScheduler: _service(
           now: () => DateTime(2026, 9, 29, 10),
           notifications: _FakeNotificationPlatform(),
           alarms: _FakeRecurrenceAlarmPlatform(),
         ),
-      ).saveReminders([reminder]);
+      ).saveReminders([reminder, disabledReminder, completedReminder]);
 
       final notifications = _FakeNotificationPlatform();
       final alarms = _FakeRecurrenceAlarmPlatform();
@@ -129,6 +141,7 @@ void main() {
       await service.initialize();
       final restoredStorage = ReminderStorage(notificationScheduler: service);
 
+      await restoredStorage.initialize();
       await restoredStorage.rescheduleAllReminders();
       await restoredStorage.rescheduleAllReminders();
 
