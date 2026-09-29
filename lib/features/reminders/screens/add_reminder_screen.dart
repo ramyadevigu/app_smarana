@@ -7,8 +7,14 @@ import '../services/reminder_storage.dart';
 class AddReminderScreen extends StatefulWidget {
   final Reminder? reminder;
   final ReminderStorage? storage;
+  final DateTime? initialDate;
 
-  const AddReminderScreen({super.key, this.reminder, this.storage});
+  const AddReminderScreen({
+    super.key,
+    this.reminder,
+    this.storage,
+    this.initialDate,
+  });
 
   bool get isEditing => reminder != null;
 
@@ -65,10 +71,11 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
     }
 
     final initialDateTime = DateTime.now().add(const Duration(minutes: 5));
+    final initialDate = widget.initialDate ?? initialDateTime;
     _selectedDate = DateTime(
-      initialDateTime.year,
-      initialDateTime.month,
-      initialDateTime.day,
+      initialDate.year,
+      initialDate.month,
+      initialDate.day,
     );
     _selectedTime = TimeOfDay.fromDateTime(initialDateTime);
   }
@@ -82,7 +89,7 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
 
   Future<void> _selectDate(FormFieldState<DateTime> field) async {
     final today = DateTime.now();
-    final firstDate = widget.isEditing
+    final firstDate = widget.isEditing || widget.initialDate != null
         ? DateTime(1900)
         : DateTime(today.year, today.month, today.day);
     final date = await showDatePicker(
