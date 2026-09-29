@@ -307,7 +307,10 @@ class _RemindersScreenState extends State<RemindersScreen> {
       margin: EdgeInsets.zero,
       elevation: 0,
       color: colorScheme.surfaceContainerLow,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: colorScheme.outlineVariant),
+      ),
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
         onTap: () => _openEditReminder(reminder),
