@@ -19,6 +19,14 @@ void main() {
       content: 'Review the next release.',
       createdAt: createdAt,
       updatedAt: createdAt,
+      isChecklist: true,
+      checklistItems: const [
+        NoteChecklistItem(id: 'task-1', text: 'Review', isChecked: true),
+        NoteChecklistItem(id: 'task-2', text: 'Ship'),
+      ],
+      isPinned: true,
+      labels: const ['Work', 'Planning'],
+      color: NoteColor.teal,
     );
     await storage.addNote(note);
     expect((await storage.getNotes()).single.toJson(), note.toJson());
@@ -39,5 +47,25 @@ void main() {
     await preferences.setString('smarana_notes_v1', '{invalid');
 
     expect(await storage.getNotes(), isEmpty);
+  });
+
+  test('reads existing version 1 notes with defaults for new fields', () async {
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setString(
+      'smarana_notes_v1',
+      '{"version":1,"notes":[{"id":"legacy","title":"Old note",'
+          '"content":"Keep this text",'
+          '"createdAt":"2026-09-29T10:00:00.000",'
+          '"updatedAt":"2026-09-29T10:00:00.000"}]}',
+    );
+
+    final note = (await storage.getNotes()).single;
+    expect(note.title, 'Old note');
+    expect(note.content, 'Keep this text');
+    expect(note.isChecklist, isFalse);
+    expect(note.checklistItems, isEmpty);
+    expect(note.isPinned, isFalse);
+    expect(note.labels, isEmpty);
+    expect(note.color, NoteColor.standard);
   });
 }

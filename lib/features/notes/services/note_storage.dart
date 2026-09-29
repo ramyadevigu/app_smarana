@@ -7,6 +7,7 @@ import '../models/note.dart';
 
 class NoteStorage {
   static const String _key = 'smarana_notes_v1';
+  static const int _schemaVersion = 2;
   static Future<void> _operationQueue = Future<void>.value();
 
   Future<List<Note>> getNotes() {
@@ -58,7 +59,7 @@ class NoteStorage {
       return [];
     }
     if (decoded is! Map ||
-        decoded['version'] != 1 ||
+        (decoded['version'] != 1 && decoded['version'] != _schemaVersion) ||
         decoded['notes'] is! List) {
       return [];
     }
@@ -87,7 +88,7 @@ class NoteStorage {
     final saved = await preferences.setString(
       _key,
       jsonEncode({
-        'version': 1,
+        'version': _schemaVersion,
         'notes': notes.map((note) => note.toJson()).toList(),
       }),
     );

@@ -36,7 +36,7 @@ void main() {
     final agendaFinder = find.byKey(agendaKey);
     final agenda = tester.widget<SingleChildScrollView>(agendaFinder);
     expect(agenda.scrollDirection, Axis.vertical);
-    expect(_nowLabel(tester), 'NOW 8:05 PM');
+    expect(_nowLabel(tester), '8:05 PM');
     expect(find.byKey(const ValueKey('calendar-hour-20')), findsOneWidget);
     expect(find.text('12:00 AM'), findsOneWidget);
     expect(find.text('11:00 PM'), findsOneWidget);
@@ -109,6 +109,42 @@ void main() {
     expect(find.text('Tuesday, September 29, 2026'), findsOneWidget);
     expect(find.byKey(const ValueKey('calendar-now-time')), findsOneWidget);
     _expectNowAtTime(tester, now);
+  });
+
+  testWidgets('navigates between years while preserving month and day', (
+    tester,
+  ) async {
+    await _pumpCalendar(tester, () => now, storage);
+
+    await tester.tap(find.byTooltip('Next year'));
+    await _pumpFrames(tester);
+    expect(find.text('September 2027'), findsOneWidget);
+    expect(find.text('Wednesday, September 29, 2027'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Previous year'));
+    await _pumpFrames(tester);
+    expect(find.text('September 2026'), findsOneWidget);
+    expect(find.text('Tuesday, September 29, 2026'), findsOneWidget);
+  });
+
+  testWidgets('month heading opens date picker with year selection', (
+    tester,
+  ) async {
+    await _pumpCalendar(tester, () => now, storage);
+
+    await tester.tap(find.byKey(const ValueKey('calendar-select-date')));
+    await tester.pumpAndSettle();
+    expect(find.byType(DatePickerDialog), findsOneWidget);
+
+    await tester.tap(find.text('2026'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('2027'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('OK'));
+    await _pumpFrames(tester);
+
+    expect(find.text('September 2027'), findsOneWidget);
+    expect(find.text('Wednesday, September 29, 2027'), findsOneWidget);
   });
 
   testWidgets('selecting an adjacent date updates its agenda', (tester) async {
@@ -268,19 +304,30 @@ void main() {
   ) async {
     await _pumpCalendar(tester, () => now, storage);
     expect(find.byKey(const ValueKey('calendar-now-time')), findsOneWidget);
-    expect(_nowLabel(tester), 'NOW 12:05 AM');
+    expect(_nowLabel(tester), '12:05 AM');
     expect(
       tester
           .widget<Text>(find.byKey(const ValueKey('calendar-now-time')))
           .style
           ?.color,
-      AppColors.azureBlue,
+      AppColors.white,
     );
+    final nowLabelContainer = tester.widget<Container>(
+      find
+          .ancestor(
+            of: find.byKey(const ValueKey('calendar-now-time')),
+            matching: find.byType(Container),
+          )
+          .first,
+    );
+    final nowLabelDecoration = nowLabelContainer.decoration! as BoxDecoration;
+    expect(nowLabelDecoration.color, AppColors.azureBlue);
+    expect(nowLabelDecoration.borderRadius, BorderRadius.circular(8));
     _expectNowAtTime(tester, now);
 
     now = DateTime(2026, 9, 29, 0, 6);
     await tester.pump(const Duration(minutes: 1));
-    expect(_nowLabel(tester), 'NOW 12:06 AM');
+    expect(_nowLabel(tester), '12:06 AM');
     _expectNowAtTime(tester, now);
 
     await tester.tap(find.byKey(const ValueKey('calendar-day-2026-9-30')));

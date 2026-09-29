@@ -136,6 +136,36 @@ class _CalendarScreenState extends State<CalendarScreen> {
     _scheduleAgendaScroll();
   }
 
+  void _changeYear(int offset) {
+    final nextMonth = DateTime(
+      _displayedMonth.year + offset,
+      _displayedMonth.month,
+    );
+    final lastDay = DateTime(nextMonth.year, nextMonth.month + 1, 0).day;
+    setState(() {
+      _displayedMonth = nextMonth;
+      _selectedDate = DateTime(
+        nextMonth.year,
+        nextMonth.month,
+        _selectedDate.day.clamp(1, lastDay),
+      );
+      _refreshVisibleOccurrences();
+    });
+    _scheduleAgendaScroll();
+  }
+
+  Future<void> _pickDate() async {
+    final date = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(1900),
+      lastDate: DateTime(2100),
+    );
+    if (date != null && mounted) {
+      _selectDate(date);
+    }
+  }
+
   void _selectDate(DateTime date) {
     setState(() {
       _selectedDate = _dateOnly(date);
@@ -375,24 +405,44 @@ class _CalendarScreenState extends State<CalendarScreen> {
     return Row(
       children: [
         IconButton(
+          key: const ValueKey('calendar-previous-year'),
+          tooltip: 'Previous year',
+          visualDensity: VisualDensity.compact,
+          onPressed: () => _changeYear(-1),
+          icon: const Icon(Icons.keyboard_double_arrow_left),
+        ),
+        IconButton(
           tooltip: 'Previous month',
+          visualDensity: VisualDensity.compact,
           onPressed: () => _changeMonth(-1),
           icon: const Icon(Icons.chevron_left),
         ),
         Expanded(
           child: Semantics(
             header: true,
-            child: Text(
-              localizations.formatMonthYear(_displayedMonth),
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.titleLarge,
+            child: TextButton(
+              key: const ValueKey('calendar-select-date'),
+              onPressed: _pickDate,
+              child: Text(
+                localizations.formatMonthYear(_displayedMonth),
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
             ),
           ),
         ),
         IconButton(
           tooltip: 'Next month',
+          visualDensity: VisualDensity.compact,
           onPressed: () => _changeMonth(1),
           icon: const Icon(Icons.chevron_right),
+        ),
+        IconButton(
+          key: const ValueKey('calendar-next-year'),
+          tooltip: 'Next year',
+          visualDensity: VisualDensity.compact,
+          onPressed: () => _changeYear(1),
+          icon: const Icon(Icons.keyboard_double_arrow_right),
         ),
       ],
     );
@@ -652,16 +702,21 @@ class _CalendarScreenState extends State<CalendarScreen> {
                           ),
                         ),
                         Container(
-                          color: Theme.of(context).colorScheme.surface,
+                          decoration: BoxDecoration(
+                            color: AppColors.azureBlue,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
                           padding: const EdgeInsets.symmetric(horizontal: 4),
                           child: Text(
-                            'NOW ${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(_currentDateTime))}',
+                            MaterialLocalizations.of(context).formatTimeOfDay(
+                              TimeOfDay.fromDateTime(_currentDateTime),
+                            ),
                             key: const ValueKey('calendar-now-time'),
                             maxLines: 1,
                             overflow: TextOverflow.clip,
                             style: Theme.of(context).textTheme.labelSmall
                                 ?.copyWith(
-                                  color: AppColors.azureBlue,
+                                  color: AppColors.white,
                                   fontWeight: FontWeight.w700,
                                 ),
                           ),

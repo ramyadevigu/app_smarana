@@ -46,6 +46,123 @@ void main() {
     expect(notes.values, isEmpty);
   });
 
+  testWidgets('creates checklists and moves completed items to the bottom', (
+    tester,
+  ) async {
+    await _pumpNotes(tester, notes, reminders);
+
+    await tester.tap(find.byTooltip('Create note'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('note-title')), 'Today');
+    await tester.tap(find.text('Checklist'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const ValueKey('new-checklist-item')),
+      'Call clinic',
+    );
+    await tester.tap(find.byTooltip('Add checklist item'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('new-checklist-item')),
+      'Pick up mail',
+    );
+    await tester.tap(find.byTooltip('Add checklist item'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Save note'));
+    await tester.pumpAndSettle();
+
+    final note = notes.values.single;
+    expect(note.isChecklist, isTrue);
+    expect(note.checklistItems.map((item) => item.text), [
+      'Call clinic',
+      'Pick up mail',
+    ]);
+
+    await tester.tap(
+      find.byKey(
+        ValueKey('note-check-${note.id}-${note.checklistItems.first.id}'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(notes.values.single.checklistItems.map((item) => item.text), [
+      'Pick up mail',
+      'Call clinic',
+    ]);
+    expect(notes.values.single.checklistItems.last.isChecked, isTrue);
+  });
+
+  testWidgets('searches, filters, pins, colors, and archives notes', (
+    tester,
+  ) async {
+    await _pumpNotes(tester, notes, reminders);
+
+    await tester.tap(find.byTooltip('Create note'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('note-title')),
+      'Work update',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('note-content')),
+      'Meet the team',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('note-labels')),
+      'Work, Weekly',
+    );
+    await tester.dragUntilVisible(
+      find.byKey(const ValueKey('note-pinned-toggle')),
+      find.byType(ListView).last,
+      const Offset(0, -360),
+    );
+    await tester.drag(find.byType(ListView).last, const Offset(0, -160));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('note-pinned-toggle')));
+    await tester.tap(find.byKey(const ValueKey('note-color-teal')));
+    await tester.tap(find.byTooltip('Save note'));
+    await tester.pumpAndSettle();
+
+    expect(notes.values.single.isPinned, isTrue);
+    expect(notes.values.single.labels, ['Work', 'Weekly']);
+    expect(notes.values.single.color, NoteColor.teal);
+
+    await tester.tap(find.byTooltip('Search notes'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('notes-search-field')),
+      'team',
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(ValueKey('note-card-${notes.values.single.id}')),
+      findsOneWidget,
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('notes-search-field')),
+      'not found',
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('No matching notes'), findsOneWidget);
+    await tester.tap(find.byTooltip('Close search'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('note-label-filter-Work')));
+    await tester.pumpAndSettle();
+    expect(find.text('Work update'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('More actions for Work update'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Archive'));
+    await tester.pumpAndSettle();
+    expect(find.text('Work update'), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('notes-archive-toggle')));
+    await tester.pumpAndSettle();
+    expect(find.text('Work update'), findsOneWidget);
+    expect(notes.values.single.isArchived, isTrue);
+  });
+
   testWidgets('creates and clears a linked alarm for a note', (tester) async {
     await _pumpNotes(tester, notes, reminders);
 
@@ -77,6 +194,34 @@ void main() {
     await tester.pumpAndSettle();
     expect(reminders.values, isEmpty);
     expect(notes.values.single.reminderId, isNull);
+  });
+
+  testWidgets('deleting a note keeps its linked alarm', (tester) async {
+    await _pumpNotes(tester, notes, reminders);
+
+    await tester.tap(find.byTooltip('Create note'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('note-title')),
+      'Keep the alarm',
+    );
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('note-reminder-toggle')),
+    );
+    await tester.tap(find.byKey(const ValueKey('note-reminder-toggle')));
+    await tester.tap(find.byTooltip('Save note'));
+    await tester.pumpAndSettle();
+    expect(reminders.values, hasLength(1));
+
+    await tester.tap(find.byTooltip('More actions for Keep the alarm'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+    await tester.pumpAndSettle();
+
+    expect(notes.values, isEmpty);
+    expect(reminders.values, hasLength(1));
   });
 }
 
