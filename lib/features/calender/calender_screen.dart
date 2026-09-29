@@ -273,12 +273,11 @@ class _CalendarScreenState extends State<CalendarScreen> {
         ],
       ),
       body: _buildBody(context),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: FloatingActionButton(
         heroTag: 'calendar-add-reminder',
         onPressed: _openAddReminder,
         tooltip: 'Add reminder for selected date',
-        icon: const Icon(Icons.add),
-        label: const Text('Add reminder'),
+        child: const Icon(Icons.add),
       ),
     );
   }

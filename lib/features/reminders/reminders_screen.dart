@@ -561,12 +561,11 @@ class _RemindersScreenState extends State<RemindersScreen> {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: FloatingActionButton(
         heroTag: 'alarms-add-reminder',
         onPressed: _openAddReminder,
         tooltip: 'Add reminder',
-        icon: const Icon(Icons.add),
-        label: const Text('Add reminder'),
+        child: const Icon(Icons.add),
       ),
     );
   }

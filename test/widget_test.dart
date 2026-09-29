@@ -11,6 +11,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:app_smarana/app/app.dart';
 import 'package:app_smarana/features/calender/calender_screen.dart';
 import 'package:app_smarana/features/reminders/reminders_screen.dart';
+import 'package:app_smarana/theme/app_colors.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -21,6 +22,14 @@ void main() {
     expect(find.byType(CalendarScreen), findsOneWidget);
     expect(find.byType(RemindersScreen), findsNothing);
     expect(find.byType(NavigationDestination), findsNWidgets(5));
+    final navigationBar = tester.widget<NavigationBar>(
+      find.byType(NavigationBar),
+    );
+    expect(navigationBar.indicatorColor, AppColors.azureBlue);
+    expect(
+      tester.widget<Icon>(find.byIcon(Icons.calendar_month)).color,
+      AppColors.white,
+    );
     for (final key in [
       'nav-calendar',
       'nav-alarms',

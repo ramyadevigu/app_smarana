@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app_colors.dart';
+
 import '../features/calender/calender_screen.dart';
 import '../features/reminders/reminders_screen.dart';
 import '../features/settings/settings_screen.dart';
@@ -101,6 +103,7 @@ class _HomeScreenState extends State<HomeScreen> {
       body: screens[_currentIndex],
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
+        indicatorColor: AppColors.azureBlue,
         onDestinationSelected: (index) {
           setState(() {
             _currentIndex = index;
@@ -110,31 +113,34 @@ class _HomeScreenState extends State<HomeScreen> {
           NavigationDestination(
             key: ValueKey('nav-calendar'),
             icon: Icon(Icons.calendar_month_outlined),
-            selectedIcon: Icon(Icons.calendar_month),
+            selectedIcon: Icon(Icons.calendar_month, color: AppColors.white),
             label: 'Calendar',
           ),
           NavigationDestination(
             key: ValueKey('nav-alarms'),
             icon: Icon(Icons.notifications_none),
-            selectedIcon: Icon(Icons.notifications_active),
+            selectedIcon: Icon(
+              Icons.notifications_active,
+              color: AppColors.white,
+            ),
             label: 'Alarms',
           ),
           NavigationDestination(
             key: ValueKey('nav-stopwatch'),
             icon: Icon(Icons.av_timer_outlined),
-            selectedIcon: Icon(Icons.av_timer),
+            selectedIcon: Icon(Icons.av_timer, color: AppColors.white),
             label: 'Stop Watch',
           ),
           NavigationDestination(
             key: ValueKey('nav-timer'),
             icon: Icon(Icons.hourglass_bottom_outlined),
-            selectedIcon: Icon(Icons.hourglass_bottom),
+            selectedIcon: Icon(Icons.hourglass_bottom, color: AppColors.white),
             label: 'Timer',
           ),
           NavigationDestination(
             key: ValueKey('nav-world-clock'),
             icon: Icon(Icons.public_outlined),
-            selectedIcon: Icon(Icons.public),
+            selectedIcon: Icon(Icons.public, color: AppColors.white),
             label: 'World Clock',
           ),
         ],
