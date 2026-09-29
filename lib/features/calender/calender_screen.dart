@@ -16,8 +16,11 @@ class CalendarScreen extends StatefulWidget {
     this.appMenu,
   });
 
-  static const double _hourHeight = 64;
   static const double _emptyAgendaHeight = 40;
+  static const double _agendaHourHeight = 88;
+  static const double _agendaReminderOverflow = 96;
+  static const int _timelineHours = 24;
+  static const double _nowViewportFraction = 0.3;
 
   final ReminderStorage? storage;
   final DateTime Function() clock;
@@ -56,9 +59,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
       setState(() {
         _currentDateTime = widget.clock();
       });
-      if (_isToday(_selectedDate)) {
-        _scheduleAgendaScroll();
-      }
     });
     _loadReminders();
   }
@@ -139,6 +139,11 @@ class _CalendarScreenState extends State<CalendarScreen> {
   void _selectDate(DateTime date) {
     setState(() {
       _selectedDate = _dateOnly(date);
+      if (_selectedDate.month != _displayedMonth.month ||
+          _selectedDate.year != _displayedMonth.year) {
+        _displayedMonth = DateTime(_selectedDate.year, _selectedDate.month);
+        _refreshVisibleOccurrences();
+      }
     });
     _scheduleAgendaScroll();
   }
@@ -154,7 +159,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     _scheduleAgendaScroll();
   }
 
-  void _scheduleAgendaScroll() {
+  void _scheduleAgendaScroll({double? targetHour}) {
     final targetTime = _isToday(_selectedDate)
         ? _currentDateTime
         : DateTime(
@@ -163,22 +168,30 @@ class _CalendarScreenState extends State<CalendarScreen> {
             _selectedDate.day,
             8,
           );
-    final targetOffset =
-        (targetTime.hour + targetTime.minute / 60) * CalendarScreen._hourHeight;
-    final emptyStateOffset = _occurrencesFor(_selectedDate).isEmpty
-        ? CalendarScreen._emptyAgendaHeight
-        : 0.0;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_agendaScrollController.hasClients) {
         return;
       }
       final position = _agendaScrollController.position;
-      final target = (targetOffset + emptyStateOffset).clamp(
-        0.0,
-        position.maxScrollExtent,
-      );
+      final hour = targetHour ?? targetTime.hour + targetTime.minute / 60;
+      final targetOffset = hour * CalendarScreen._agendaHourHeight;
+      final target =
+          (targetOffset -
+                  position.viewportDimension *
+                      CalendarScreen._nowViewportFraction)
+              .clamp(0.0, position.maxScrollExtent);
       _agendaScrollController.jumpTo(target);
     });
+  }
+
+  void _moveAgendaDate(int offset) {
+    final date = _selectedDate.add(Duration(days: offset));
+    setState(() {
+      _selectedDate = date;
+      _displayedMonth = DateTime(date.year, date.month);
+      _refreshVisibleOccurrences();
+    });
+    _scheduleAgendaScroll(targetHour: offset > 0 ? 0 : 23);
   }
 
   Future<void> _openAddReminder() async {
@@ -269,7 +282,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
             label: const Text('Today'),
           ),
           const SizedBox(width: 8),
-          if (widget.appMenu case final appMenu?) appMenu,
+          ?widget.appMenu,
         ],
       ),
       body: _buildBody(context),
@@ -339,24 +352,13 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   const Divider(height: 20),
                   _buildAgendaHeader(context),
                   const SizedBox(height: 4),
+                  if (_occurrencesFor(_selectedDate).isEmpty)
+                    _buildEmptyAgenda(context),
                   Expanded(
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        final centerPadding = constraints.maxHeight / 2;
-                        return ListView(
-                          controller: _agendaScrollController,
-                          padding: EdgeInsets.only(
-                            top: centerPadding,
-                            bottom: centerPadding + 24,
-                          ),
-                          children: [
-                            if (_occurrencesFor(_selectedDate).isEmpty)
-                              _buildEmptyAgenda(context),
-                            for (var hour = 0; hour < 24; hour++)
-                              _buildHourRow(context, hour),
-                          ],
-                        );
-                      },
+                    child: SingleChildScrollView(
+                      key: const ValueKey('calendar-agenda-scroll'),
+                      controller: _agendaScrollController,
+                      child: _buildDayTimeline(context),
                     ),
                   ),
                 ],
@@ -545,6 +547,13 @@ class _CalendarScreenState extends State<CalendarScreen> {
   Widget _buildAgendaHeader(BuildContext context) {
     return Row(
       children: [
+        IconButton(
+          key: const ValueKey('calendar-previous-day'),
+          tooltip: 'Previous day',
+          onPressed: () => _moveAgendaDate(-1),
+          icon: const Icon(Icons.chevron_left),
+          visualDensity: VisualDensity.compact,
+        ),
         Expanded(
           child: Semantics(
             header: true,
@@ -553,6 +562,13 @@ class _CalendarScreenState extends State<CalendarScreen> {
               style: Theme.of(context).textTheme.titleMedium,
             ),
           ),
+        ),
+        IconButton(
+          key: const ValueKey('calendar-next-day'),
+          tooltip: 'Next day',
+          onPressed: () => _moveAgendaDate(1),
+          icon: const Icon(Icons.chevron_right),
+          visualDensity: VisualDensity.compact,
         ),
       ],
     );
@@ -573,7 +589,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                'No reminders for this day',
+                'No Reminders today',
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -585,91 +601,140 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
-  Widget _buildHourRow(BuildContext context, int hour) {
-    final colorScheme = Theme.of(context).colorScheme;
-    const nowColor = AppColors.azureBlue;
-    final occurrences = _occurrencesFor(_selectedDate)
-        .where((occurrence) => occurrence.dateTime.hour == hour)
-        .toList();
-    final showsNow = _isToday(_selectedDate) && _currentDateTime.hour == hour;
-    final localizations = MaterialLocalizations.of(context);
+  Widget _buildDayTimeline(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final occurrences = _occurrencesFor(_selectedDate);
+        final nowOffset =
+            (_currentDateTime.hour * 60 + _currentDateTime.minute) /
+            60 *
+            CalendarScreen._agendaHourHeight;
+        final eventLaneWidth = (constraints.maxWidth - 64)
+            .clamp(0.0, double.infinity)
+            .toDouble();
 
-    return Column(
-      children: [
-        SizedBox(
-          height: CalendarScreen._hourHeight,
-          child: Row(
+        return SizedBox(
+          height:
+              CalendarScreen._timelineHours * CalendarScreen._agendaHourHeight +
+              CalendarScreen._agendaReminderOverflow,
+          child: Stack(
+            clipBehavior: Clip.none,
             children: [
-              SizedBox(
-                width: 58,
-                child: Text(
-                  TimeOfDay(hour: hour, minute: 0).format(context),
-                  style: Theme.of(context).textTheme.labelMedium
-                      ?.copyWith(color: colorScheme.onSurfaceVariant),
+              for (var hour = 0; hour < CalendarScreen._timelineHours; hour++)
+                Positioned(
+                  top: hour * CalendarScreen._agendaHourHeight,
+                  left: 0,
+                  right: 0,
+                  height: CalendarScreen._agendaHourHeight,
+                  child: _buildHourColumn(context, hour),
                 ),
-              ),
-              Expanded(
-                child: SizedBox.expand(
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: Container(
-                          height: 1,
-                          color: colorScheme.outlineVariant,
-                        ),
-                      ),
-                      if (showsNow)
-                        Positioned(
-                          left: 0,
-                          right: 0,
-                          top:
-                              (_currentDateTime.minute /
-                                          60 *
-                                          CalendarScreen._hourHeight -
-                                      9)
-                                  .clamp(0.0, CalendarScreen._hourHeight - 18),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 9,
-                                height: 9,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: nowColor,
-                                ),
-                              ),
-                              const SizedBox(width: 4),
-                              Expanded(
-                                child: Container(
-                                  height: 2,
-                                  color: nowColor,
-                                ),
-                              ),
-                              const SizedBox(width: 5),
-                              Text(
-                                'NOW ${localizations.formatTimeOfDay(TimeOfDay.fromDateTime(_currentDateTime))}',
-                                key: const ValueKey('calendar-now-time'),
-                                style: Theme.of(context).textTheme.labelSmall
-                                    ?.copyWith(
-                                      color: nowColor,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                              ),
-                            ],
+              for (var index = 0; index < occurrences.length; index++)
+                _buildPositionedReminder(
+                  context,
+                  occurrences,
+                  index,
+                  eventLaneWidth,
+                ),
+              if (_isToday(_selectedDate))
+                Positioned(
+                  top: nowOffset - 1,
+                  left: 64,
+                  right: 0,
+                  child: IgnorePointer(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Container(
+                            key: const ValueKey('calendar-now-indicator'),
+                            height: 2,
+                            color: AppColors.azureBlue,
                           ),
                         ),
-                    ],
+                        Container(
+                          color: Theme.of(context).colorScheme.surface,
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: Text(
+                            'NOW ${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(_currentDateTime))}',
+                            key: const ValueKey('calendar-now-time'),
+                            maxLines: 1,
+                            overflow: TextOverflow.clip,
+                            style: Theme.of(context).textTheme.labelSmall
+                                ?.copyWith(
+                                  color: AppColors.azureBlue,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
             ],
           ),
-        ),
-        for (final occurrence in occurrences)
-          _buildReminderTile(context, occurrence),
-      ],
+        );
+      },
+    );
+  }
+
+  Widget _buildPositionedReminder(
+    BuildContext context,
+    List<CalendarOccurrence> occurrences,
+    int index,
+    double eventLaneWidth,
+  ) {
+    final occurrence = occurrences[index];
+    final sameTime = occurrences
+        .where(
+          (candidate) =>
+              candidate.dateTime.hour == occurrence.dateTime.hour &&
+              candidate.dateTime.minute == occurrence.dateTime.minute,
+        )
+        .toList();
+    final lane = sameTime.indexOf(occurrence);
+    final laneWidth = eventLaneWidth / sameTime.length;
+    final minuteOffset =
+        (occurrence.dateTime.hour * 60 + occurrence.dateTime.minute) /
+        60 *
+        CalendarScreen._agendaHourHeight;
+
+    return Positioned(
+      top: minuteOffset,
+      left: 64 + laneWidth * lane,
+      right: laneWidth * (sameTime.length - lane - 1),
+      child: _buildReminderTile(context, occurrence),
+    );
+  }
+
+  Widget _buildHourColumn(BuildContext context, int hour) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return SizedBox(
+      child: Stack(
+        key: ValueKey('calendar-hour-$hour'),
+        children: [
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(color: colorScheme.outlineVariant),
+                ),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+            child: SizedBox(
+              width: 56,
+              child: Text(
+                TimeOfDay(hour: hour, minute: 0).format(context),
+                style: Theme.of(context).textTheme.labelMedium
+                    ?.copyWith(color: colorScheme.onSurfaceVariant),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -680,8 +745,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     return Padding(
-      padding: const EdgeInsets.only(left: 58, bottom: 6),
+      padding: const EdgeInsets.only(right: 4, bottom: 4),
       child: Material(
+        key: ValueKey('calendar-reminder-${occurrence.reminder.id}'),
         color: colorScheme.surfaceContainerLow,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8),
@@ -691,81 +757,76 @@ class _CalendarScreenState extends State<CalendarScreen> {
           borderRadius: BorderRadius.circular(8),
           onTap: () => _openEditReminder(occurrence.reminder),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 9, 4, 9),
-            child: Row(
+            padding: const EdgeInsets.all(6),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                SizedBox(
-                  width: 68,
-                  child: Text(
-                    TimeOfDay.fromDateTime(occurrence.dateTime).format(context),
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      color: colorScheme.primary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                Container(
-                  width: 3,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    color: colorScheme.secondary,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
                         occurrence.reminder.title,
-                        maxLines: 1,
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodyMedium?.copyWith(
+                        style: theme.textTheme.bodySmall?.copyWith(
                           fontWeight: FontWeight.w600,
                         ),
                       ),
-                      if (occurrence.reminder.description
-                          case final String description
-                          when description.trim().isNotEmpty)
-                        Text(
-                          description,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
+                    ),
+                    PopupMenuButton<String>(
+                      tooltip: 'More actions for ${occurrence.reminder.title}',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minWidth: 32,
+                        minHeight: 32,
+                      ),
+                      iconSize: 18,
+                      onSelected: (action) {
+                        if (action == 'edit') {
+                          _openEditReminder(occurrence.reminder);
+                        } else if (action == 'delete') {
+                          _deleteReminder(occurrence.reminder);
+                        }
+                      },
+                      itemBuilder: (context) => const [
+                        PopupMenuItem<String>(
+                          value: 'edit',
+                          child: ListTile(
+                            leading: Icon(Icons.edit_outlined),
+                            title: Text('Edit'),
+                            contentPadding: EdgeInsets.zero,
                           ),
                         ),
-                    ],
-                  ),
-                ),
-                PopupMenuButton<String>(
-                  tooltip: 'More actions for ${occurrence.reminder.title}',
-                  onSelected: (action) {
-                    if (action == 'edit') {
-                      _openEditReminder(occurrence.reminder);
-                    } else if (action == 'delete') {
-                      _deleteReminder(occurrence.reminder);
-                    }
-                  },
-                  itemBuilder: (context) => const [
-                    PopupMenuItem<String>(
-                      value: 'edit',
-                      child: ListTile(
-                        leading: Icon(Icons.edit_outlined),
-                        title: Text('Edit'),
-                        contentPadding: EdgeInsets.zero,
-                      ),
-                    ),
-                    PopupMenuItem<String>(
-                      value: 'delete',
-                      child: ListTile(
-                        leading: Icon(Icons.delete_outline),
-                        title: Text('Delete'),
-                        contentPadding: EdgeInsets.zero,
-                      ),
+                        PopupMenuItem<String>(
+                          value: 'delete',
+                          child: ListTile(
+                            leading: Icon(Icons.delete_outline),
+                            title: Text('Delete'),
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
+                ),
+                if (occurrence.reminder.description
+                    case final String description
+                    when description.trim().isNotEmpty)
+                  Text(
+                    description,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                Text(
+                  TimeOfDay.fromDateTime(occurrence.dateTime).format(context),
+                  textAlign: TextAlign.end,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: colorScheme.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ],
             ),
