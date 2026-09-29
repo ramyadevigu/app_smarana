@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 
 import '../features/calender/calender_screen.dart';
+import '../features/notes/notes_screen.dart';
 import '../features/reminders/reminders_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../theme/app_theme.dart';
@@ -81,6 +82,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final screens = [
       CalendarScreen(appMenu: _buildAppMenu()),
+      NotesScreen(appMenu: _buildAppMenu()),
       RemindersScreen(title: 'Alarms', appMenu: _buildAppMenu()),
       _TimeToolScreen(
         title: 'Stop Watch',
@@ -90,11 +92,6 @@ class _HomeScreenState extends State<HomeScreen> {
       _TimeToolScreen(
         title: 'Timer',
         icon: Icons.hourglass_bottom,
-        appMenu: _buildAppMenu(),
-      ),
-      _TimeToolScreen(
-        title: 'World Clock',
-        icon: Icons.public,
         appMenu: _buildAppMenu(),
       ),
     ];
@@ -117,6 +114,12 @@ class _HomeScreenState extends State<HomeScreen> {
             label: 'Calendar',
           ),
           NavigationDestination(
+            key: ValueKey('nav-notes'),
+            icon: Icon(Icons.sticky_note_2_outlined),
+            selectedIcon: Icon(Icons.sticky_note_2, color: AppColors.white),
+            label: 'Notes',
+          ),
+          NavigationDestination(
             key: ValueKey('nav-alarms'),
             icon: Icon(Icons.notifications_none),
             selectedIcon: Icon(
@@ -136,12 +139,6 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: Icon(Icons.hourglass_bottom_outlined),
             selectedIcon: Icon(Icons.hourglass_bottom, color: AppColors.white),
             label: 'Timer',
-          ),
-          NavigationDestination(
-            key: ValueKey('nav-world-clock'),
-            icon: Icon(Icons.public_outlined),
-            selectedIcon: Icon(Icons.public, color: AppColors.white),
-            label: 'World Clock',
           ),
         ],
       ),
@@ -201,8 +198,8 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: const Icon(Icons.help_outline),
             title: const Text('Help'),
             content: const Text(
-              'Use Calendar to view reminders by date and Alarms to manage '
-              'your reminders.',
+              'Use Calendar to view reminders, Notes to save ideas, and '
+              'Alarms to manage your reminders.',
             ),
             actions: [
               TextButton(
