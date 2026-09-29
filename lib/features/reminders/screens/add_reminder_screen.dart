@@ -4,6 +4,21 @@ import 'package:uuid/uuid.dart';
 import '../models/reminder.dart';
 import '../services/reminder_storage.dart';
 
+const _monthLabels = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
+
 class AddReminderScreen extends StatefulWidget {
   final Reminder? reminder;
   final ReminderStorage? storage;
@@ -31,6 +46,7 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
 
   DateTime? _selectedDate;
   TimeOfDay? _selectedTime;
+  late RecurrenceRule _recurrenceRule;
   bool _isSaving = false;
 
   @override
@@ -39,6 +55,9 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
     _storage = widget.storage ?? ReminderStorage();
 
     final reminder = widget.reminder;
+    _recurrenceRule =
+        reminder?.recurrenceRule ??
+        const RecurrenceRule(type: RecurrenceType.none);
     if (reminder != null) {
       _titleController.text = reminder.title;
       _descriptionController.text = reminder.description ?? '';
@@ -134,9 +153,7 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
         time.hour,
         time.minute,
       ),
-      recurrenceRule:
-          existing?.recurrenceRule ??
-          const RecurrenceRule(type: RecurrenceType.none),
+      recurrenceRule: _recurrenceRule,
       enabled: existing?.enabled ?? true,
       isCompleted: existing?.isCompleted ?? false,
       createdAt: existing?.createdAt ?? DateTime.now(),
@@ -179,6 +196,28 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
 
   String _formatTime(BuildContext context, TimeOfDay? time) {
     return time?.format(context) ?? 'Select a time';
+  }
+
+  Future<void> _selectRecurrence() async {
+    final selection = await showModalBottomSheet<_RecurrenceSelection>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (_) => _RecurrenceSheet(
+        initialRule: _recurrenceRule,
+        initialDate: _selectedDate ?? DateTime.now(),
+      ),
+    );
+
+    if (selection == null || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _recurrenceRule = selection.rule;
+      _selectedDate = selection.startDate;
+    });
   }
 
   Widget _fieldError(String? message) {
@@ -282,13 +321,27 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
                               color: colorScheme.primary,
                             ),
                             title: const Text('Date'),
-                            subtitle: Text(_formatDate(context, field.value)),
+                            subtitle: Text(_formatDate(context, _selectedDate)),
                             trailing: const Icon(Icons.chevron_right),
                             onTap: () => _selectDate(field),
                           ),
                           _fieldError(field.errorText),
                         ],
                       ),
+                    ),
+                    Divider(height: 1, color: colorScheme.outlineVariant),
+                    ListTile(
+                      key: const ValueKey('repeat-field'),
+                      leading: Icon(
+                        Icons.repeat_rounded,
+                        color: colorScheme.primary,
+                      ),
+                      title: const Text('Repeat'),
+                      subtitle: Text(
+                        _recurrenceLabel(_recurrenceRule, _selectedDate),
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: _selectRecurrence,
                     ),
                     Divider(height: 1, color: colorScheme.outlineVariant),
                     FormField<TimeOfDay>(
@@ -320,5 +373,467 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
         ),
       ),
     );
+  }
+
+  String _recurrenceLabel(RecurrenceRule rule, DateTime? startDate) {
+    final date = startDate ?? DateTime.now();
+    final interval = rule.interval;
+    final label = switch (rule.type) {
+      RecurrenceType.none => 'Does not repeat',
+      RecurrenceType.daily =>
+        interval == 1 ? 'Every day' : 'Every $interval days',
+      RecurrenceType.weekly => _weeklyLabel(rule, date),
+      RecurrenceType.monthly =>
+        interval == 1
+            ? '${_ordinal(rule.dayOfMonth ?? date.day)} of every month'
+            : 'Every $interval months on '
+                  '${_ordinal(rule.dayOfMonth ?? date.day)}',
+      RecurrenceType.yearly =>
+        'Every ${interval == 1 ? '' : '$interval '}'
+            '${interval == 1 ? 'year' : 'years'} on '
+            '${_monthName(rule.monthOfYear ?? date.month)} '
+            '${_ordinal(rule.dayOfMonth ?? date.day)}',
+    };
+    final endDate = rule.endDate;
+    return endDate == null
+        ? label
+        : '$label until ${MaterialLocalizations.of(context).formatMediumDate(endDate)}';
+  }
+
+  String _weeklyLabel(RecurrenceRule rule, DateTime date) {
+    final weekdays = rule.weekdays.isNotEmpty
+        ? rule.weekdays
+        : [rule.dayOfWeek ?? date.weekday];
+    final names = weekdays.map(_weekdayName).join(', ');
+    if (rule.interval > 1) {
+      return 'Every ${rule.interval} weeks on $names';
+    }
+    return 'Every $names';
+  }
+
+  String _weekdayName(int weekday) => switch (weekday) {
+    DateTime.monday => 'Monday',
+    DateTime.tuesday => 'Tuesday',
+    DateTime.wednesday => 'Wednesday',
+    DateTime.thursday => 'Thursday',
+    DateTime.friday => 'Friday',
+    DateTime.saturday => 'Saturday',
+    DateTime.sunday => 'Sunday',
+    _ => '',
+  };
+
+  String _monthName(int month) => _monthLabels[month - 1];
+
+  String _ordinal(int day) {
+    if (day >= 11 && day <= 13) {
+      return '${day}th';
+    }
+    return switch (day % 10) {
+      1 => '${day}st',
+      2 => '${day}nd',
+      3 => '${day}rd',
+      _ => '${day}th',
+    };
+  }
+}
+
+class _RecurrenceSelection {
+  const _RecurrenceSelection({required this.rule, required this.startDate});
+
+  final RecurrenceRule rule;
+  final DateTime startDate;
+}
+
+class _RecurrenceSheet extends StatefulWidget {
+  const _RecurrenceSheet({
+    required this.initialRule,
+    required this.initialDate,
+  });
+
+  final RecurrenceRule initialRule;
+  final DateTime initialDate;
+
+  @override
+  State<_RecurrenceSheet> createState() => _RecurrenceSheetState();
+}
+
+class _RecurrenceSheetState extends State<_RecurrenceSheet> {
+  static const _presets = [
+    ('none', 'Does not repeat'),
+    ('daily', 'Every day'),
+    ('weekly', 'Every week'),
+    ('biweekly', 'Every 2 weeks'),
+    ('alternateWeeks', 'Alternate weeks'),
+    ('monthly', 'Every month'),
+    ('bimonthly', 'Every 2 months'),
+    ('alternateMonths', 'Alternate months'),
+    ('yearly', 'Every year'),
+    ('custom', 'Custom'),
+  ];
+
+  late String _preset;
+  late RecurrenceType _frequency;
+  late int _interval;
+  late int _dayOfMonth;
+  late int _monthOfYear;
+  late DateTime _startDate;
+  late DateTime? _endDate;
+  late Set<int> _weekdays;
+
+  bool get _isWeekly => _frequency == RecurrenceType.weekly;
+  bool get _isMonthly => _frequency == RecurrenceType.monthly;
+  bool get _isYearly => _frequency == RecurrenceType.yearly;
+  bool get _isCustom => _preset == 'custom';
+  bool get _showWeeklyOptions => _isWeekly;
+  bool get _showDayOfMonth => _isMonthly || _isYearly;
+  bool get _showMonthOfYear => _isYearly;
+
+  @override
+  void initState() {
+    super.initState();
+    final rule = widget.initialRule;
+    _frequency = rule.type == RecurrenceType.none
+        ? RecurrenceType.daily
+        : rule.type;
+    _interval = rule.interval;
+    _dayOfMonth = rule.dayOfMonth ?? widget.initialDate.day;
+    _monthOfYear = rule.monthOfYear ?? widget.initialDate.month;
+    _startDate = DateUtils.dateOnly(widget.initialDate);
+    _endDate = rule.endDate == null ? null : DateUtils.dateOnly(rule.endDate!);
+    _weekdays =
+        (rule.weekdays.isNotEmpty
+                ? rule.weekdays
+                : [rule.dayOfWeek ?? widget.initialDate.weekday])
+            .toSet();
+    _preset = _presetFor(rule);
+  }
+
+  String _presetFor(RecurrenceRule rule) {
+    if (rule.type == RecurrenceType.none) return 'none';
+    if (rule.type == RecurrenceType.daily && rule.interval == 1) return 'daily';
+    if (rule.type == RecurrenceType.weekly) {
+      return rule.interval == 2 ? 'biweekly' : 'weekly';
+    }
+    if (rule.type == RecurrenceType.monthly) {
+      return rule.interval == 2 ? 'bimonthly' : 'monthly';
+    }
+    if (rule.type == RecurrenceType.yearly && rule.interval == 1) {
+      return 'yearly';
+    }
+    return 'custom';
+  }
+
+  void _choosePreset(String preset) {
+    setState(() {
+      _preset = preset;
+      if (preset != 'custom') {
+        _endDate = null;
+      }
+      switch (preset) {
+        case 'none':
+          break;
+        case 'daily':
+          _frequency = RecurrenceType.daily;
+          _interval = 1;
+        case 'weekly':
+          _frequency = RecurrenceType.weekly;
+          _interval = 1;
+        case 'biweekly' || 'alternateWeeks':
+          _frequency = RecurrenceType.weekly;
+          _interval = 2;
+        case 'monthly':
+          _frequency = RecurrenceType.monthly;
+          _interval = 1;
+        case 'bimonthly' || 'alternateMonths':
+          _frequency = RecurrenceType.monthly;
+          _interval = 2;
+        case 'yearly':
+          _frequency = RecurrenceType.yearly;
+          _interval = 1;
+        case 'custom':
+          _interval = _interval < 1 ? 1 : _interval;
+      }
+    });
+  }
+
+  Future<void> _pickStartDate() async {
+    final date = await showDatePicker(
+      context: context,
+      initialDate: _startDate,
+      firstDate: DateTime(1900),
+      lastDate: DateTime(2100),
+    );
+    if (date != null) {
+      setState(() {
+        _startDate = DateUtils.dateOnly(date);
+      });
+    }
+  }
+
+  Future<void> _pickEndDate() async {
+    final date = await showDatePicker(
+      context: context,
+      initialDate: _endDate ?? _startDate,
+      firstDate: _startDate,
+      lastDate: DateTime(2100),
+    );
+    if (date != null) {
+      setState(() {
+        _endDate = DateUtils.dateOnly(date);
+      });
+    }
+  }
+
+  void _finish() {
+    final rule = _preset == 'none'
+        ? const RecurrenceRule(type: RecurrenceType.none)
+        : RecurrenceRule(
+            type: _frequency,
+            interval: _interval.clamp(1, 999),
+            weekdays: _isWeekly ? (_weekdays.toList()..sort()) : const [],
+            dayOfMonth: _showDayOfMonth ? _dayOfMonth : null,
+            monthOfYear: _showMonthOfYear ? _monthOfYear : null,
+            endDate: _endDate,
+          );
+    Navigator.of(context)
+        .pop(_RecurrenceSelection(rule: rule, startDate: _startDate));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        20,
+        8,
+        20,
+        20 + MediaQuery.viewInsetsOf(context).bottom,
+      ),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.82,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Repeat', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 8),
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    RadioGroup<String>(
+                      groupValue: _preset,
+                      onChanged: (value) {
+                        if (value != null) _choosePreset(value);
+                      },
+                      child: Column(
+                        children: [
+                          for (final (value, label) in _presets)
+                            RadioListTile<String>(
+                              contentPadding: EdgeInsets.zero,
+                              title: Text(label),
+                              value: value,
+                            ),
+                        ],
+                      ),
+                    ),
+                    if (_preset != 'none') ...[
+                      const Divider(),
+                      if (_isCustom) ...[
+                        DropdownButtonFormField<RecurrenceType>(
+                          initialValue: _frequency,
+                          decoration: const InputDecoration(
+                            labelText: 'Frequency',
+                          ),
+                          items: const [
+                            DropdownMenuItem(
+                              value: RecurrenceType.daily,
+                              child: Text('Daily'),
+                            ),
+                            DropdownMenuItem(
+                              value: RecurrenceType.weekly,
+                              child: Text('Weekly'),
+                            ),
+                            DropdownMenuItem(
+                              value: RecurrenceType.monthly,
+                              child: Text('Monthly'),
+                            ),
+                            DropdownMenuItem(
+                              value: RecurrenceType.yearly,
+                              child: Text('Yearly'),
+                            ),
+                          ],
+                          onChanged: (value) {
+                            if (value != null) {
+                              setState(() => _frequency = value);
+                            }
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          key: ValueKey('repeat-interval-$_preset'),
+                          initialValue: _interval.toString(),
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'Interval',
+                            helperText:
+                                'Repeat every this many frequency units',
+                          ),
+                          onChanged: (value) {
+                            final parsed = int.tryParse(value);
+                            if (parsed != null && parsed > 0) {
+                              _interval = parsed.clamp(1, 999);
+                            }
+                          },
+                        ),
+                      ],
+                      if (_showWeeklyOptions) ...[
+                        const SizedBox(height: 12),
+                        Text(
+                          'Weekdays',
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                        Wrap(
+                          spacing: 4,
+                          children: [
+                            for (final (label, weekday) in const [
+                              ('S', DateTime.sunday),
+                              ('M', DateTime.monday),
+                              ('T', DateTime.tuesday),
+                              ('W', DateTime.wednesday),
+                              ('T', DateTime.thursday),
+                              ('F', DateTime.friday),
+                              ('S', DateTime.saturday),
+                            ])
+                              FilterChip(
+                                key: ValueKey('weekday-$weekday'),
+                                label: Text(label),
+                                selected: _weekdays.contains(weekday),
+                                onSelected: (selected) {
+                                  setState(() {
+                                    if (selected) {
+                                      _weekdays.add(weekday);
+                                    } else if (_weekdays.length > 1) {
+                                      _weekdays.remove(weekday);
+                                    }
+                                  });
+                                },
+                              ),
+                          ],
+                        ),
+                      ],
+                      if (_showDayOfMonth) ...[
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<int>(
+                          initialValue: _dayOfMonth,
+                          decoration: const InputDecoration(
+                            labelText: 'Day of month',
+                          ),
+                          items: [
+                            for (var day = 1; day <= 31; day++)
+                              DropdownMenuItem(
+                                value: day,
+                                child: Text(_ordinal(day)),
+                              ),
+                          ],
+                          onChanged: (value) {
+                            if (value != null) {
+                              setState(() => _dayOfMonth = value);
+                            }
+                          },
+                        ),
+                      ],
+                      if (_showMonthOfYear) ...[
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<int>(
+                          initialValue: _monthOfYear,
+                          decoration: const InputDecoration(labelText: 'Month'),
+                          items: [
+                            for (var month = 1; month <= 12; month++)
+                              DropdownMenuItem(
+                                value: month,
+                                child: Text(_monthLabels[month - 1]),
+                              ),
+                          ],
+                          onChanged: (value) {
+                            if (value != null) {
+                              setState(() => _monthOfYear = value);
+                            }
+                          },
+                        ),
+                      ],
+                      if (_isCustom) ...[
+                        const SizedBox(height: 8),
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Start date'),
+                          subtitle: Text(
+                            MaterialLocalizations.of(context)
+                                .formatMediumDate(_startDate),
+                          ),
+                          trailing: const Icon(Icons.calendar_month_outlined),
+                          onTap: _pickStartDate,
+                        ),
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Ends'),
+                          subtitle: Text(
+                            _endDate == null
+                                ? 'Never'
+                                : MaterialLocalizations.of(context)
+                                      .formatMediumDate(_endDate!),
+                          ),
+                          trailing: Wrap(
+                            children: [
+                              if (_endDate != null)
+                                IconButton(
+                                  tooltip: 'Remove end date',
+                                  onPressed: () =>
+                                      setState(() => _endDate = null),
+                                  icon: const Icon(Icons.close),
+                                ),
+                              IconButton(
+                                tooltip: 'Choose end date',
+                                onPressed: _pickEndDate,
+                                icon: const Icon(Icons.event_outlined),
+                              ),
+                            ],
+                          ),
+                          onTap: _pickEndDate,
+                        ),
+                      ],
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancel'),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(onPressed: _finish, child: const Text('Done')),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _ordinal(int day) {
+    if (day >= 11 && day <= 13) return '${day}th';
+    return switch (day % 10) {
+      1 => '${day}st',
+      2 => '${day}nd',
+      3 => '${day}rd',
+      _ => '${day}th',
+    };
   }
 }

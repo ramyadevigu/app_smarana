@@ -17,13 +17,37 @@ class RecurrenceRule {
   /// DateTime.sunday = 7
   final int? dayOfWeek;
 
-  const RecurrenceRule({required this.type, this.dayOfMonth, this.dayOfWeek});
+  /// Repeats once every [interval] units of [type].
+  final int interval;
+
+  /// Selected weekdays for weekly recurrence, using DateTime weekday values.
+  final List<int> weekdays;
+
+  /// Used for yearly recurrence. January = 1, December = 12.
+  final int? monthOfYear;
+
+  /// The final date on which an occurrence may happen.
+  final DateTime? endDate;
+
+  const RecurrenceRule({
+    required this.type,
+    this.dayOfMonth,
+    this.dayOfWeek,
+    this.interval = 1,
+    this.weekdays = const [],
+    this.monthOfYear,
+    this.endDate,
+  });
 
   Map<String, dynamic> toJson() {
     return {
       'type': type.name,
       'dayOfMonth': dayOfMonth,
       'dayOfWeek': dayOfWeek,
+      'interval': interval,
+      'weekdays': weekdays,
+      'monthOfYear': monthOfYear,
+      'endDate': endDate?.toIso8601String(),
     };
   }
 
@@ -32,6 +56,10 @@ class RecurrenceRule {
       type: _recurrenceTypeFromJson(json['type']),
       dayOfMonth: _readInteger(json['dayOfMonth'], minimum: 1, maximum: 31),
       dayOfWeek: _readInteger(json['dayOfWeek'], minimum: 1, maximum: 7),
+      interval: _readInteger(json['interval'], minimum: 1, maximum: 999) ?? 1,
+      weekdays: _readWeekdays(json['weekdays']),
+      monthOfYear: _readInteger(json['monthOfYear'], minimum: 1, maximum: 12),
+      endDate: _dateTimeFromJson(json['endDate']),
     );
   }
 
@@ -39,11 +67,19 @@ class RecurrenceRule {
     RecurrenceType? type,
     int? dayOfMonth,
     int? dayOfWeek,
+    int? interval,
+    List<int>? weekdays,
+    int? monthOfYear,
+    DateTime? endDate,
   }) {
     return RecurrenceRule(
       type: type ?? this.type,
       dayOfMonth: dayOfMonth ?? this.dayOfMonth,
       dayOfWeek: dayOfWeek ?? this.dayOfWeek,
+      interval: interval ?? this.interval,
+      weekdays: weekdays ?? this.weekdays,
+      monthOfYear: monthOfYear ?? this.monthOfYear,
+      endDate: endDate ?? this.endDate,
     );
   }
 }
@@ -142,6 +178,21 @@ int? _readInteger(Object? value, {required int minimum, required int maximum}) {
 
   final integer = value.toInt();
   return integer >= minimum && integer <= maximum ? integer : null;
+}
+
+List<int> _readWeekdays(Object? value) {
+  if (value is! List) {
+    return const [];
+  }
+
+  return value
+      .whereType<num>()
+      .where((day) => day.isFinite && day == day.roundToDouble())
+      .map((day) => day.toInt())
+      .where((day) => day >= DateTime.monday && day <= DateTime.sunday)
+      .toSet()
+      .toList()
+    ..sort();
 }
 
 DateTime? _dateTimeFromJson(Object? value) {

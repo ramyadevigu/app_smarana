@@ -158,17 +158,37 @@ class _RemindersScreenState extends State<RemindersScreen> {
 
   String _recurrenceLabel(Reminder reminder) {
     final rule = reminder.recurrenceRule;
-    return switch (rule.type) {
+    final label = switch (rule.type) {
       RecurrenceType.none => 'Does not repeat',
-      RecurrenceType.daily => 'Every day',
-      RecurrenceType.weekly =>
-        'Every ${_weekdayName(rule.dayOfWeek ?? reminder.dateTime.weekday)}',
+      RecurrenceType.daily =>
+        rule.interval == 1 ? 'Every day' : 'Every ${rule.interval} days',
+      RecurrenceType.weekly => _weeklyRecurrenceLabel(reminder),
       RecurrenceType.monthly =>
-        '${_ordinal(rule.dayOfMonth ?? reminder.dateTime.day)} of every month',
+        rule.interval == 1
+            ? '${_ordinal(rule.dayOfMonth ?? reminder.dateTime.day)} of every month'
+            : 'Every ${rule.interval} months on '
+                  '${_ordinal(rule.dayOfMonth ?? reminder.dateTime.day)}',
       RecurrenceType.yearly =>
-        '${reminder.dateTime.day} '
-            '${_monthNames[reminder.dateTime.month - 1]} every year',
+        'Every ${rule.interval == 1 ? '' : '${rule.interval} '}'
+            '${rule.interval == 1 ? 'year' : 'years'} on '
+            '${_monthNames[(rule.monthOfYear ?? reminder.dateTime.month) - 1]} '
+            '${_ordinal(rule.dayOfMonth ?? reminder.dateTime.day)}',
     };
+    final endDate = rule.endDate;
+    return endDate == null
+        ? label
+        : '$label until ${MaterialLocalizations.of(context).formatMediumDate(endDate)}';
+  }
+
+  String _weeklyRecurrenceLabel(Reminder reminder) {
+    final rule = reminder.recurrenceRule;
+    final weekdays = rule.weekdays.isNotEmpty
+        ? rule.weekdays
+        : [rule.dayOfWeek ?? reminder.dateTime.weekday];
+    final days = weekdays.map(_weekdayName).join(', ');
+    return rule.interval == 1
+        ? 'Every $days'
+        : 'Every ${rule.interval} weeks on $days';
   }
 
   String _weekdayName(int day) {
