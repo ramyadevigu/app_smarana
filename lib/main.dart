@@ -1,7 +1,15 @@
 import 'package:flutter/material.dart';
 
+import 'features/reminders/services/reminder_storage.dart';
+import 'services/notification_service.dart';
+
 import 'app/app.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final reminderStorage = ReminderStorage();
+  await reminderStorage.initialize();
+  await NotificationService.instance.initialize();
+  await reminderStorage.rescheduleAllReminders();
   runApp(const AppSmarana());
 }
