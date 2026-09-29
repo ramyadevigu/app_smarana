@@ -59,8 +59,7 @@ class ReminderPreferencesStore {
       notificationMode: notificationMode,
       soundUri: preferences.getString(_soundUriKey),
       soundName: preferences.getString(_soundNameKey) ?? 'Default',
-      snoozeDurationMinutes:
-          availableSnoozeDurations.contains(snoozeDuration)
+      snoozeDurationMinutes: availableSnoozeDurations.contains(snoozeDuration)
           ? snoozeDuration!
           : 10,
       vibrate: preferences.getBool(_vibrateKey) ?? true,

@@ -67,7 +67,7 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
     super.initState();
     _storage = widget.storage ?? ReminderStorage();
     _preferencesStore =
-      widget.preferencesStore ?? const ReminderPreferencesStore();
+        widget.preferencesStore ?? const ReminderPreferencesStore();
 
     final reminder = widget.reminder;
     _recurrenceRule =
@@ -368,7 +368,7 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
   }
 
   Future<void> _selectSnoozeDuration() async {
-    const durations = [5, 10, 15, 30, 60];
+    const durations = [5, 10, 15, 20, 30];
     final selection = await showModalBottomSheet<int>(
       context: context,
       useSafeArea: true,

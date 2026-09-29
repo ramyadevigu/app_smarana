@@ -1,6 +1,7 @@
 import 'package:app_smarana/features/reminders/models/reminder.dart';
 import 'package:app_smarana/features/reminders/reminders_screen.dart';
 import 'package:app_smarana/features/reminders/services/reminder_storage.dart';
+import 'package:app_smarana/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -24,21 +25,81 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(home: RemindersScreen(storage: storage)),
+      MaterialApp(
+        theme: lightTheme,
+        home: RemindersScreen(storage: storage),
+      ),
     );
     await tester.pumpAndSettle();
     final reminderSwitch = find.byType(Switch);
     expect(tester.widget<Switch>(reminderSwitch).value, isFalse);
+    final reminderCard = find.ancestor(
+      of: find.byKey(const ValueKey('reminder-switch-toggle')),
+      matching: find.byType(Card),
+    );
+    final lightColorScheme = lightTheme.colorScheme;
+    final darkColorScheme = darkTheme.colorScheme;
+    expect(
+      tester.widget<Card>(reminderCard).color,
+      lightColorScheme.surfaceContainerLow,
+    );
 
     await tester.tap(reminderSwitch);
     await tester.pumpAndSettle();
     expect((await storage.getReminders()).single.enabled, isTrue);
     expect(scheduler.scheduledReminders.keys, contains('toggle'));
+    expect(tester.widget<Switch>(reminderSwitch).value, isTrue);
+    expect(
+      tester.widget<Card>(reminderCard).color,
+      lightColorScheme.primaryContainer,
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    final restartedStorage = ReminderStorage(notificationScheduler: scheduler);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: darkTheme,
+        home: RemindersScreen(storage: restartedStorage),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect((await restartedStorage.getReminders()).single.enabled, isTrue);
+    expect(tester.widget<Switch>(reminderSwitch).value, isTrue);
+    expect(
+      tester.widget<Card>(reminderCard).color,
+      darkColorScheme.primaryContainer,
+    );
 
     await tester.tap(reminderSwitch);
     await tester.pumpAndSettle();
-    expect((await storage.getReminders()).single.enabled, isFalse);
+    expect((await restartedStorage.getReminders()).single.enabled, isFalse);
+    expect(tester.widget<Switch>(reminderSwitch).value, isFalse);
+    expect(
+      tester.widget<Card>(reminderCard).color,
+      darkColorScheme.surfaceContainerLow,
+    );
     expect(scheduler.scheduledReminders, isEmpty);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    final disabledRestartStorage = ReminderStorage(
+      notificationScheduler: scheduler,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: lightTheme,
+        home: RemindersScreen(storage: disabledRestartStorage),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      (await disabledRestartStorage.getReminders()).single.enabled,
+      isFalse,
+    );
+    expect(tester.widget<Switch>(reminderSwitch).value, isFalse);
+    expect(
+      tester.widget<Card>(reminderCard).color,
+      lightColorScheme.surfaceContainerLow,
+    );
   });
 
   testWidgets(

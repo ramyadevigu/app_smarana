@@ -68,11 +68,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _updateDefaults(ReminderDefaults defaults) async {
     setState(() => _defaults = defaults);
-    final save = _saveQueue.then((_) => _preferencesStore.saveDefaults(defaults));
-    _saveQueue = save.then<void>(
-      (_) {},
-      onError: (Object _, StackTrace _) {},
+    final save = _saveQueue.then(
+      (_) => _preferencesStore.saveDefaults(defaults),
     );
+    _saveQueue = save.then<void>((_) {}, onError: (Object _, StackTrace _) {});
     try {
       await save;
     } on Exception {
@@ -83,9 +82,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _showSaveError() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Unable to save settings.')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Unable to save settings.')));
   }
 
   Future<void> _selectSound() async {
@@ -103,8 +102,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
-            child: Text('Default ringtone',
-                style: Theme.of(context).textTheme.titleLarge),
+            child: Text(
+              'Default ringtone',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
           ),
           for (final sound in sounds)
             ListTile(
@@ -191,8 +192,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
         children: [
-          _sectionHeading(context, Icons.notifications_active_outlined,
-              'Notifications'),
+          _sectionHeading(
+            context,
+            Icons.notifications_active_outlined,
+            'Notifications',
+          ),
           const SizedBox(height: 12),
           _settingsGroup(
             colorScheme,
@@ -251,9 +255,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 title: const Text('Vibration'),
                 subtitle: Text(_defaults.vibrate ? 'On' : 'Off'),
                 value: _defaults.vibrate,
-                onChanged: (value) => _updateDefaults(
-                  _defaults.copyWith(vibrate: value),
-                ),
+                onChanged: (value) =>
+                    _updateDefaults(_defaults.copyWith(vibrate: value)),
               ),
             ],
           ),
@@ -265,8 +268,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-                child: Text('Theme',
-                    style: Theme.of(context).textTheme.titleSmall),
+                child: Text(
+                  'Theme',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
@@ -313,7 +318,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _settingsGroup(ColorScheme colorScheme, {required List<Widget> children}) {
+  Widget _settingsGroup(
+    ColorScheme colorScheme, {
+    required List<Widget> children,
+  }) {
     return Material(
       color: colorScheme.surfaceContainerLow,
       shape: RoundedRectangleBorder(

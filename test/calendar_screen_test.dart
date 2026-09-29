@@ -4,12 +4,14 @@ import 'package:app_smarana/features/reminders/services/reminder_storage.dart';
 import 'package:app_smarana/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   late DateTime now;
   late _TestReminderStorage storage;
 
   setUp(() {
+    SharedPreferences.setMockInitialValues({});
     now = DateTime(2026, 9, 29, 0, 5);
     storage = _TestReminderStorage([
       _reminder(

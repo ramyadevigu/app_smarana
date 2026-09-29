@@ -338,10 +338,16 @@ class _RemindersScreenState extends State<RemindersScreen> {
     return Card(
       margin: EdgeInsets.zero,
       elevation: 1,
-      color: colorScheme.surfaceContainerLow,
+      color: reminder.enabled
+          ? colorScheme.primaryContainer
+          : colorScheme.surfaceContainerLow,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: colorScheme.outlineVariant),
+        side: BorderSide(
+          color: reminder.enabled
+              ? colorScheme.primary.withValues(alpha: 0.35)
+              : colorScheme.outlineVariant,
+        ),
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),

@@ -31,7 +31,7 @@ void main() {
       'Calendar',
       'Notes',
       'Alarms',
-      'Stop Watch',
+      'Stopwatch',
       'Timer',
     ]);
     final navigationBar = tester.widget<NavigationBar>(
@@ -81,7 +81,7 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('nav-stopwatch')));
     await tester.pumpAndSettle();
-    expect(find.text('Stop Watch'), findsNWidgets(3));
+    expect(find.text('Stopwatch'), findsNWidgets(3));
     expect(find.text('Coming soon'), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('nav-timer')));

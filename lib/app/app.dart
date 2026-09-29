@@ -148,7 +148,7 @@ class _HomeScreenState extends State<HomeScreen> {
       NotesScreen(appMenu: _buildAppMenu()),
       RemindersScreen(title: 'Alarms', appMenu: _buildAppMenu()),
       _TimeToolScreen(
-        title: 'Stop Watch',
+        title: 'Stopwatch',
         icon: Icons.av_timer,
         appMenu: _buildAppMenu(),
       ),
@@ -195,7 +195,7 @@ class _HomeScreenState extends State<HomeScreen> {
             key: ValueKey('nav-stopwatch'),
             icon: Icon(Icons.av_timer_outlined),
             selectedIcon: Icon(Icons.av_timer, color: AppColors.white),
-            label: 'Stop Watch',
+            label: 'Stopwatch',
           ),
           NavigationDestination(
             key: ValueKey('nav-timer'),
