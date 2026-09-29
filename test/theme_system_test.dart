@@ -86,8 +86,14 @@ void main() {
       await tester.tap(find.text(modeLabel));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byIcon(Icons.notifications_none));
-      await tester.pumpAndSettle();
+      await tester.pageBack();
+      for (var frame = 0; frame < 6; frame++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      await tester.tap(find.byKey(const ValueKey('nav-alarms')));
+      for (var frame = 0; frame < 6; frame++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
       expect(_activeBrightness(tester), brightness);
 
       await tester.tap(find.byType(FloatingActionButton));
@@ -120,14 +126,22 @@ void main() {
       await tester.pumpAndSettle();
 
       await tester.pageBack();
-      await tester.pumpAndSettle();
+      for (var frame = 0; frame < 6; frame++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
     }
   });
 }
 
 Future<void> _openSettings(WidgetTester tester) async {
-  await tester.tap(find.byIcon(Icons.settings_outlined));
-  await tester.pumpAndSettle();
+  await tester.tap(find.byTooltip('More options'));
+  for (var frame = 0; frame < 6; frame++) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+  await tester.tap(find.text('Settings'));
+  for (var frame = 0; frame < 6; frame++) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
   expect(find.text('Appearance'), findsOneWidget);
 }
 

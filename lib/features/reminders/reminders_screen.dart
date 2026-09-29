@@ -7,8 +7,15 @@ import 'services/reminder_storage.dart';
 
 class RemindersScreen extends StatefulWidget {
   final ReminderStorage? storage;
+  final String title;
+  final Widget? appMenu;
 
-  const RemindersScreen({super.key, this.storage});
+  const RemindersScreen({
+    super.key,
+    this.storage,
+    this.title = 'Reminders',
+    this.appMenu,
+  });
 
   @override
   State<RemindersScreen> createState() => _RemindersScreenState();
@@ -459,7 +466,10 @@ class _RemindersScreenState extends State<RemindersScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Reminders')),
+      appBar: AppBar(
+        title: Text(widget.title),
+        actions: [if (widget.appMenu case final appMenu?) appMenu],
+      ),
       body: FutureBuilder<List<Reminder>>(
         future: _reminders,
         builder: (context, snapshot) {
@@ -552,6 +562,7 @@ class _RemindersScreenState extends State<RemindersScreen> {
         },
       ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'alarms-add-reminder',
         onPressed: _openAddReminder,
         tooltip: 'Add reminder',
         icon: const Icon(Icons.add),

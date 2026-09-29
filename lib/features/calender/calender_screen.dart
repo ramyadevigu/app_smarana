@@ -2,19 +2,26 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../theme/app_colors.dart';
 import '../reminders/models/reminder.dart';
 import '../reminders/screens/add_reminder_screen.dart';
 import '../reminders/services/reminder_storage.dart';
 import 'services/calendar_service.dart';
 
 class CalendarScreen extends StatefulWidget {
-  const CalendarScreen({super.key, this.storage, this.clock = DateTime.now});
+  const CalendarScreen({
+    super.key,
+    this.storage,
+    this.clock = DateTime.now,
+    this.appMenu,
+  });
 
   static const double _hourHeight = 64;
   static const double _emptyAgendaHeight = 40;
 
   final ReminderStorage? storage;
   final DateTime Function() clock;
+  final Widget? appMenu;
 
   @override
   State<CalendarScreen> createState() => _CalendarScreenState();
@@ -43,12 +50,15 @@ class _CalendarScreenState extends State<CalendarScreen> {
     _selectedDate = _dateOnly(_currentDateTime);
     _displayedMonth = DateTime(_selectedDate.year, _selectedDate.month);
     _clockTimer = Timer.periodic(const Duration(minutes: 1), (_) {
-      if (!mounted) {
+      if (!mounted || ModalRoute.of(context)?.isCurrent == false) {
         return;
       }
       setState(() {
         _currentDateTime = widget.clock();
       });
+      if (_isToday(_selectedDate)) {
+        _scheduleAgendaScroll();
+      }
     });
     _loadReminders();
   }
@@ -259,10 +269,12 @@ class _CalendarScreenState extends State<CalendarScreen> {
             label: const Text('Today'),
           ),
           const SizedBox(width: 8),
+          if (widget.appMenu case final appMenu?) appMenu,
         ],
       ),
       body: _buildBody(context),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'calendar-add-reminder',
         onPressed: _openAddReminder,
         tooltip: 'Add reminder for selected date',
         icon: const Icon(Icons.add),
@@ -329,15 +341,23 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   _buildAgendaHeader(context),
                   const SizedBox(height: 4),
                   Expanded(
-                    child: ListView(
-                      controller: _agendaScrollController,
-                      padding: const EdgeInsets.only(bottom: 24),
-                      children: [
-                        if (_occurrencesFor(_selectedDate).isEmpty)
-                          _buildEmptyAgenda(context),
-                        for (var hour = 0; hour < 24; hour++)
-                          _buildHourRow(context, hour),
-                      ],
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final centerPadding = constraints.maxHeight / 2;
+                        return ListView(
+                          controller: _agendaScrollController,
+                          padding: EdgeInsets.only(
+                            top: centerPadding,
+                            bottom: centerPadding + 24,
+                          ),
+                          children: [
+                            if (_occurrencesFor(_selectedDate).isEmpty)
+                              _buildEmptyAgenda(context),
+                            for (var hour = 0; hour < 24; hour++)
+                              _buildHourRow(context, hour),
+                          ],
+                        );
+                      },
                     ),
                   ),
                 ],
@@ -568,6 +588,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
   Widget _buildHourRow(BuildContext context, int hour) {
     final colorScheme = Theme.of(context).colorScheme;
+    const nowColor = AppColors.azureBlue;
     final occurrences = _occurrencesFor(_selectedDate)
         .where((occurrence) => occurrence.dateTime.hour == hour)
         .toList();
@@ -617,14 +638,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                 height: 9,
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
-                                  color: colorScheme.error,
+                                  color: nowColor,
                                 ),
                               ),
                               const SizedBox(width: 4),
                               Expanded(
                                 child: Container(
                                   height: 2,
-                                  color: colorScheme.error,
+                                  color: nowColor,
                                 ),
                               ),
                               const SizedBox(width: 5),
@@ -633,7 +654,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                 key: const ValueKey('calendar-now-time'),
                                 style: Theme.of(context).textTheme.labelSmall
                                     ?.copyWith(
-                                      color: colorScheme.error,
+                                      color: nowColor,
                                       fontWeight: FontWeight.w700,
                                     ),
                               ),

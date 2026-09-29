@@ -1,6 +1,7 @@
 import 'package:app_smarana/features/calender/calender_screen.dart';
 import 'package:app_smarana/features/reminders/models/reminder.dart';
 import 'package:app_smarana/features/reminders/services/reminder_storage.dart';
+import 'package:app_smarana/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -109,9 +110,11 @@ void main() {
     final createdReminder = storage.reminders.singleWhere(
       (reminder) => reminder.title == 'Created from calendar',
     );
-    await tester.drag(find.byType(ListView), const Offset(0, -320));
-    await _pumpFrames(tester);
-    await tester.ensureVisible(find.text('Created from calendar'));
+    await tester.dragUntilVisible(
+      find.text('Created from calendar'),
+      find.byType(ListView),
+      const Offset(0, -120),
+    );
     await _pumpFrames(tester);
     await tester.tap(find.text('Created from calendar'));
     await _pumpFrames(tester);
@@ -128,7 +131,11 @@ void main() {
       'Edited in calendar',
     );
 
-    await tester.ensureVisible(find.text('Edited in calendar'));
+    await tester.dragUntilVisible(
+      find.text('Edited in calendar'),
+      find.byType(ListView),
+      const Offset(0, -120),
+    );
     await _pumpFrames(tester);
     await tester.tap(find.byTooltip('More actions for Edited in calendar'));
     await _pumpFrames(tester);
@@ -149,10 +156,19 @@ void main() {
     await _pumpCalendar(tester, () => now, storage);
     expect(find.byKey(const ValueKey('calendar-now-time')), findsOneWidget);
     expect(_nowLabel(tester), 'NOW 12:05 AM');
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('calendar-now-time')))
+          .style
+          ?.color,
+      AppColors.azureBlue,
+    );
+    _expectNowCentered(tester);
 
     now = DateTime(2026, 9, 29, 0, 6);
     await tester.pump(const Duration(minutes: 1));
     expect(_nowLabel(tester), 'NOW 12:06 AM');
+    _expectNowCentered(tester);
 
     await tester.tap(find.byKey(const ValueKey('calendar-day-2026-9-30')));
     await _pumpFrames(tester);
@@ -182,6 +198,14 @@ String? _nowLabel(WidgetTester tester) {
   return tester
       .widget<Text>(find.byKey(const ValueKey('calendar-now-time')))
       .data;
+}
+
+void _expectNowCentered(WidgetTester tester) {
+  final labelCenter = tester.getCenter(
+    find.byKey(const ValueKey('calendar-now-time')),
+  );
+  final agendaCenter = tester.getRect(find.byType(ListView)).center;
+  expect((labelCenter.dy - agendaCenter.dy).abs(), lessThan(12));
 }
 
 Reminder _reminder({
