@@ -46,6 +46,14 @@ class RecentNoteCard extends StatelessWidget {
             const SizedBox(height: 8),
             Row(
               children: [
+                if (note.note.reminderId != null) ...[
+                  Icon(
+                    Icons.notifications_active_outlined,
+                    size: 14,
+                    color: colorScheme.primary,
+                  ),
+                  const SizedBox(width: 6),
+                ],
                 Icon(
                   Icons.menu_book_outlined,
                   size: 14,

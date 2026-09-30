@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../reminders/services/reminder_storage.dart';
 import '../models/note_workspace_models.dart';
 import '../models/rich_note_draft.dart';
 import 'rich_note_editor_screen.dart';
@@ -16,10 +17,12 @@ class NotebookDetailScreen extends StatefulWidget {
     super.key,
     required this.notebook,
     this.onNotebookChanged,
+    this.reminderStorage,
   });
 
   final Notebook notebook;
   final Future<void> Function(Notebook notebook)? onNotebookChanged;
+  final ReminderStorage? reminderStorage;
 
   @override
   State<NotebookDetailScreen> createState() => _NotebookDetailScreenState();
@@ -28,12 +31,14 @@ class NotebookDetailScreen extends StatefulWidget {
 class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
   late Notebook _notebook;
   late String _selectedSectionId;
+  late final ReminderStorage _reminderStorage;
 
   @override
   void initState() {
     super.initState();
     _notebook = widget.notebook;
     _selectedSectionId = _notebook.sections.first.id;
+    _reminderStorage = widget.reminderStorage ?? ReminderStorage();
   }
 
   List<NoteEntry> get _sectionNotes {
@@ -168,6 +173,7 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
           note: note,
           sections: _notebook.sections,
           initialSectionId: _selectedSectionId,
+          reminderStorage: _reminderStorage,
           onAutosave: (snapshot) async {
             if (!_hasMeaningfulContent(snapshot) || !mounted) {
               return;
@@ -202,6 +208,10 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
           ),
         );
       }
+      final orphanedReminderId = draft?.reminderId;
+      if (orphanedReminderId != null) {
+        await _reminderStorage.deleteReminder(orphanedReminderId);
+      }
       return;
     }
 
@@ -221,6 +231,7 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
           note: note,
           sections: _notebook.sections,
           initialSectionId: note.sectionId,
+          reminderStorage: _reminderStorage,
           onAutosave: (snapshot) async {
             if (!mounted) {
               return;
@@ -268,6 +279,8 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
       richContentDelta: draft.richContentDelta,
       attachments: draft.attachments,
       updatedAt: draft.updatedAt,
+      reminderId: draft.reminderId,
+      clearReminderId: draft.reminderId == null,
     );
   }
 
@@ -285,6 +298,46 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
   bool _hasMeaningfulContent(RichNoteDraft draft) {
     return draft.title.trim().isNotEmpty ||
         draft.plainContent.trim().isNotEmpty;
+  }
+
+  Future<void> _deleteNote(NoteEntry note) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: const Icon(Icons.delete_outline),
+        title: const Text('Delete note?'),
+        content: Text(
+          'Delete "${note.title.isEmpty ? 'Untitled note' : note.title}"? '
+          'This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
+    final reminderId = note.reminderId;
+    if (reminderId != null) {
+      await _reminderStorage.deleteReminder(reminderId);
+    }
+
+    await _publishNotebook(
+      _notebook.copyWith(
+        notes: _notebook.notes.where((item) => item.id != note.id).toList(),
+        updatedAt: DateTime.now(),
+      ),
+    );
   }
 
   Future<String?> _showNameDialog({
@@ -447,11 +500,25 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
                         return Card(
                           child: ListTile(
                             onTap: () => _editNote(note),
-                            title: Text(note.title),
+                            leading: note.reminderId != null
+                                ? Icon(
+                                    Icons.notifications_active_outlined,
+                                    color: colorScheme.primary,
+                                  )
+                                : null,
+                            title: Text(
+                              note.title.isEmpty ? 'Untitled note' : note.title,
+                            ),
                             subtitle: Text(
                               note.preview,
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
+                            ),
+                            trailing: IconButton(
+                              key: ValueKey('delete-note-${note.id}'),
+                              tooltip: 'Delete note',
+                              icon: const Icon(Icons.delete_outline),
+                              onPressed: () => _deleteNote(note),
                             ),
                           ),
                         );

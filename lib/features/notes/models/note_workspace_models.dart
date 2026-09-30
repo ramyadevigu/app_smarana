@@ -159,6 +159,7 @@ class NoteEntry {
     this.attachments = const [],
     required this.createdAt,
     required this.updatedAt,
+    this.reminderId,
   });
 
   final String id;
@@ -170,6 +171,7 @@ class NoteEntry {
   final List<NoteAttachment> attachments;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final String? reminderId;
 
   Map<String, Object?> toJson() => {
     'id': id,
@@ -183,6 +185,7 @@ class NoteEntry {
         .toList(),
     'createdAt': createdAt.toIso8601String(),
     'updatedAt': updatedAt.toIso8601String(),
+    'reminderId': reminderId,
   };
 
   factory NoteEntry.fromJson(Map<String, Object?> json) {
@@ -203,6 +206,9 @@ class NoteEntry {
       attachments: _readObjects(json['attachments'], NoteAttachment.fromJson),
       createdAt: createdAt,
       updatedAt: _readDate(json['updatedAt']) ?? createdAt,
+      reminderId: json['reminderId'] is String
+          ? json['reminderId']! as String
+          : null,
     );
   }
 
@@ -253,6 +259,8 @@ class NoteEntry {
     String? richContentDelta,
     List<NoteAttachment>? attachments,
     DateTime? updatedAt,
+    String? reminderId,
+    bool clearReminderId = false,
   }) {
     return NoteEntry(
       id: id,
@@ -264,6 +272,7 @@ class NoteEntry {
       attachments: attachments ?? this.attachments,
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      reminderId: clearReminderId ? null : reminderId ?? this.reminderId,
     );
   }
 }

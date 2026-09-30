@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
@@ -5,6 +6,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
 import 'package:uuid/uuid.dart';
 
+import '../../reminders/models/reminder.dart';
+import '../../reminders/services/reminder_storage.dart';
+import '../models/note_repeat_option.dart';
 import '../models/note_workspace_models.dart';
 import '../models/rich_note_draft.dart';
 import '../services/note_attachment_storage.dart';
@@ -17,12 +21,14 @@ class RichNoteEditorScreen extends StatefulWidget {
     required this.sections,
     required this.initialSectionId,
     this.onAutosave,
+    this.reminderStorage,
   });
 
   final NoteEntry? note;
   final List<NoteSection> sections;
   final String initialSectionId;
   final Future<void> Function(RichNoteDraft draft)? onAutosave;
+  final ReminderStorage? reminderStorage;
 
   @override
   State<RichNoteEditorScreen> createState() => _RichNoteEditorScreenState();
@@ -37,10 +43,19 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
   final _autosaveMessage = ValueNotifier<String>('');
 
   late final quill.QuillController _quillController;
+  late final ReminderStorage _reminderStorage;
   late String _selectedSectionId;
   late List<NoteAttachment> _attachments;
   bool _toolbarExpanded = true;
   bool _isExiting = false;
+
+  bool _reminderSectionVisible = false;
+  bool _loadingReminder = false;
+  String? _reminderId;
+  bool _reminderEnabled = true;
+  DateTime _reminderDateTime = DateTime.now().add(const Duration(minutes: 5));
+  DateTime _reminderCreatedAt = DateTime.now();
+  NoteRepeatOption _repeatOption = NoteRepeatOption.doesNotRepeat;
 
   @override
   void initState() {
@@ -49,6 +64,7 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
     _titleController.text = note?.title ?? '';
     _selectedSectionId = note?.sectionId ?? widget.initialSectionId;
     _attachments = List<NoteAttachment>.of(note?.attachments ?? const []);
+    _reminderStorage = widget.reminderStorage ?? ReminderStorage();
 
     _quillController = quill.QuillController(
       document: _buildDocument(note),
@@ -60,6 +76,14 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
 
     _titleController.addListener(_queueAutosave);
     _quillController.addListener(_queueAutosave);
+
+    final reminderId = note?.reminderId;
+    if (reminderId != null && reminderId.isNotEmpty) {
+      _reminderId = reminderId;
+      _reminderSectionVisible = true;
+      _loadingReminder = true;
+      unawaited(_loadReminder(reminderId));
+    }
   }
 
   @override
@@ -74,6 +98,161 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
     _lastUpdated.dispose();
     _autosaveMessage.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadReminder(String reminderId) async {
+    try {
+      final reminders = await _reminderStorage.getReminders();
+      final match = reminders.where((item) => item.id == reminderId);
+      if (!mounted) {
+        return;
+      }
+      if (match.isEmpty) {
+        setState(() {
+          _reminderId = null;
+          _reminderSectionVisible = false;
+          _loadingReminder = false;
+        });
+        return;
+      }
+      final reminder = match.first;
+      setState(() {
+        _reminderEnabled = reminder.enabled;
+        _reminderDateTime = reminder.dateTime;
+        _reminderCreatedAt = reminder.createdAt;
+        _repeatOption = NoteRepeatOption.fromRecurrenceRule(
+          reminder.recurrenceRule,
+        );
+        _loadingReminder = false;
+      });
+    } on Exception {
+      if (mounted) {
+        setState(() => _loadingReminder = false);
+      }
+    }
+  }
+
+  Future<void> _addReminder() async {
+    setState(() {
+      _reminderSectionVisible = true;
+      _reminderEnabled = true;
+      _reminderDateTime = DateTime.now().add(const Duration(minutes: 5));
+      _reminderCreatedAt = DateTime.now();
+      _repeatOption = NoteRepeatOption.doesNotRepeat;
+    });
+    await _persistReminder();
+    _queueAutosave();
+  }
+
+  Future<void> _removeReminder() async {
+    final reminderId = _reminderId;
+    try {
+      if (reminderId != null) {
+        await _reminderStorage.deleteReminder(reminderId);
+      }
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _reminderId = null;
+        _reminderSectionVisible = false;
+        _reminderEnabled = true;
+        _repeatOption = NoteRepeatOption.doesNotRepeat;
+      });
+      _queueAutosave();
+    } on Exception catch (error) {
+      _showAttachmentError('Could not remove the reminder: $error');
+    }
+  }
+
+  void _toggleReminderEnabled(bool value) {
+    setState(() => _reminderEnabled = value);
+    _persistReminder();
+  }
+
+  Future<void> _pickReminderDate() async {
+    final date = await showDatePicker(
+      context: context,
+      initialDate: _reminderDateTime,
+      firstDate: DateTime(1900),
+      lastDate: DateTime(2100),
+    );
+    if (date == null || !mounted) {
+      return;
+    }
+    setState(() {
+      _reminderDateTime = DateTime(
+        date.year,
+        date.month,
+        date.day,
+        _reminderDateTime.hour,
+        _reminderDateTime.minute,
+      );
+    });
+    _persistReminder();
+  }
+
+  Future<void> _pickReminderTime() async {
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(_reminderDateTime),
+    );
+    if (time == null || !mounted) {
+      return;
+    }
+    setState(() {
+      _reminderDateTime = DateTime(
+        _reminderDateTime.year,
+        _reminderDateTime.month,
+        _reminderDateTime.day,
+        time.hour,
+        time.minute,
+      );
+    });
+    _persistReminder();
+  }
+
+  void _selectRepeatOption(NoteRepeatOption option) {
+    setState(() => _repeatOption = option);
+    _persistReminder();
+  }
+
+  Future<void> _persistReminder() async {
+    final reminderId = _reminderId;
+    if (reminderId == null && !_reminderSectionVisible) {
+      return;
+    }
+
+    final title = _titleController.text.trim();
+    final description = _quillController.document.toPlainText().trim();
+    final reminder = Reminder(
+      id: reminderId ?? _uuid.v4(),
+      title: title.isEmpty ? 'Note reminder' : title,
+      description: description.isEmpty
+          ? null
+          : description.length > 300
+          ? description.substring(0, 300)
+          : description,
+      dateTime: _reminderDateTime,
+      recurrenceRule: _repeatOption.toRecurrenceRule(_reminderDateTime),
+      enabled: _reminderEnabled,
+      createdAt: _reminderCreatedAt,
+    );
+
+    try {
+      if (reminderId == null) {
+        await _reminderStorage.addReminder(reminder);
+        if (mounted) {
+          setState(() => _reminderId = reminder.id);
+        }
+      } else {
+        await _reminderStorage.updateReminder(reminder);
+      }
+    } on Exception catch (error) {
+      if (mounted) {
+        _showAttachmentError('Could not save the reminder: $error');
+      }
+    }
   }
 
   quill.Document _buildDocument(NoteEntry? note) {
@@ -108,6 +287,7 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
       sectionId: _selectedSectionId,
       attachments: List<NoteAttachment>.unmodifiable(_attachments),
       updatedAt: now,
+      reminderId: _reminderId,
     );
   }
 
@@ -123,6 +303,9 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
     final draft = _buildDraft();
     if (onAutosave != null) {
       await onAutosave(draft);
+    }
+    if (_reminderId != null) {
+      await _persistReminder();
     }
     if (!mounted) {
       return;
@@ -303,6 +486,143 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
         .showSnackBar(SnackBar(content: Text(message)));
   }
 
+  Widget _buildReminderSection() {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    if (_loadingReminder) {
+      return const Padding(
+        padding: EdgeInsets.fromLTRB(16, 4, 16, 4),
+        child: LinearProgressIndicator(minHeight: 2),
+      );
+    }
+
+    if (!_reminderSectionVisible) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+        child: OutlinedButton.icon(
+          key: const ValueKey('note-add-reminder-button'),
+          onPressed: _addReminder,
+          icon: const Icon(Icons.notifications_outlined),
+          label: const Text('Add Reminder'),
+        ),
+      );
+    }
+
+    final localizations = MaterialLocalizations.of(context);
+    final time = TimeOfDay.fromDateTime(_reminderDateTime);
+
+    return Container(
+      key: const ValueKey('note-reminder-section'),
+      margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: colorScheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.notifications_active_outlined,
+                color: colorScheme.primary,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Reminder',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              Switch(
+                key: const ValueKey('note-reminder-enabled-switch'),
+                value: _reminderEnabled,
+                onChanged: _toggleReminderEnabled,
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            _reminderStatusText(localizations, time),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  key: const ValueKey('note-reminder-date-button'),
+                  onPressed: _pickReminderDate,
+                  icon: const Icon(Icons.calendar_today_outlined, size: 18),
+                  label: Text(
+                    localizations.formatMediumDate(_reminderDateTime),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  key: const ValueKey('note-reminder-time-button'),
+                  onPressed: _pickReminderTime,
+                  icon: const Icon(Icons.access_time_outlined, size: 18),
+                  label: Text(localizations.formatTimeOfDay(time)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          DropdownButtonFormField<NoteRepeatOption>(
+            key: const ValueKey('note-reminder-repeat-dropdown'),
+            initialValue: _repeatOption,
+            decoration: const InputDecoration(labelText: 'Repeat'),
+            items: NoteRepeatOption.values
+                .map(
+                  (option) => DropdownMenuItem<NoteRepeatOption>(
+                    value: option,
+                    child: Text(option.label),
+                  ),
+                )
+                .toList(),
+            onChanged: (value) {
+              if (value != null) {
+                _selectRepeatOption(value);
+              }
+            },
+          ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              key: const ValueKey('note-remove-reminder-button'),
+              onPressed: _removeReminder,
+              icon: const Icon(Icons.delete_outline),
+              label: const Text('Remove reminder'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _reminderStatusText(
+    MaterialLocalizations localizations,
+    TimeOfDay time,
+  ) {
+    final dateLabel = localizations.formatMediumDate(_reminderDateTime);
+    final timeLabel = localizations.formatTimeOfDay(time);
+    final repeatLabel = _repeatOption == NoteRepeatOption.doesNotRepeat
+        ? ''
+        : ' · ${_repeatOption.label}';
+    final statusLabel = _reminderEnabled ? '' : ' · Disabled';
+    return 'Reminds on $dateLabel at $timeLabel$repeatLabel$statusLabel';
+  }
+
   void _toggleInlineAttribute(quill.Attribute attribute) {
     _quillController.formatSelection(attribute);
     _queueAutosave();
@@ -420,6 +740,7 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
                 ),
               ),
               _buildAttachmentSection(),
+              _buildReminderSection(),
               const SizedBox(height: 8),
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),

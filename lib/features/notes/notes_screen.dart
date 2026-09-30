@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../reminders/services/reminder_storage.dart';
 import 'models/note_workspace_models.dart';
 import 'screens/notebook_detail_screen.dart';
 import 'services/note_workspace_storage.dart';
@@ -376,6 +377,13 @@ class _NotesScreenState extends State<NotesScreen> {
     );
     if (confirmed != true || !mounted) {
       return;
+    }
+    final reminderStorage = ReminderStorage();
+    for (final note in notebook.notes) {
+      final reminderId = note.reminderId;
+      if (reminderId != null) {
+        await reminderStorage.deleteReminder(reminderId);
+      }
     }
     setState(() {
       _notebooks = _notebooks.where((item) => item.id != notebook.id).toList();
