@@ -1,7 +1,6 @@
 import 'package:app_smarana/features/calender/calender_screen.dart';
 import 'package:app_smarana/features/reminders/models/reminder.dart';
 import 'package:app_smarana/features/reminders/services/reminder_storage.dart';
-import 'package:app_smarana/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -28,110 +27,46 @@ void main() {
     ]);
   });
 
-  testWidgets('scrolls through the full day without changing its date', (
+  testWidgets('shows full-width month grid with selected date details', (
     tester,
   ) async {
-    final lateEvening = DateTime(2026, 9, 29, 20, 5);
-    await _pumpCalendar(tester, () => lateEvening, storage);
+    await _pumpCalendar(tester, () => now, storage);
 
-    const agendaKey = ValueKey('calendar-agenda-scroll');
-    final agendaFinder = find.byKey(agendaKey);
-    final agenda = tester.widget<SingleChildScrollView>(agendaFinder);
-    expect(agenda.scrollDirection, Axis.vertical);
-    expect(_nowLabel(tester), '8:05 PM');
-    expect(find.byKey(const ValueKey('calendar-hour-20')), findsOneWidget);
-    expect(find.text('12:00 AM'), findsOneWidget);
-    expect(find.text('11:00 PM'), findsOneWidget);
-    _expectNowAtTime(tester, lateEvening);
-    final indicatorRect = tester.getRect(
-      find.byKey(const ValueKey('calendar-now-indicator')),
-    );
-    final agendaRect = tester.getRect(agendaFinder);
+    expect(find.text('September 2026'), findsOneWidget);
     expect(
-      (indicatorRect.center.dy - (agendaRect.top + agendaRect.height * 0.3))
-          .abs(),
-      lessThan(2),
+      find.byKey(const ValueKey('calendar-previous-month')),
+      findsOneWidget,
     );
-
-    await tester.drag(agendaFinder, const Offset(0, 2400));
-    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('calendar-next-month')), findsOneWidget);
+    expect(find.byType(GridView), findsOneWidget);
     expect(find.text('Tuesday, September 29, 2026'), findsOneWidget);
-    expect(agenda.controller!.offset, 0);
-
-    await tester.drag(agendaFinder, const Offset(0, -2400));
-    await tester.pumpAndSettle();
-    expect(find.text('Tuesday, September 29, 2026'), findsOneWidget);
-    expect(
-      agenda.controller!.offset,
-      agenda.controller!.position.maxScrollExtent,
-    );
   });
 
   testWidgets('shows the requested empty-day message', (tester) async {
     await _pumpCalendar(tester, () => now, _TestReminderStorage([]));
 
+    expect(find.byKey(const ValueKey('calendar-empty-day')), findsOneWidget);
     expect(find.text('No Reminders today'), findsOneWidget);
-  });
-
-  testWidgets('positions reminders at their exact time in the day timeline', (
-    tester,
-  ) async {
-    final eventStorage = _TestReminderStorage([
-      _reminder(
-        id: 'half-hour',
-        title: 'Half-hour reminder',
-        dateTime: DateTime(2026, 9, 29, 15, 30),
-      ),
-    ]);
-    await _pumpCalendar(tester, () => now, eventStorage);
-
-    final agenda = tester.getRect(
-      find.byKey(const ValueKey('calendar-agenda-scroll')),
-    );
-    final reminder = tester.getRect(
-      find.byKey(const ValueKey('calendar-reminder-half-hour')),
-    );
-    expect(reminder.top, closeTo(agenda.top + 15.5 * 88, 1));
   });
 
   testWidgets('navigates between months and returns to today', (tester) async {
     await _pumpCalendar(tester, () => now, storage);
 
     expect(find.text('September 2026'), findsOneWidget);
-    await tester.tap(find.byTooltip('Next month'));
+    await tester.tap(find.byKey(const ValueKey('calendar-next-month')));
     await _pumpFrames(tester);
     expect(find.text('October 2026'), findsOneWidget);
 
-    await tester.tap(find.byTooltip('Previous month'));
+    await tester.tap(find.byKey(const ValueKey('calendar-previous-month')));
     await _pumpFrames(tester);
     expect(find.text('September 2026'), findsOneWidget);
 
     await tester.tap(find.text('Today'));
     await _pumpFrames(tester);
     expect(find.text('Tuesday, September 29, 2026'), findsOneWidget);
-    expect(find.byKey(const ValueKey('calendar-now-time')), findsOneWidget);
-    _expectNowAtTime(tester, now);
   });
 
-  testWidgets('navigates between years while preserving month and day', (
-    tester,
-  ) async {
-    await _pumpCalendar(tester, () => now, storage);
-
-    await tester.tap(find.byTooltip('Next year'));
-    await _pumpFrames(tester);
-    expect(find.text('September 2027'), findsOneWidget);
-    expect(find.text('Wednesday, September 29, 2027'), findsOneWidget);
-
-    await tester.tap(find.byTooltip('Previous year'));
-    await _pumpFrames(tester);
-    expect(find.text('September 2026'), findsOneWidget);
-    expect(find.text('Tuesday, September 29, 2026'), findsOneWidget);
-  });
-
-  testWidgets('month heading opens date picker with year selection', (
-    tester,
-  ) async {
+  testWidgets('month heading opens date picker', (tester) async {
     await _pumpCalendar(tester, () => now, storage);
 
     await tester.tap(find.byKey(const ValueKey('calendar-select-date')));
@@ -146,7 +81,9 @@ void main() {
     expect(find.text('Wednesday, September 29, 2027'), findsOneWidget);
   });
 
-  testWidgets('selecting an adjacent date updates its agenda', (tester) async {
+  testWidgets('selecting an adjacent date updates selected header and list', (
+    tester,
+  ) async {
     await _pumpCalendar(tester, () => now, storage);
 
     await tester.tap(find.byKey(const ValueKey('calendar-day-2026-9-30')));
@@ -166,55 +103,12 @@ void main() {
     expect(find.text('Thursday, October 1, 2026'), findsOneWidget);
     expect(find.text('October 2026'), findsOneWidget);
 
-    await tester.tap(find.byTooltip('Previous month'));
+    await tester.tap(find.byKey(const ValueKey('calendar-previous-month')));
     await _pumpFrames(tester);
     await tester.tap(find.byKey(const ValueKey('calendar-day-2026-8-31')));
     await _pumpFrames(tester);
     expect(find.text('Monday, August 31, 2026'), findsOneWidget);
     expect(find.text('August 2026'), findsOneWidget);
-  });
-
-  testWidgets('day controls synchronize the calendar across month boundaries', (
-    tester,
-  ) async {
-    await _pumpCalendar(tester, () => now, storage);
-
-    await tester.tap(find.byKey(const ValueKey('calendar-next-day')));
-    await tester.pumpAndSettle();
-    expect(find.text('Wednesday, September 30, 2026'), findsOneWidget);
-    expect(find.text('September 2026'), findsOneWidget);
-    expect(
-      tester
-          .widget<Semantics>(
-            find.byKey(const ValueKey('calendar-day-2026-9-30')),
-          )
-          .properties
-          .selected,
-      isTrue,
-    );
-
-    await tester.tap(find.byKey(const ValueKey('calendar-next-day')));
-    await tester.pumpAndSettle();
-    expect(find.text('Thursday, October 1, 2026'), findsOneWidget);
-    expect(find.text('October 2026'), findsOneWidget);
-
-    await tester.tap(find.byKey(const ValueKey('calendar-next-day')));
-    await tester.pumpAndSettle();
-    expect(find.text('Friday, October 2, 2026'), findsOneWidget);
-    expect(find.text('October 2026'), findsOneWidget);
-    expect(
-      tester
-          .widget<Semantics>(
-            find.byKey(const ValueKey('calendar-day-2026-10-2')),
-          )
-          .properties
-          .selected,
-      isTrue,
-    );
-
-    await tester.tap(find.byKey(const ValueKey('calendar-previous-day')));
-    await tester.pumpAndSettle();
-    expect(find.text('Thursday, October 1, 2026'), findsOneWidget);
   });
 
   testWidgets('calendar add action prepopulates the selected date', (
@@ -256,12 +150,6 @@ void main() {
     final createdReminder = storage.reminders.singleWhere(
       (reminder) => reminder.title == 'Created from calendar',
     );
-    await tester.dragUntilVisible(
-      find.text('Created from calendar'),
-      find.byKey(const ValueKey('calendar-agenda-scroll')),
-      const Offset(0, -120),
-    );
-    await _pumpFrames(tester);
     await tester.tap(find.text('Created from calendar'));
     await _pumpFrames(tester);
     await tester.enterText(
@@ -279,12 +167,6 @@ void main() {
       'Edited in calendar',
     );
 
-    await tester.dragUntilVisible(
-      find.text('Edited in calendar'),
-      find.byKey(const ValueKey('calendar-agenda-scroll')),
-      const Offset(0, -120),
-    );
-    await _pumpFrames(tester);
     await tester.tap(find.byTooltip('More actions for Edited in calendar'));
     await _pumpFrames(tester);
     await tester.tap(find.text('Delete'));
@@ -296,42 +178,6 @@ void main() {
       storage.reminders.any((reminder) => reminder.id == createdReminder.id),
       isFalse,
     );
-  });
-
-  testWidgets('NOW follows the clock and is absent on another date', (
-    tester,
-  ) async {
-    await _pumpCalendar(tester, () => now, storage);
-    expect(find.byKey(const ValueKey('calendar-now-time')), findsOneWidget);
-    expect(_nowLabel(tester), '12:05 AM');
-    expect(
-      tester
-          .widget<Text>(find.byKey(const ValueKey('calendar-now-time')))
-          .style
-          ?.color,
-      AppColors.white,
-    );
-    final nowLabelContainer = tester.widget<Container>(
-      find
-          .ancestor(
-            of: find.byKey(const ValueKey('calendar-now-time')),
-            matching: find.byType(Container),
-          )
-          .first,
-    );
-    final nowLabelDecoration = nowLabelContainer.decoration! as BoxDecoration;
-    expect(nowLabelDecoration.color, AppColors.azureBlue);
-    expect(nowLabelDecoration.borderRadius, BorderRadius.circular(8));
-    _expectNowAtTime(tester, now);
-
-    now = DateTime(2026, 9, 29, 0, 6);
-    await tester.pump(const Duration(minutes: 1));
-    expect(_nowLabel(tester), '12:06 AM');
-    _expectNowAtTime(tester, now);
-
-    await tester.tap(find.byKey(const ValueKey('calendar-day-2026-9-30')));
-    await _pumpFrames(tester);
-    expect(find.byKey(const ValueKey('calendar-now-time')), findsNothing);
   });
 }
 
@@ -351,31 +197,6 @@ Future<void> _pumpCalendar(
 Future<void> _pumpFrames(WidgetTester tester) async {
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 350));
-}
-
-String? _nowLabel(WidgetTester tester) {
-  return tester
-      .widget<Text>(find.byKey(const ValueKey('calendar-now-time')))
-      .data;
-}
-
-void _expectNowAtTime(WidgetTester tester, DateTime time) {
-  final indicator = tester.getRect(
-    find.byKey(const ValueKey('calendar-now-indicator')),
-  );
-  final agendaWidget = tester.widget<SingleChildScrollView>(
-    find.byKey(const ValueKey('calendar-agenda-scroll')),
-  );
-  final agenda = tester.getRect(
-    find.byKey(const ValueKey('calendar-agenda-scroll')),
-  );
-  final expectedOffset =
-      (time.hour * 60 + time.minute) / 60 * 88 -
-      agendaWidget.controller!.offset;
-  expect(
-    (indicator.center.dy - (agenda.top + expectedOffset)).abs(),
-    lessThan(2),
-  );
 }
 
 Reminder _reminder({
