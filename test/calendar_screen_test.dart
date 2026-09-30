@@ -1,4 +1,5 @@
 import 'package:app_smarana/features/calender/calender_screen.dart';
+import 'package:app_smarana/features/calender/models/calendar_view_mode.dart';
 import 'package:app_smarana/features/reminders/models/reminder.dart';
 import 'package:app_smarana/features/reminders/services/reminder_storage.dart';
 import 'package:flutter/material.dart';
@@ -40,6 +41,30 @@ void main() {
     expect(find.byKey(const ValueKey('calendar-next-month')), findsOneWidget);
     expect(find.byType(GridView), findsOneWidget);
     expect(find.text('Tuesday, September 29, 2026'), findsOneWidget);
+    expect(find.byKey(const ValueKey('calendar-view-stacked')), findsOneWidget);
+  });
+
+  testWidgets('renders two pane layout when split mode is selected', (
+    tester,
+  ) async {
+    await _pumpCalendar(
+      tester,
+      () => now,
+      storage,
+      viewMode: CalendarViewMode.split,
+    );
+
+    expect(find.byKey(const ValueKey('calendar-view-split')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('calendar-split-divider')),
+      findsOneWidget,
+    );
+    final selectedLabel = tester.widget<Text>(
+      find.byKey(const ValueKey('calendar-selected-date-label')),
+    );
+    expect(selectedLabel.data, contains('Tuesday'));
+    final digitsOnly = selectedLabel.data!.replaceAll(RegExp(r'[^0-9]'), '');
+    expect(digitsOnly, contains('2026'));
   });
 
   testWidgets('shows the requested empty-day message', (tester) async {
@@ -184,11 +209,12 @@ void main() {
 Future<void> _pumpCalendar(
   WidgetTester tester,
   DateTime Function() clock,
-  ReminderStorage storage,
-) async {
+  ReminderStorage storage, {
+  CalendarViewMode viewMode = CalendarViewMode.stacked,
+}) async {
   await tester.pumpWidget(
     MaterialApp(
-      home: CalendarScreen(storage: storage, clock: clock),
+      home: CalendarScreen(storage: storage, clock: clock, viewMode: viewMode),
     ),
   );
   await _pumpFrames(tester);

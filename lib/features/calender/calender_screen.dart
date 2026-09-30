@@ -288,7 +288,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
       );
     }
 
+    return widget.viewMode == CalendarViewMode.split
+        ? _buildSplitLayout(context)
+        : _buildStackedLayout(context);
+  }
+
+  Widget _buildStackedLayout(BuildContext context) {
     return Padding(
+      key: const ValueKey('calendar-view-stacked'),
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -307,10 +314,58 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
-  Widget _buildMonthHeader(BuildContext context) {
+  Widget _buildSplitLayout(BuildContext context) {
+    return Padding(
+      key: const ValueKey('calendar-view-split'),
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            flex: 3,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildMonthHeader(context, isCompact: true),
+                const SizedBox(height: 10),
+                _buildWeekdayHeader(context),
+                const SizedBox(height: 2),
+                Expanded(child: _buildMonthGridCard(context)),
+              ],
+            ),
+          ),
+          VerticalDivider(
+            key: const ValueKey('calendar-split-divider'),
+            width: 14,
+            thickness: 0.8,
+            color: Theme.of(context).colorScheme.outlineVariant,
+          ),
+          Expanded(
+            flex: 2,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(height: 8),
+                _buildSelectedDateHeader(context, includeMonth: false),
+                const SizedBox(height: 8),
+                Expanded(child: _buildSelectedDateList(context)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMonthHeader(BuildContext context, {bool isCompact = false}) {
     final localizations = MaterialLocalizations.of(context);
     final title = localizations.formatMonthYear(_displayedMonth);
     final theme = Theme.of(context);
+    final baseTextStyle =
+        (isCompact ? theme.textTheme.titleMedium : theme.textTheme.titleLarge)
+            ?.copyWith(fontWeight: FontWeight.w700);
+    final iconSize = isCompact ? 24.0 : 28.0;
+    final minButtonSize = isCompact ? 40.0 : 46.0;
 
     return Row(
       children: [
@@ -318,9 +373,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
           key: const ValueKey('calendar-previous-month'),
           tooltip: 'Previous month',
           onPressed: () => _changeMonth(-1),
-          icon: const Icon(Icons.chevron_left, size: 28),
+          icon: Icon(Icons.chevron_left, size: iconSize),
           style: IconButton.styleFrom(
-            minimumSize: const Size(46, 46),
+            minimumSize: Size(minButtonSize, minButtonSize),
             tapTargetSize: MaterialTapTargetSize.padded,
           ),
         ),
@@ -330,13 +385,22 @@ class _CalendarScreenState extends State<CalendarScreen> {
             child: TextButton(
               key: const ValueKey('calendar-select-date'),
               onPressed: _pickDate,
-              child: Text(
-                title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: theme.textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w700,
+              style: TextButton.styleFrom(
+                padding: EdgeInsets.symmetric(
+                  horizontal: isCompact ? 2 : 8,
+                  vertical: 6,
+                ),
+              ),
+              child: SizedBox(
+                height: isCompact ? 26 : 30,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    textAlign: TextAlign.center,
+                    style: baseTextStyle,
+                  ),
                 ),
               ),
             ),
@@ -346,9 +410,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
           key: const ValueKey('calendar-next-month'),
           tooltip: 'Next month',
           onPressed: () => _changeMonth(1),
-          icon: const Icon(Icons.chevron_right, size: 28),
+          icon: Icon(Icons.chevron_right, size: iconSize),
           style: IconButton.styleFrom(
-            minimumSize: const Size(46, 46),
+            minimumSize: Size(minButtonSize, minButtonSize),
             tapTargetSize: MaterialTapTargetSize.padded,
           ),
         ),
@@ -474,9 +538,18 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
               return DecoratedBox(
                 decoration: BoxDecoration(
+                  color: today
+                      ? (selected
+                            ? colorScheme.primaryContainer
+                            : colorScheme.primaryContainer.withValues(
+                                alpha: 0.55,
+                              ))
+                      : null,
                   border: Border.all(
-                    color: colorScheme.outlineVariant.withValues(alpha: 0.65),
-                    width: 0.35,
+                    color: today
+                        ? colorScheme.primary.withValues(alpha: 0.55)
+                        : colorScheme.outlineVariant.withValues(alpha: 0.65),
+                    width: today ? 0.9 : 0.35,
                   ),
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -563,11 +636,28 @@ class _CalendarScreenState extends State<CalendarScreen> {
     };
   }
 
-  Widget _buildSelectedDateHeader(BuildContext context) {
+  Widget _buildSelectedDateHeader(
+    BuildContext context, {
+    bool includeMonth = true,
+  }) {
+    final localizations = MaterialLocalizations.of(context);
+    final fullDate = localizations.formatFullDate(_selectedDate);
+    final firstCommaIndex = fullDate.indexOf(',');
+    final weekday = firstCommaIndex == -1
+        ? fullDate
+        : fullDate.substring(0, firstCommaIndex);
+    final compactDate =
+        '$weekday, '
+        '${localizations.formatDecimal(_selectedDate.day)} '
+        '${localizations.formatDecimal(_selectedDate.year)}';
+
     return Semantics(
       header: true,
       child: Text(
-        MaterialLocalizations.of(context).formatFullDate(_selectedDate),
+        key: const ValueKey('calendar-selected-date-label'),
+        includeMonth ? fullDate : compactDate,
+        maxLines: 3,
+        overflow: TextOverflow.ellipsis,
         style: Theme.of(context).textTheme.titleMedium
             ?.copyWith(fontWeight: FontWeight.w700),
       ),

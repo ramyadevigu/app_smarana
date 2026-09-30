@@ -30,7 +30,7 @@ void main() {
         home: RemindersScreen(storage: storage),
       ),
     );
-    await tester.pumpAndSettle();
+    await _pumpFrames(tester);
     final reminderSwitch = find.byType(Switch);
     expect(tester.widget<Switch>(reminderSwitch).value, isFalse);
     final reminderCard = find.ancestor(
@@ -45,7 +45,7 @@ void main() {
     );
 
     await tester.tap(reminderSwitch);
-    await tester.pumpAndSettle();
+    await _pumpFrames(tester);
     expect((await storage.getReminders()).single.enabled, isTrue);
     expect(scheduler.scheduledReminders.keys, contains('toggle'));
     expect(tester.widget<Switch>(reminderSwitch).value, isTrue);
@@ -62,7 +62,7 @@ void main() {
         home: RemindersScreen(storage: restartedStorage),
       ),
     );
-    await tester.pumpAndSettle();
+    await _pumpFrames(tester);
     expect((await restartedStorage.getReminders()).single.enabled, isTrue);
     expect(tester.widget<Switch>(reminderSwitch).value, isTrue);
     expect(
@@ -71,7 +71,7 @@ void main() {
     );
 
     await tester.tap(reminderSwitch);
-    await tester.pumpAndSettle();
+    await _pumpFrames(tester);
     expect((await restartedStorage.getReminders()).single.enabled, isFalse);
     expect(tester.widget<Switch>(reminderSwitch).value, isFalse);
     expect(
@@ -90,7 +90,7 @@ void main() {
         home: RemindersScreen(storage: disabledRestartStorage),
       ),
     );
-    await tester.pumpAndSettle();
+    await _pumpFrames(tester);
     expect(
       (await disabledRestartStorage.getReminders()).single.enabled,
       isFalse,
@@ -146,7 +146,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(home: RemindersScreen(storage: storage)),
       );
-      await tester.pumpAndSettle();
+      await _pumpFrames(tester);
 
       expect(find.text('Weekly check-in'), findsOneWidget);
       expect(find.text('8:00'), findsOneWidget);
@@ -162,7 +162,7 @@ void main() {
       expect(find.text('Disabled'), findsOneWidget);
 
       await tester.tap(find.byTooltip('Add reminder'));
-      await tester.pumpAndSettle();
+      await _pumpFrames(tester);
       await tester.enterText(
         find.byKey(const ValueKey('title-field')),
         'New reminder',
@@ -173,21 +173,21 @@ void main() {
       );
       await tester.ensureVisible(find.byKey(const ValueKey('save-reminder')));
       await tester.tap(find.byKey(const ValueKey('save-reminder')));
-      await tester.pumpAndSettle();
+      await _pumpFrames(tester);
 
       expect(find.text('New reminder'), findsOneWidget);
       expect(find.text('Created from the list'), findsOneWidget);
       expect(await storage.getReminders(), hasLength(5));
 
       await tester.tap(find.text('New reminder'));
-      await tester.pumpAndSettle();
+      await _pumpFrames(tester);
       await tester.enterText(
         find.byKey(const ValueKey('title-field')),
         'Edited reminder',
       );
       await tester.ensureVisible(find.byKey(const ValueKey('save-reminder')));
       await tester.tap(find.byKey(const ValueKey('save-reminder')));
-      await tester.pumpAndSettle();
+      await _pumpFrames(tester);
 
       expect(find.text('New reminder'), findsNothing);
       expect(find.text('Edited reminder'), findsOneWidget);
@@ -206,25 +206,25 @@ void main() {
         matching: find.byKey(ValueKey('reminder-menu-$editedReminderId')),
       );
       await tester.tap(reminderMenu);
-      await tester.pumpAndSettle();
+      await _pumpFrames(tester);
       await tester.tap(
         find.byKey(ValueKey('delete-reminder-$editedReminderId')),
       );
-      await tester.pumpAndSettle();
+      await _pumpFrames(tester);
 
       expect(find.text('Delete reminder?'), findsOneWidget);
       await tester.tap(find.text('Cancel'));
-      await tester.pumpAndSettle();
+      await _pumpFrames(tester);
       expect(find.text('Edited reminder'), findsOneWidget);
 
       await tester.tap(reminderMenu);
-      await tester.pumpAndSettle();
+      await _pumpFrames(tester);
       await tester.tap(
         find.byKey(ValueKey('delete-reminder-$editedReminderId')),
       );
-      await tester.pumpAndSettle();
+      await _pumpFrames(tester);
       await tester.tap(find.text('Delete').last);
-      await tester.pumpAndSettle();
+      await _pumpFrames(tester);
 
       expect(find.text('Edited reminder'), findsNothing);
       expect(await storage.getReminders(), hasLength(4));
@@ -257,15 +257,20 @@ void main() {
     );
 
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
-    await tester.pumpAndSettle();
+    await _pumpFrames(tester);
     expect(find.text('Unable to load reminders'), findsOneWidget);
 
     storage.shouldFail = false;
     await tester.tap(find.byKey(const ValueKey('retry-reminders')));
-    await tester.pumpAndSettle();
+    await _pumpFrames(tester);
 
     expect(find.text('No reminders yet'), findsOneWidget);
   });
+}
+
+Future<void> _pumpFrames(WidgetTester tester) async {
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 350));
 }
 
 class _RecoveringReminderStorage extends ReminderStorage {
