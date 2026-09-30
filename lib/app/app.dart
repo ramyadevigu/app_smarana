@@ -170,7 +170,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final screens = [
       CalendarScreen(viewMode: _calendarViewMode, appMenu: _buildAppMenu()),
-      NotesScreen(appMenu: _buildAppMenu()),
+      NotesScreen(appMenu: _buildAppMenu(), onBackToSmarana: _returnToCalendar),
       RemindersScreen(title: 'Alarms', appMenu: _buildAppMenu()),
       _TimeToolScreen(
         title: 'Stopwatch',
@@ -327,6 +327,15 @@ class _HomeScreenState extends State<HomeScreen> {
     }
     setState(() {
       _calendarViewMode = viewMode;
+    });
+  }
+
+  void _returnToCalendar() {
+    if (_currentIndex == 0) {
+      return;
+    }
+    setState(() {
+      _currentIndex = 0;
     });
   }
 }

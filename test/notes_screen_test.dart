@@ -1,285 +1,154 @@
-import 'package:app_smarana/features/notes/models/note.dart';
+import 'package:app_smarana/features/notes/models/note_workspace_models.dart';
 import 'package:app_smarana/features/notes/notes_screen.dart';
-import 'package:app_smarana/features/notes/services/note_storage.dart';
-import 'package:app_smarana/features/reminders/models/reminder.dart';
-import 'package:app_smarana/features/reminders/services/reminder_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  late _MemoryNoteStorage notes;
-  late _MemoryReminderStorage reminders;
+  testWidgets('creates, renames, and deletes notebooks', (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: NotesScreen()));
 
-  setUp(() {
-    notes = _MemoryNoteStorage();
-    reminders = _MemoryReminderStorage();
-  });
-
-  testWidgets('creates, edits, and deletes notes', (tester) async {
-    await _pumpNotes(tester, notes, reminders);
-
-    await tester.tap(find.byTooltip('Create note'));
+    await tester.tap(find.byKey(const ValueKey('notes-new-notebook-button')));
     await tester.pumpAndSettle();
-    await tester.enterText(
-      find.byKey(const ValueKey('note-title')),
-      'Groceries',
-    );
-    await tester.enterText(find.byKey(const ValueKey('note-content')), 'Oats');
-    await tester.tap(find.byTooltip('Save note'));
-    await tester.pumpAndSettle();
-    expect(notes.values.single.title, 'Groceries');
-    expect(find.text('Groceries'), findsOneWidget);
-
-    await tester.tap(find.text('Groceries'));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(const ValueKey('note-title')), 'Market');
-    await tester.tap(find.byTooltip('Save note'));
-    await tester.pumpAndSettle();
-    expect(notes.values.single.title, 'Market');
-
-    await tester.tap(find.byTooltip('More actions for Market'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Delete'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
-    await tester.pumpAndSettle();
-    expect(notes.values, isEmpty);
-  });
-
-  testWidgets('creates checklists and moves completed items to the bottom', (
-    tester,
-  ) async {
-    await _pumpNotes(tester, notes, reminders);
-
-    await tester.tap(find.byTooltip('Create note'));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(const ValueKey('note-title')), 'Today');
-    await tester.tap(find.text('Checklist'));
+    await tester.enterText(find.byType(TextField).last, 'Project Launch');
+    await tester.tap(find.widgetWithText(FilledButton, 'Create'));
     await tester.pumpAndSettle();
 
-    await tester.enterText(
-      find.byKey(const ValueKey('new-checklist-item')),
-      'Call clinic',
-    );
-    await tester.tap(find.byTooltip('Add checklist item'));
-    await tester.pumpAndSettle();
-    await tester.enterText(
-      find.byKey(const ValueKey('new-checklist-item')),
-      'Pick up mail',
-    );
-    await tester.tap(find.byTooltip('Add checklist item'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Save note'));
-    await tester.pumpAndSettle();
+    expect(find.text('Project Launch'), findsOneWidget);
 
-    final note = notes.values.single;
-    expect(note.isChecklist, isTrue);
-    expect(note.checklistItems.map((item) => item.text), [
-      'Call clinic',
-      'Pick up mail',
-    ]);
-
-    await tester.tap(
-      find.byKey(
-        ValueKey('note-check-${note.id}-${note.checklistItems.first.id}'),
-      ),
-    );
-    await tester.pumpAndSettle();
-    expect(notes.values.single.checklistItems.map((item) => item.text), [
-      'Pick up mail',
-      'Call clinic',
-    ]);
-    expect(notes.values.single.checklistItems.last.isChecked, isTrue);
-  });
-
-  testWidgets('searches, filters, pins, colors, and archives notes', (
-    tester,
-  ) async {
-    await _pumpNotes(tester, notes, reminders);
-
-    await tester.tap(find.byTooltip('Create note'));
-    await tester.pumpAndSettle();
-    await tester.enterText(
-      find.byKey(const ValueKey('note-title')),
-      'Work update',
-    );
-    await tester.enterText(
-      find.byKey(const ValueKey('note-content')),
-      'Meet the team',
-    );
-    await tester.enterText(
-      find.byKey(const ValueKey('note-labels')),
-      'Work, Weekly',
-    );
-    await tester.dragUntilVisible(
-      find.byKey(const ValueKey('note-pinned-toggle')),
-      find.byType(ListView).last,
-      const Offset(0, -360),
-    );
-    await tester.drag(find.byType(ListView).last, const Offset(0, -160));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('note-pinned-toggle')));
-    await tester.tap(find.byKey(const ValueKey('note-color-teal')));
-    await tester.tap(find.byTooltip('Save note'));
-    await tester.pumpAndSettle();
-
-    expect(notes.values.single.isPinned, isTrue);
-    expect(notes.values.single.labels, ['Work', 'Weekly']);
-    expect(notes.values.single.color, NoteColor.teal);
-
-    await tester.tap(find.byTooltip('Search notes'));
-    await tester.pumpAndSettle();
-    await tester.enterText(
-      find.byKey(const ValueKey('notes-search-field')),
-      'team',
-    );
-    await tester.pumpAndSettle();
-    expect(
-      find.byKey(ValueKey('note-card-${notes.values.single.id}')),
-      findsOneWidget,
-    );
-    await tester.enterText(
-      find.byKey(const ValueKey('notes-search-field')),
-      'not found',
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('No matching notes'), findsOneWidget);
-    await tester.tap(find.byTooltip('Close search'));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const ValueKey('note-label-filter-Work')));
-    await tester.pumpAndSettle();
-    expect(find.text('Work update'), findsOneWidget);
-
-    await tester.tap(find.byTooltip('More actions for Work update'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Archive'));
-    await tester.pumpAndSettle();
-    expect(find.text('Work update'), findsNothing);
-
-    await tester.tap(find.byKey(const ValueKey('notes-archive-toggle')));
-    await tester.pumpAndSettle();
-    expect(find.text('Work update'), findsOneWidget);
-    expect(notes.values.single.isArchived, isTrue);
-  });
-
-  testWidgets('creates and clears a linked alarm for a note', (tester) async {
-    await _pumpNotes(tester, notes, reminders);
-
-    await tester.tap(find.byTooltip('Create note'));
-    await tester.pumpAndSettle();
-    await tester.enterText(
-      find.byKey(const ValueKey('note-title')),
-      'Call Mum',
-    );
-    await tester.enterText(
-      find.byKey(const ValueKey('note-content')),
-      'Ask about Sunday.',
-    );
-    await tester.tap(find.byKey(const ValueKey('note-reminder-toggle')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Save note'));
-    await tester.pumpAndSettle();
-
-    expect(reminders.values, hasLength(1));
-    expect(reminders.values.single.title, 'Call Mum');
-    expect(reminders.values.single.description, 'Ask about Sunday.');
-    expect(notes.values.single.reminderId, reminders.values.single.id);
-    expect(find.textContaining('Call Mum'), findsOneWidget);
-
-    await tester.tap(find.text('Call Mum'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('note-reminder-toggle')));
-    await tester.tap(find.byTooltip('Save note'));
-    await tester.pumpAndSettle();
-    expect(reminders.values, isEmpty);
-    expect(notes.values.single.reminderId, isNull);
-  });
-
-  testWidgets('deleting a note keeps its linked alarm', (tester) async {
-    await _pumpNotes(tester, notes, reminders);
-
-    await tester.tap(find.byTooltip('Create note'));
-    await tester.pumpAndSettle();
-    await tester.enterText(
-      find.byKey(const ValueKey('note-title')),
-      'Keep the alarm',
-    );
     await tester.ensureVisible(
-      find.byKey(const ValueKey('note-reminder-toggle')),
+      find.byTooltip('Notebook actions for Project Launch'),
     );
-    await tester.tap(find.byKey(const ValueKey('note-reminder-toggle')));
-    await tester.tap(find.byTooltip('Save note'));
+    await tester.tap(find.byTooltip('Notebook actions for Project Launch'));
     await tester.pumpAndSettle();
-    expect(reminders.values, hasLength(1));
+    await tester.tap(find.text('Rename'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, 'Project X');
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('More actions for Keep the alarm'));
+    expect(find.text('Project X'), findsOneWidget);
+
+    await tester.ensureVisible(
+      find.byTooltip('Notebook actions for Project X'),
+    );
+    await tester.tap(find.byTooltip('Notebook actions for Project X'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Delete'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
     await tester.pumpAndSettle();
 
-    expect(notes.values, isEmpty);
-    expect(reminders.values, hasLength(1));
+    expect(find.text('Project X'), findsNothing);
   });
-}
 
-Future<void> _pumpNotes(
-  WidgetTester tester,
-  NoteStorage notes,
-  ReminderStorage reminders,
-) async {
-  await tester.pumpWidget(
-    MaterialApp(
-      home: NotesScreen(noteStorage: notes, reminderStorage: reminders),
-    ),
-  );
-  await tester.pumpAndSettle();
-}
+  testWidgets('opens notebook and manages sections with notes', (tester) async {
+    final notebook = Notebook(
+      id: 'book-1',
+      name: 'Engineering',
+      iconType: NotebookIconType.work,
+      sections: [
+        NoteSection(
+          id: 'sec-roadmap',
+          name: 'Roadmap',
+          createdAt: DateTime(2026, 9, 1),
+        ),
+        NoteSection(
+          id: 'sec-retro',
+          name: 'Retrospective',
+          createdAt: DateTime(2026, 9, 2),
+        ),
+      ],
+      notes: [
+        NoteEntry(
+          id: 'note-1',
+          notebookId: 'book-1',
+          sectionId: 'sec-retro',
+          title: 'Sprint Review',
+          content: 'Document lessons learned.',
+          createdAt: DateTime(2026, 9, 15),
+          updatedAt: DateTime(2026, 9, 15, 10),
+        ),
+      ],
+      createdAt: DateTime(2026, 9, 1),
+      updatedAt: DateTime(2026, 9, 15),
+    );
 
-class _MemoryNoteStorage extends NoteStorage {
-  final List<Note> values = [];
+    await tester.pumpWidget(
+      MaterialApp(home: NotesScreen(initialNotebooks: [notebook])),
+    );
 
-  @override
-  Future<List<Note>> getNotes() async => List.of(values);
+    await tester.tap(find.text('Engineering'));
+    await tester.pumpAndSettle();
 
-  @override
-  Future<void> addNote(Note note) async => values.add(note);
+    expect(find.text('Roadmap'), findsNWidgets(2));
+    expect(find.text('Retrospective'), findsOneWidget);
+    expect(find.text('No notes in this section yet'), findsOneWidget);
 
-  @override
-  Future<void> updateNote(Note note) async {
-    final index = values.indexWhere((item) => item.id == note.id);
-    if (index >= 0) {
-      values[index] = note;
-    }
-  }
+    await tester.tap(find.text('Retrospective'));
+    await tester.pumpAndSettle();
+    expect(find.text('Sprint Review'), findsOneWidget);
 
-  @override
-  Future<void> deleteNote(String id) async {
-    values.removeWhere((note) => note.id == id);
-  }
-}
+    await tester.tap(find.byKey(const ValueKey('notebook-add-section')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, 'Ideas');
+    await tester.tap(find.widgetWithText(FilledButton, 'Create'));
+    await tester.pumpAndSettle();
 
-class _MemoryReminderStorage extends ReminderStorage {
-  final List<Reminder> values = [];
+    expect(find.text('Ideas'), findsNWidgets(2));
 
-  @override
-  Future<List<Reminder>> getReminders() async => List.of(values);
+    await tester.tap(find.byKey(const ValueKey('section-actions-menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Rename section'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, 'Concepts');
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
 
-  @override
-  Future<void> addReminder(Reminder reminder) async => values.add(reminder);
+    expect(find.text('Concepts'), findsNWidgets(2));
 
-  @override
-  Future<void> updateReminder(Reminder reminder) async {
-    final index = values.indexWhere((item) => item.id == reminder.id);
-    if (index >= 0) {
-      values[index] = reminder;
-    }
-  }
+    await tester.tap(find.byKey(const ValueKey('section-new-note-button')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('new-note-title-field')),
+      'Draft launch brief',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('new-note-content-field')),
+      'Share with marketing and design teams.',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Create'));
+    await tester.pumpAndSettle();
 
-  @override
-  Future<void> deleteReminder(String id) async {
-    values.removeWhere((reminder) => reminder.id == id);
-  }
+    expect(find.text('Draft launch brief'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('section-actions-menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete section'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Concepts'), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('notebook-save-and-close')));
+    await tester.pumpAndSettle();
+    expect(find.text('Engineering'), findsOneWidget);
+  });
+
+  testWidgets('search filters notebook and recent note lists', (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: NotesScreen()));
+
+    expect(find.text('Plans & Goals'), findsOneWidget);
+    expect(find.text('Weekly Review'), findsOneWidget);
+
+    await tester.enterText(
+      find.byKey(const ValueKey('notes-workspace-search')),
+      'workout',
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Health & Fitness'), findsOneWidget);
+    expect(find.text('Workout Split'), findsOneWidget);
+    expect(find.text('Plans & Goals'), findsNothing);
+  });
 }
