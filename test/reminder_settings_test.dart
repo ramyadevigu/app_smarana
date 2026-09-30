@@ -1,6 +1,7 @@
 import 'package:app_smarana/features/reminders/models/reminder.dart';
 import 'package:app_smarana/features/reminders/screens/add_reminder_screen.dart';
 import 'package:app_smarana/features/reminders/services/reminder_storage.dart';
+import 'package:app_smarana/features/calender/models/calendar_view_mode.dart';
 import 'package:app_smarana/features/settings/services/reminder_preferences_store.dart';
 import 'package:app_smarana/features/settings/settings_screen.dart';
 import 'package:flutter/material.dart';
@@ -14,6 +15,11 @@ void main() {
   testWidgets('settings persist and become defaults for new reminders', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(1080, 1920);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     SharedPreferences.setMockInitialValues({});
     const soundChannel = MethodChannel('smarana/reminder_sounds');
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -28,6 +34,7 @@ void main() {
       notificationScheduler: FakeReminderNotificationScheduler(),
     );
     var selectedThemeMode = ThemeMode.system;
+    var selectedCalendarViewMode = CalendarViewMode.stacked;
 
     await tester.pumpWidget(
       MaterialApp(
@@ -41,9 +48,13 @@ void main() {
                     MaterialPageRoute<void>(
                       builder: (_) => SettingsScreen(
                         selectedThemeMode: selectedThemeMode,
+                        selectedCalendarViewMode: selectedCalendarViewMode,
                         preferencesStore: preferencesStore,
                         onThemeModeChanged: (mode) async {
                           selectedThemeMode = mode;
+                        },
+                        onCalendarViewModeChanged: (mode) async {
+                          selectedCalendarViewMode = mode;
                         },
                       ),
                     ),
@@ -90,6 +101,20 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Dark'));
     await tester.pumpAndSettle();
+    final calendarViewControl = find.byKey(
+      const ValueKey('settings-calendar-view-mode'),
+    );
+    await tester.scrollUntilVisible(
+      calendarViewControl,
+      120,
+      scrollable: find.byType(Scrollable).first,
+    );
+    final twoPaneFinder = find.descendant(
+      of: calendarViewControl,
+      matching: find.text('Two Pane'),
+    );
+    await tester.tap(twoPaneFinder);
+    await tester.pumpAndSettle();
 
     final defaults = await preferencesStore.loadDefaults();
     expect(
@@ -100,7 +125,9 @@ void main() {
     expect(defaults.soundName, 'Morning Bell');
     expect(defaults.snoozeDurationMinutes, 20);
     expect(defaults.vibrate, isFalse);
+    expect(defaults.calendarViewMode, CalendarViewMode.split);
     expect(selectedThemeMode, ThemeMode.dark);
+    expect(selectedCalendarViewMode, CalendarViewMode.split);
 
     await tester.pageBack();
     await tester.pumpAndSettle();

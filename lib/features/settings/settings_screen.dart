@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../calender/models/calendar_view_mode.dart';
 import '../../services/notification_service.dart';
 import '../reminders/models/reminder.dart';
 import 'services/reminder_preferences_store.dart';
@@ -8,12 +9,16 @@ class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
     super.key,
     required this.selectedThemeMode,
+    required this.selectedCalendarViewMode,
     required this.onThemeModeChanged,
+    required this.onCalendarViewModeChanged,
     this.preferencesStore,
   });
 
   final ThemeMode selectedThemeMode;
+  final CalendarViewMode selectedCalendarViewMode;
   final Future<void> Function(ThemeMode) onThemeModeChanged;
+  final Future<void> Function(CalendarViewMode) onCalendarViewModeChanged;
   final ReminderPreferencesStore? preferencesStore;
 
   @override
@@ -177,6 +182,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _changeCalendarViewMode(CalendarViewMode mode) async {
+    if (_defaults.calendarViewMode == mode) {
+      return;
+    }
+
+    await _updateDefaults(_defaults.copyWith(calendarViewMode: mode));
+    try {
+      await widget.onCalendarViewModeChanged(mode);
+    } on Exception {
+      if (mounted) {
+        _showSaveError();
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -297,6 +317,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   showSelectedIcon: false,
                   onSelectionChanged: (selection) {
                     _changeThemeMode(selection.first);
+                  },
+                ),
+              ),
+              const Divider(height: 1),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+                child: Text(
+                  'Calendar view',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+                child: SegmentedButton<CalendarViewMode>(
+                  key: const ValueKey('settings-calendar-view-mode'),
+                  segments: const [
+                    ButtonSegment<CalendarViewMode>(
+                      value: CalendarViewMode.stacked,
+                      icon: Icon(Icons.view_agenda_outlined),
+                      label: Text('Top + Bottom'),
+                    ),
+                    ButtonSegment<CalendarViewMode>(
+                      value: CalendarViewMode.split,
+                      icon: Icon(Icons.view_week_outlined),
+                      label: Text('Two Pane'),
+                    ),
+                  ],
+                  selected: {_defaults.calendarViewMode},
+                  showSelectedIcon: false,
+                  onSelectionChanged: (selection) {
+                    _changeCalendarViewMode(selection.first);
                   },
                 ),
               ),

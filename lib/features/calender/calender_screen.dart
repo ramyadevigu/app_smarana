@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'models/calendar_view_mode.dart';
 import '../../theme/app_colors.dart';
 import '../reminders/models/reminder.dart';
 import '../reminders/screens/add_reminder_screen.dart';
@@ -13,6 +14,7 @@ class CalendarScreen extends StatefulWidget {
     super.key,
     this.storage,
     this.clock = DateTime.now,
+    this.viewMode = CalendarViewMode.stacked,
     this.appMenu,
   });
 
@@ -24,6 +26,7 @@ class CalendarScreen extends StatefulWidget {
 
   final ReminderStorage? storage;
   final DateTime Function() clock;
+  final CalendarViewMode viewMode;
   final Widget? appMenu;
 
   @override
@@ -360,6 +363,12 @@ class _CalendarScreenState extends State<CalendarScreen> {
       );
     }
 
+    return widget.viewMode == CalendarViewMode.split
+        ? _buildSplitLayout(context)
+        : _buildStackedLayout(context);
+  }
+
+  Widget _buildStackedLayout(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final rowCount = _monthGridCellCount() ~/ 7;
@@ -384,19 +393,73 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   const SizedBox(height: 4),
                   if (_occurrencesFor(_selectedDate).isEmpty)
                     _buildEmptyAgenda(context),
-                  Expanded(
-                    child: SingleChildScrollView(
-                      key: const ValueKey('calendar-agenda-scroll'),
-                      controller: _agendaScrollController,
-                      child: _buildDayTimeline(context),
-                    ),
-                  ),
+                  Expanded(child: _buildAgendaScrollView(context)),
                 ],
               ),
             ),
           ),
         );
       },
+    );
+  }
+
+  Widget _buildSplitLayout(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final rowCount = _monthGridCellCount() ~/ 7;
+        final cellExtent = ((constraints.maxHeight - 120) / rowCount)
+            .clamp(42.0, 64.0)
+            .toDouble();
+
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                flex: 3,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildMonthHeader(context),
+                    const SizedBox(height: 8),
+                    _buildWeekdayHeader(context),
+                    const SizedBox(height: 2),
+                    Expanded(
+                      child: Align(
+                        alignment: Alignment.topCenter,
+                        child: _buildMonthGrid(context, cellExtent),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const VerticalDivider(width: 14),
+              Expanded(
+                flex: 2,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildAgendaHeader(context),
+                    const SizedBox(height: 4),
+                    if (_occurrencesFor(_selectedDate).isEmpty)
+                      _buildEmptyAgenda(context),
+                    Expanded(child: _buildAgendaScrollView(context)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildAgendaScrollView(BuildContext context) {
+    return SingleChildScrollView(
+      key: const ValueKey('calendar-agenda-scroll'),
+      controller: _agendaScrollController,
+      child: _buildDayTimeline(context),
     );
   }
 

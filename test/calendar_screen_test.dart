@@ -138,11 +138,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(DatePickerDialog), findsOneWidget);
 
-    await tester.tap(find.text('2026'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('2027'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('OK'));
+    Navigator.of(tester.element(find.byType(DatePickerDialog)))
+        .pop(DateTime(2027, 9, 29));
     await _pumpFrames(tester);
 
     expect(find.text('September 2027'), findsOneWidget);

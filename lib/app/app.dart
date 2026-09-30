@@ -4,11 +4,13 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
 
+import '../features/calender/models/calendar_view_mode.dart';
 import '../features/calender/calender_screen.dart';
 import '../features/notes/notes_screen.dart';
 import '../features/reminders/screens/add_reminder_screen.dart';
 import '../features/reminders/services/reminder_storage.dart';
 import '../features/reminders/reminders_screen.dart';
+import '../features/settings/services/reminder_preferences_store.dart';
 import '../features/settings/settings_screen.dart';
 import '../services/notification_service.dart';
 import '../theme/app_theme.dart';
@@ -140,11 +142,34 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
+  final ReminderPreferencesStore _preferencesStore =
+      const ReminderPreferencesStore();
+  CalendarViewMode _calendarViewMode = CalendarViewMode.stacked;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCalendarViewMode();
+  }
+
+  Future<void> _loadCalendarViewMode() async {
+    try {
+      final defaults = await _preferencesStore.loadDefaults();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _calendarViewMode = defaults.calendarViewMode;
+      });
+    } on Exception {
+      // Keep default view mode if preferences cannot be read.
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final screens = [
-      CalendarScreen(appMenu: _buildAppMenu()),
+      CalendarScreen(viewMode: _calendarViewMode, appMenu: _buildAppMenu()),
       NotesScreen(appMenu: _buildAppMenu()),
       RemindersScreen(title: 'Alarms', appMenu: _buildAppMenu()),
       _TimeToolScreen(
@@ -250,6 +275,8 @@ class _HomeScreenState extends State<HomeScreen> {
           MaterialPageRoute<void>(
             builder: (_) => SettingsScreen(
               selectedThemeMode: widget.selectedThemeMode,
+              selectedCalendarViewMode: _calendarViewMode,
+              onCalendarViewModeChanged: _changeCalendarViewMode,
               onThemeModeChanged: _changeThemeMode,
             ),
           ),
@@ -292,6 +319,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _changeThemeMode(ThemeMode themeMode) async {
     await widget.onThemeModeChanged?.call(themeMode);
+  }
+
+  Future<void> _changeCalendarViewMode(CalendarViewMode viewMode) async {
+    if (_calendarViewMode == viewMode) {
+      return;
+    }
+    setState(() {
+      _calendarViewMode = viewMode;
+    });
   }
 }
 

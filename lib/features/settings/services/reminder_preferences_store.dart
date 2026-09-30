@@ -1,5 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../calender/models/calendar_view_mode.dart';
 import '../../reminders/models/reminder.dart';
 
 class ReminderDefaults {
@@ -9,6 +10,7 @@ class ReminderDefaults {
     this.soundName = 'Default',
     this.snoozeDurationMinutes = 10,
     this.vibrate = true,
+    this.calendarViewMode = CalendarViewMode.stacked,
   });
 
   final ReminderNotificationMode notificationMode;
@@ -16,6 +18,7 @@ class ReminderDefaults {
   final String soundName;
   final int snoozeDurationMinutes;
   final bool vibrate;
+  final CalendarViewMode calendarViewMode;
 
   ReminderDefaults copyWith({
     ReminderNotificationMode? notificationMode,
@@ -24,6 +27,7 @@ class ReminderDefaults {
     String? soundName,
     int? snoozeDurationMinutes,
     bool? vibrate,
+    CalendarViewMode? calendarViewMode,
   }) {
     return ReminderDefaults(
       notificationMode: notificationMode ?? this.notificationMode,
@@ -32,6 +36,7 @@ class ReminderDefaults {
       snoozeDurationMinutes:
           snoozeDurationMinutes ?? this.snoozeDurationMinutes,
       vibrate: vibrate ?? this.vibrate,
+      calendarViewMode: calendarViewMode ?? this.calendarViewMode,
     );
   }
 }
@@ -44,6 +49,7 @@ class ReminderPreferencesStore {
   static const _soundNameKey = 'defaultReminderSoundName';
   static const _snoozeDurationKey = 'defaultReminderSnoozeDuration';
   static const _vibrateKey = 'defaultReminderVibrate';
+  static const _calendarViewModeKey = 'calendarViewMode';
 
   Future<ReminderDefaults> loadDefaults() async {
     final preferences = await SharedPreferences.getInstance();
@@ -54,6 +60,11 @@ class ReminderPreferencesStore {
     );
     final snoozeDuration = preferences.getInt(_snoozeDurationKey);
     const availableSnoozeDurations = [5, 10, 15, 20, 30];
+    final viewModeName = preferences.getString(_calendarViewModeKey);
+    final calendarViewMode = CalendarViewMode.values.firstWhere(
+      (mode) => mode.name == viewModeName,
+      orElse: () => CalendarViewMode.stacked,
+    );
 
     return ReminderDefaults(
       notificationMode: notificationMode,
@@ -63,6 +74,7 @@ class ReminderPreferencesStore {
           ? snoozeDuration!
           : 10,
       vibrate: preferences.getBool(_vibrateKey) ?? true,
+      calendarViewMode: calendarViewMode,
     );
   }
 
@@ -79,6 +91,10 @@ class ReminderPreferencesStore {
       preferences.setString(_soundNameKey, defaults.soundName),
       preferences.setInt(_snoozeDurationKey, defaults.snoozeDurationMinutes),
       preferences.setBool(_vibrateKey, defaults.vibrate),
+      preferences.setString(
+        _calendarViewModeKey,
+        defaults.calendarViewMode.name,
+      ),
     ]);
     if (results.any((saved) => !saved)) {
       throw StateError('Unable to save reminder defaults.');
