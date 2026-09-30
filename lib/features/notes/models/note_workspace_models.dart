@@ -4,6 +4,98 @@ enum NotebookIconType { work, goals, journal, health, ideas, general }
 
 enum NoteAttachmentType { image, file }
 
+enum NoteProjectPriority { low, medium, high }
+
+enum NoteProjectStatus { toDo, inProgress, done }
+
+class NoteProjectMetadata {
+  const NoteProjectMetadata({
+    this.owner,
+    this.tags = const [],
+    this.startDate,
+    this.endDate,
+    this.priority,
+    this.status = NoteProjectStatus.toDo,
+    this.relatedCalendarEventId,
+  });
+
+  final String? owner;
+  final List<String> tags;
+  final DateTime? startDate;
+  final DateTime? endDate;
+  final NoteProjectPriority? priority;
+  final NoteProjectStatus status;
+  final String? relatedCalendarEventId;
+
+  bool get isEmpty {
+    return (owner == null || owner!.trim().isEmpty) &&
+        tags.isEmpty &&
+        startDate == null &&
+        endDate == null &&
+        priority == null &&
+        status == NoteProjectStatus.toDo &&
+        relatedCalendarEventId == null;
+  }
+
+  Map<String, Object?> toJson() => {
+    'owner': owner,
+    'tags': tags,
+    'startDate': startDate?.toIso8601String(),
+    'endDate': endDate?.toIso8601String(),
+    'priority': priority?.name,
+    'status': status.name,
+    'relatedCalendarEventId': relatedCalendarEventId,
+  };
+
+  factory NoteProjectMetadata.fromJson(Map<String, Object?> json) {
+    final tags = json['tags'] is List
+        ? (json['tags']! as List)
+              .whereType<String>()
+              .map((tag) => tag.trim())
+              .where((tag) => tag.isNotEmpty)
+              .toList()
+        : const <String>[];
+
+    return NoteProjectMetadata(
+      owner: json['owner'] is String ? json['owner']! as String : null,
+      tags: tags,
+      startDate: _readDate(json['startDate']),
+      endDate: _readDate(json['endDate']),
+      priority: _readProjectPriority(json['priority']),
+      status: _readProjectStatus(json['status']),
+      relatedCalendarEventId: json['relatedCalendarEventId'] is String
+          ? json['relatedCalendarEventId']! as String
+          : null,
+    );
+  }
+
+  NoteProjectMetadata copyWith({
+    String? owner,
+    List<String>? tags,
+    DateTime? startDate,
+    bool clearStartDate = false,
+    DateTime? endDate,
+    bool clearEndDate = false,
+    NoteProjectPriority? priority,
+    bool clearPriority = false,
+    NoteProjectStatus? status,
+    String? relatedCalendarEventId,
+    bool clearRelatedCalendarEventId = false,
+  }) {
+    return NoteProjectMetadata(
+      owner: owner ?? this.owner,
+      tags: tags ?? this.tags,
+      startDate: clearStartDate ? null : startDate ?? this.startDate,
+      endDate: clearEndDate ? null : endDate ?? this.endDate,
+      priority: clearPriority ? null : priority ?? this.priority,
+      status: status ?? this.status,
+      relatedCalendarEventId: clearRelatedCalendarEventId
+          ? null
+          : relatedCalendarEventId ?? this.relatedCalendarEventId,
+    );
+  }
+}
+
 class NoteAttachment {
   const NoteAttachment({
     required this.id,
@@ -157,6 +249,7 @@ class NoteEntry {
     required this.content,
     this.richContentDelta,
     this.attachments = const [],
+    this.projectMetadata,
     required this.createdAt,
     required this.updatedAt,
     this.reminderId,
@@ -169,6 +262,7 @@ class NoteEntry {
   final String content;
   final String? richContentDelta;
   final List<NoteAttachment> attachments;
+  final NoteProjectMetadata? projectMetadata;
   final DateTime createdAt;
   final DateTime updatedAt;
   final String? reminderId;
@@ -183,6 +277,7 @@ class NoteEntry {
     'attachments': attachments
         .map((attachment) => attachment.toJson())
         .toList(),
+    'projectMetadata': projectMetadata?.toJson(),
     'createdAt': createdAt.toIso8601String(),
     'updatedAt': updatedAt.toIso8601String(),
     'reminderId': reminderId,
@@ -204,6 +299,7 @@ class NoteEntry {
           ? json['richContentDelta']! as String
           : null,
       attachments: _readObjects(json['attachments'], NoteAttachment.fromJson),
+      projectMetadata: _readProjectMetadata(json['projectMetadata']),
       createdAt: createdAt,
       updatedAt: _readDate(json['updatedAt']) ?? createdAt,
       reminderId: json['reminderId'] is String
@@ -258,6 +354,8 @@ class NoteEntry {
     String? content,
     String? richContentDelta,
     List<NoteAttachment>? attachments,
+    NoteProjectMetadata? projectMetadata,
+    bool clearProjectMetadata = false,
     DateTime? updatedAt,
     String? reminderId,
     bool clearReminderId = false,
@@ -270,11 +368,45 @@ class NoteEntry {
       content: content ?? this.content,
       richContentDelta: richContentDelta ?? this.richContentDelta,
       attachments: attachments ?? this.attachments,
+      projectMetadata: clearProjectMetadata
+          ? null
+          : projectMetadata ?? this.projectMetadata,
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       reminderId: clearReminderId ? null : reminderId ?? this.reminderId,
     );
   }
+}
+
+NoteProjectMetadata? _readProjectMetadata(Object? value) {
+  if (value is! Map) {
+    return null;
+  }
+  final metadata = NoteProjectMetadata.fromJson(_stringKeyedMap(value));
+  return metadata.isEmpty ? null : metadata;
+}
+
+NoteProjectPriority? _readProjectPriority(Object? value) {
+  if (value is! String) {
+    return null;
+  }
+  for (final item in NoteProjectPriority.values) {
+    if (item.name == value) {
+      return item;
+    }
+  }
+  return null;
+}
+
+NoteProjectStatus _readProjectStatus(Object? value) {
+  if (value is String) {
+    for (final item in NoteProjectStatus.values) {
+      if (item.name == value) {
+        return item;
+      }
+    }
+  }
+  return NoteProjectStatus.toDo;
 }
 
 class RecentNoteView {

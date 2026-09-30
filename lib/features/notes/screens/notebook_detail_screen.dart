@@ -5,6 +5,8 @@ import '../models/note_workspace_models.dart';
 import '../models/rich_note_draft.dart';
 import 'rich_note_editor_screen.dart';
 
+enum NotebookViewMode { notes, list, kanban }
+
 class NotebookDetailResult {
   const NotebookDetailResult({this.updatedNotebook, this.isDeleted = false});
 
@@ -32,6 +34,7 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
   late Notebook _notebook;
   late String _selectedSectionId;
   late final ReminderStorage _reminderStorage;
+  NotebookViewMode _viewMode = NotebookViewMode.notes;
 
   @override
   void initState() {
@@ -278,9 +281,31 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
       content: draft.plainContent,
       richContentDelta: draft.richContentDelta,
       attachments: draft.attachments,
+      projectMetadata: draft.projectMetadata,
+      clearProjectMetadata: draft.projectMetadata == null,
       updatedAt: draft.updatedAt,
       reminderId: draft.reminderId,
       clearReminderId: draft.reminderId == null,
+    );
+  }
+
+  Future<void> _moveNoteToStatus(
+    NoteEntry note,
+    NoteProjectStatus status,
+  ) async {
+    final now = DateTime.now();
+    final currentMetadata = note.projectMetadata;
+    final updatedMetadata = (currentMetadata ?? const NoteProjectMetadata())
+        .copyWith(status: status);
+    final updatedNote = note.copyWith(
+      projectMetadata: updatedMetadata,
+      updatedAt: now,
+    );
+    await _publishNotebook(
+      _notebook.copyWith(
+        notes: _upsertNote(_notebook.notes, updatedNote),
+        updatedAt: now,
+      ),
     );
   }
 
@@ -409,18 +434,22 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
             itemBuilder: (context) => const [
               PopupMenuItem<String>(
                 value: 'rename',
-                child: ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.drive_file_rename_outline),
-                  title: Text('Rename section'),
+                child: Row(
+                  children: [
+                    Icon(Icons.drive_file_rename_outline),
+                    SizedBox(width: 12),
+                    Text('Rename section'),
+                  ],
                 ),
               ),
               PopupMenuItem<String>(
                 value: 'delete',
-                child: ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.delete_outline),
-                  title: Text('Delete section'),
+                child: Row(
+                  children: [
+                    Icon(Icons.delete_outline),
+                    SizedBox(width: 12),
+                    Text('Delete section'),
+                  ],
                 ),
               ),
             ],
@@ -463,69 +492,72 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
             const SizedBox(height: 12),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
+              child: Column(
                 children: [
-                  Expanded(
-                    child: Text(
-                      _selectedSection.name,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _selectedSection.name,
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                       ),
-                    ),
+                      FilledButton.icon(
+                        key: const ValueKey('section-new-note-button'),
+                        onPressed: _createNote,
+                        icon: const Icon(Icons.note_add_outlined),
+                        label: const Text('New Note'),
+                      ),
+                    ],
                   ),
-                  FilledButton.icon(
-                    key: const ValueKey('section-new-note-button'),
-                    onPressed: _createNote,
-                    icon: const Icon(Icons.note_add_outlined),
-                    label: const Text('New Note'),
+                  const SizedBox(height: 10),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: SegmentedButton<NotebookViewMode>(
+                      key: const ValueKey('notebook-view-segmented-button'),
+                      segments: const [
+                        ButtonSegment<NotebookViewMode>(
+                          value: NotebookViewMode.notes,
+                          icon: Icon(Icons.notes_outlined),
+                          label: Text('Document'),
+                        ),
+                        ButtonSegment<NotebookViewMode>(
+                          value: NotebookViewMode.list,
+                          icon: Icon(Icons.view_list_outlined),
+                          label: Text('List'),
+                        ),
+                        ButtonSegment<NotebookViewMode>(
+                          value: NotebookViewMode.kanban,
+                          icon: Icon(Icons.view_kanban_outlined),
+                          label: Text('Kanban'),
+                        ),
+                      ],
+                      selected: {_viewMode},
+                      onSelectionChanged: (selection) {
+                        if (selection.isEmpty) {
+                          return;
+                        }
+                        setState(() {
+                          _viewMode = selection.first;
+                        });
+                      },
+                    ),
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 10),
             Expanded(
-              child: _sectionNotes.isEmpty
-                  ? Center(
-                      child: Text(
-                        'No notes in this section yet',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    )
-                  : ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                      itemBuilder: (context, index) {
-                        final note = _sectionNotes[index];
-                        return Card(
-                          child: ListTile(
-                            onTap: () => _editNote(note),
-                            leading: note.reminderId != null
-                                ? Icon(
-                                    Icons.notifications_active_outlined,
-                                    color: colorScheme.primary,
-                                  )
-                                : null,
-                            title: Text(
-                              note.title.isEmpty ? 'Untitled note' : note.title,
-                            ),
-                            subtitle: Text(
-                              note.preview,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            trailing: IconButton(
-                              key: ValueKey('delete-note-${note.id}'),
-                              tooltip: 'Delete note',
-                              icon: const Icon(Icons.delete_outline),
-                              onPressed: () => _deleteNote(note),
-                            ),
-                          ),
-                        );
-                      },
-                      separatorBuilder: (_, _) => const SizedBox(height: 8),
-                      itemCount: _sectionNotes.length,
-                    ),
+              child: switch (_viewMode) {
+                NotebookViewMode.notes => _buildDocumentView(
+                  theme,
+                  colorScheme,
+                ),
+                NotebookViewMode.list => _buildListView(theme, colorScheme),
+                NotebookViewMode.kanban => _buildKanbanView(theme, colorScheme),
+              },
             ),
           ],
         ),
@@ -540,5 +572,328 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
         label: const Text('Done'),
       ),
     );
+  }
+
+  Widget _buildDocumentView(ThemeData theme, ColorScheme colorScheme) {
+    final notes = _sectionNotes;
+    if (notes.isEmpty) {
+      return Center(
+        child: Text(
+          'No notes in this section yet',
+          style: theme.textTheme.titleMedium?.copyWith(
+            color: colorScheme.onSurfaceVariant,
+          ),
+        ),
+      );
+    }
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      itemBuilder: (context, index) {
+        final note = notes[index];
+        final metadata = note.projectMetadata;
+        return Card(
+          child: ListTile(
+            onTap: () => _editNote(note),
+            leading: note.reminderId != null
+                ? Icon(
+                    Icons.notifications_active_outlined,
+                    color: colorScheme.primary,
+                  )
+                : null,
+            title: Text(note.title.isEmpty ? 'Untitled note' : note.title),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  note.preview,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (metadata != null) ...[
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      _statusChip(metadata.status),
+                      if (metadata.priority != null)
+                        Chip(
+                          label: Text(_priorityLabel(metadata.priority!)),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      if ((metadata.owner ?? '').trim().isNotEmpty)
+                        Chip(
+                          label: Text('Owner: ${metadata.owner!.trim()}'),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+            trailing: IconButton(
+              key: ValueKey('delete-note-${note.id}'),
+              tooltip: 'Delete note',
+              icon: const Icon(Icons.delete_outline),
+              onPressed: () => _deleteNote(note),
+            ),
+          ),
+        );
+      },
+      separatorBuilder: (_, _) => const SizedBox(height: 8),
+      itemCount: notes.length,
+    );
+  }
+
+  Widget _buildListView(ThemeData theme, ColorScheme colorScheme) {
+    final notes = _sectionNotes;
+    if (notes.isEmpty) {
+      return Center(
+        child: Text(
+          'No notes in this section yet',
+          style: theme.textTheme.titleMedium?.copyWith(
+            color: colorScheme.onSurfaceVariant,
+          ),
+        ),
+      );
+    }
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      itemBuilder: (context, index) {
+        final note = notes[index];
+        final metadata = note.projectMetadata;
+        final status = metadata?.status ?? NoteProjectStatus.toDo;
+        return Card(
+          child: ListTile(
+            key: ValueKey('list-note-${note.id}'),
+            onTap: () => _editNote(note),
+            title: Text(note.title.isEmpty ? 'Untitled note' : note.title),
+            subtitle: Text(
+              metadata?.owner == null
+                  ? _statusLabel(status)
+                  : 'Owner: ${metadata!.owner} · ${_statusLabel(status)}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            leading: _statusChip(status),
+            trailing: PopupMenuButton<NoteProjectStatus>(
+              tooltip: 'Move status',
+              onSelected: (value) {
+                _moveNoteToStatus(note, value);
+              },
+              itemBuilder: (context) => const [
+                PopupMenuItem<NoteProjectStatus>(
+                  value: NoteProjectStatus.toDo,
+                  child: Text('Move to To Do'),
+                ),
+                PopupMenuItem<NoteProjectStatus>(
+                  value: NoteProjectStatus.inProgress,
+                  child: Text('Move to In Progress'),
+                ),
+                PopupMenuItem<NoteProjectStatus>(
+                  value: NoteProjectStatus.done,
+                  child: Text('Move to Done'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+      separatorBuilder: (_, _) => const SizedBox(height: 8),
+      itemCount: notes.length,
+    );
+  }
+
+  Widget _buildKanbanView(ThemeData theme, ColorScheme colorScheme) {
+    final notes = _sectionNotes;
+    if (notes.isEmpty) {
+      return Center(
+        child: Text(
+          'No notes in this section yet',
+          style: theme.textTheme.titleMedium?.copyWith(
+            color: colorScheme.onSurfaceVariant,
+          ),
+        ),
+      );
+    }
+
+    final grouped = <NoteProjectStatus, List<NoteEntry>>{
+      NoteProjectStatus.toDo: [],
+      NoteProjectStatus.inProgress: [],
+      NoteProjectStatus.done: [],
+    };
+
+    for (final note in notes) {
+      final status = note.projectMetadata?.status ?? NoteProjectStatus.toDo;
+      grouped[status]!.add(note);
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 900;
+        final columns = NoteProjectStatus.values
+            .map(
+              (status) => _buildKanbanColumn(
+                status: status,
+                notes: grouped[status]!,
+                theme: theme,
+                colorScheme: colorScheme,
+              ),
+            )
+            .toList();
+
+        if (compact) {
+          return ListView.separated(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+            itemBuilder: (context, index) => columns[index],
+            separatorBuilder: (_, _) => const SizedBox(height: 12),
+            itemCount: columns.length,
+          );
+        }
+
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (var i = 0; i < columns.length; i++) ...[
+              Expanded(child: columns[i]),
+              if (i != columns.length - 1) const SizedBox(width: 8),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildKanbanColumn({
+    required NoteProjectStatus status,
+    required List<NoteEntry> notes,
+    required ThemeData theme,
+    required ColorScheme colorScheme,
+  }) {
+    return DragTarget<NoteEntry>(
+      onWillAcceptWithDetails: (details) {
+        return details.data.projectMetadata?.status != status;
+      },
+      onAcceptWithDetails: (details) {
+        _moveNoteToStatus(details.data, status);
+      },
+      builder: (context, candidateData, rejectedData) {
+        final hasCandidate = candidateData.isNotEmpty;
+        return Container(
+          key: ValueKey('kanban-column-${status.name}'),
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: hasCandidate
+                ? colorScheme.primaryContainer.withValues(alpha: 0.45)
+                : colorScheme.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: colorScheme.outlineVariant),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                '${_statusLabel(status)} (${notes.length})',
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              if (notes.isEmpty)
+                Text(
+                  'Drop notes here',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                )
+              else
+                ...notes.map((note) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: LongPressDraggable<NoteEntry>(
+                      data: note,
+                      feedback: Material(
+                        elevation: 4,
+                        borderRadius: BorderRadius.circular(8),
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 220),
+                          child: _kanbanCard(
+                            note: note,
+                            theme: theme,
+                            colorScheme: colorScheme,
+                          ),
+                        ),
+                      ),
+                      childWhenDragging: Opacity(
+                        opacity: 0.4,
+                        child: _kanbanCard(
+                          note: note,
+                          theme: theme,
+                          colorScheme: colorScheme,
+                        ),
+                      ),
+                      child: _kanbanCard(
+                        note: note,
+                        theme: theme,
+                        colorScheme: colorScheme,
+                      ),
+                    ),
+                  );
+                }),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _kanbanCard({
+    required NoteEntry note,
+    required ThemeData theme,
+    required ColorScheme colorScheme,
+  }) {
+    final metadata = note.projectMetadata;
+    return Card(
+      child: ListTile(
+        dense: true,
+        onTap: () => _editNote(note),
+        title: Text(
+          note.title.isEmpty ? 'Untitled note' : note.title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        subtitle: Text(
+          metadata?.owner == null ? note.preview : 'Owner: ${metadata!.owner}',
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _statusChip(NoteProjectStatus status) {
+    return Chip(
+      label: Text(_statusLabel(status)),
+      visualDensity: VisualDensity.compact,
+    );
+  }
+
+  String _statusLabel(NoteProjectStatus status) {
+    return switch (status) {
+      NoteProjectStatus.toDo => 'To Do',
+      NoteProjectStatus.inProgress => 'In Progress',
+      NoteProjectStatus.done => 'Done',
+    };
+  }
+
+  String _priorityLabel(NoteProjectPriority priority) {
+    return switch (priority) {
+      NoteProjectPriority.low => 'Low',
+      NoteProjectPriority.medium => 'Medium',
+      NoteProjectPriority.high => 'High',
+    };
   }
 }

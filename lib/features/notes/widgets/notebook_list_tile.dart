@@ -78,18 +78,22 @@ class NotebookListTile extends StatelessWidget {
               itemBuilder: (context) => const [
                 PopupMenuItem<String>(
                   value: 'rename',
-                  child: ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(Icons.drive_file_rename_outline),
-                    title: Text('Rename'),
+                  child: Row(
+                    children: [
+                      Icon(Icons.drive_file_rename_outline),
+                      SizedBox(width: 12),
+                      Text('Rename'),
+                    ],
                   ),
                 ),
                 PopupMenuItem<String>(
                   value: 'delete',
-                  child: ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(Icons.delete_outline),
-                    title: Text('Delete'),
+                  child: Row(
+                    children: [
+                      Icon(Icons.delete_outline),
+                      SizedBox(width: 12),
+                      Text('Delete'),
+                    ],
                   ),
                 ),
               ],

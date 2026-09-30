@@ -36,6 +36,8 @@ class RichNoteEditorScreen extends StatefulWidget {
 
 class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
   final _titleController = TextEditingController();
+  final _projectOwnerController = TextEditingController();
+  final _projectTagsController = TextEditingController();
   final _autosaveService = NoteEditorAutosaveService();
   final _attachmentStorage = NoteAttachmentStorage();
   final _uuid = const Uuid();
@@ -48,6 +50,14 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
   late List<NoteAttachment> _attachments;
   bool _toolbarExpanded = true;
   bool _isExiting = false;
+  bool _projectMetadataVisible = false;
+
+  DateTime? _projectStartDate;
+  DateTime? _projectEndDate;
+  NoteProjectPriority? _projectPriority;
+  NoteProjectStatus _projectStatus = NoteProjectStatus.toDo;
+  String? _relatedCalendarEventId;
+  List<Reminder> _availableCalendarReminders = const [];
 
   bool _reminderSectionVisible = false;
   bool _loadingReminder = false;
@@ -65,6 +75,15 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
     _selectedSectionId = note?.sectionId ?? widget.initialSectionId;
     _attachments = List<NoteAttachment>.of(note?.attachments ?? const []);
     _reminderStorage = widget.reminderStorage ?? ReminderStorage();
+    final metadata = note?.projectMetadata;
+    _projectMetadataVisible = metadata != null;
+    _projectOwnerController.text = metadata?.owner ?? '';
+    _projectTagsController.text = metadata?.tags.join(', ') ?? '';
+    _projectStartDate = metadata?.startDate;
+    _projectEndDate = metadata?.endDate;
+    _projectPriority = metadata?.priority;
+    _projectStatus = metadata?.status ?? NoteProjectStatus.toDo;
+    _relatedCalendarEventId = metadata?.relatedCalendarEventId;
 
     _quillController = quill.QuillController(
       document: _buildDocument(note),
@@ -84,6 +103,7 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
       _loadingReminder = true;
       unawaited(_loadReminder(reminderId));
     }
+    unawaited(_loadAvailableCalendarReminders());
   }
 
   @override
@@ -91,6 +111,8 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
     _titleController
       ..removeListener(_queueAutosave)
       ..dispose();
+    _projectOwnerController.dispose();
+    _projectTagsController.dispose();
     _quillController
       ..removeListener(_queueAutosave)
       ..dispose();
@@ -98,6 +120,26 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
     _lastUpdated.dispose();
     _autosaveMessage.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadAvailableCalendarReminders() async {
+    try {
+      final reminders = await _reminderStorage.getReminders();
+      reminders.sort((a, b) => a.dateTime.compareTo(b.dateTime));
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _availableCalendarReminders = reminders;
+      });
+    } on Exception {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _availableCalendarReminders = const [];
+      });
+    }
   }
 
   Future<void> _loadReminder(String reminderId) async {
@@ -278,6 +320,7 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
 
   RichNoteDraft _buildDraft() {
     final now = DateTime.now();
+    final projectMetadata = _buildProjectMetadata();
     return RichNoteDraft(
       title: _titleController.text.trim(),
       richContentDelta: jsonEncode(
@@ -286,9 +329,78 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
       plainContent: _quillController.document.toPlainText().trim(),
       sectionId: _selectedSectionId,
       attachments: List<NoteAttachment>.unmodifiable(_attachments),
+      projectMetadata: projectMetadata,
       updatedAt: now,
       reminderId: _reminderId,
     );
+  }
+
+  NoteProjectMetadata? _buildProjectMetadata() {
+    if (!_projectMetadataVisible) {
+      return null;
+    }
+    final ownerText = _projectOwnerController.text.trim();
+    final owner = ownerText.isEmpty ? null : ownerText;
+    final tags = <String>[];
+    final seen = <String>{};
+    for (final raw in _projectTagsController.text.split(',')) {
+      final tag = raw.trim();
+      if (tag.isNotEmpty && seen.add(tag.toLowerCase())) {
+        tags.add(tag);
+      }
+    }
+    final metadata = NoteProjectMetadata(
+      owner: owner,
+      tags: tags,
+      startDate: _projectStartDate,
+      endDate: _projectEndDate,
+      priority: _projectPriority,
+      status: _projectStatus,
+      relatedCalendarEventId: _relatedCalendarEventId,
+    );
+    return metadata.isEmpty ? null : metadata;
+  }
+
+  Future<void> _pickProjectStartDate() async {
+    final initialDate = _projectStartDate ?? DateTime.now();
+    final date = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(1900),
+      lastDate: DateTime(2100),
+    );
+    if (date == null || !mounted) {
+      return;
+    }
+    setState(() {
+      _projectStartDate = date;
+      final endDate = _projectEndDate;
+      if (endDate != null && endDate.isBefore(date)) {
+        _projectEndDate = date;
+      }
+    });
+    _queueAutosave();
+  }
+
+  Future<void> _pickProjectEndDate() async {
+    final initialDate = _projectEndDate ?? _projectStartDate ?? DateTime.now();
+    final date = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(1900),
+      lastDate: DateTime(2100),
+    );
+    if (date == null || !mounted) {
+      return;
+    }
+    setState(() {
+      _projectEndDate = date;
+      final startDate = _projectStartDate;
+      if (startDate != null && startDate.isAfter(date)) {
+        _projectStartDate = date;
+      }
+    });
+    _queueAutosave();
   }
 
   void _queueAutosave() {
@@ -741,6 +853,7 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
               ),
               _buildAttachmentSection(),
               _buildReminderSection(),
+              _buildProjectMetadataSection(),
               const SizedBox(height: 8),
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
@@ -901,6 +1014,211 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
             onDeleted: () => _removeAttachment(attachment),
           );
         }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildProjectMetadataSection() {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final localizations = MaterialLocalizations.of(context);
+    final hasLinkedReminder = _availableCalendarReminders.any(
+      (item) => item.id == _relatedCalendarEventId,
+    );
+    final selectedCalendarEventId = hasLinkedReminder
+        ? _relatedCalendarEventId
+        : null;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 4, 12, 6),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: colorScheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Material(
+            color: Colors.transparent,
+            child: SwitchListTile.adaptive(
+              key: const ValueKey('note-project-metadata-toggle'),
+              value: _projectMetadataVisible,
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Project mode'),
+              subtitle: const Text('Add optional project fields'),
+              onChanged: (value) {
+                setState(() {
+                  _projectMetadataVisible = value;
+                });
+                _queueAutosave();
+              },
+            ),
+          ),
+          if (_projectMetadataVisible) ...[
+            const SizedBox(height: 8),
+            TextField(
+              key: const ValueKey('note-project-owner-field'),
+              controller: _projectOwnerController,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(
+                labelText: 'Owner',
+                prefixIcon: Icon(Icons.person_outline),
+              ),
+              onChanged: (_) => _queueAutosave(),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              key: const ValueKey('note-project-tags-field'),
+              controller: _projectTagsController,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(
+                labelText: 'Tags',
+                hintText: 'Design, Sprint 3',
+                prefixIcon: Icon(Icons.sell_outlined),
+              ),
+              onChanged: (_) => _queueAutosave(),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                OutlinedButton.icon(
+                  key: const ValueKey('note-project-start-date-button'),
+                  onPressed: _pickProjectStartDate,
+                  icon: const Icon(Icons.play_arrow_outlined, size: 18),
+                  label: Text(
+                    _projectStartDate == null
+                        ? 'Start date'
+                        : localizations.formatMediumDate(_projectStartDate!),
+                  ),
+                ),
+                if (_projectStartDate != null)
+                  IconButton(
+                    tooltip: 'Clear start date',
+                    onPressed: () {
+                      setState(() {
+                        _projectStartDate = null;
+                      });
+                      _queueAutosave();
+                    },
+                    icon: const Icon(Icons.close),
+                  ),
+                OutlinedButton.icon(
+                  key: const ValueKey('note-project-end-date-button'),
+                  onPressed: _pickProjectEndDate,
+                  icon: const Icon(Icons.flag_outlined, size: 18),
+                  label: Text(
+                    _projectEndDate == null
+                        ? 'End date'
+                        : localizations.formatMediumDate(_projectEndDate!),
+                  ),
+                ),
+                if (_projectEndDate != null)
+                  IconButton(
+                    tooltip: 'Clear end date',
+                    onPressed: () {
+                      setState(() {
+                        _projectEndDate = null;
+                      });
+                      _queueAutosave();
+                    },
+                    icon: const Icon(Icons.close),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<NoteProjectPriority?>(
+              key: const ValueKey('note-project-priority-dropdown'),
+              initialValue: _projectPriority,
+              decoration: const InputDecoration(labelText: 'Priority'),
+              items: const [
+                DropdownMenuItem<NoteProjectPriority?>(
+                  value: null,
+                  child: Text('Not set'),
+                ),
+                DropdownMenuItem<NoteProjectPriority?>(
+                  value: NoteProjectPriority.low,
+                  child: Text('Low'),
+                ),
+                DropdownMenuItem<NoteProjectPriority?>(
+                  value: NoteProjectPriority.medium,
+                  child: Text('Medium'),
+                ),
+                DropdownMenuItem<NoteProjectPriority?>(
+                  value: NoteProjectPriority.high,
+                  child: Text('High'),
+                ),
+              ],
+              onChanged: (value) {
+                setState(() {
+                  _projectPriority = value;
+                });
+                _queueAutosave();
+              },
+            ),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<NoteProjectStatus>(
+              key: const ValueKey('note-project-status-dropdown'),
+              initialValue: _projectStatus,
+              decoration: const InputDecoration(labelText: 'Status'),
+              items: const [
+                DropdownMenuItem<NoteProjectStatus>(
+                  value: NoteProjectStatus.toDo,
+                  child: Text('To Do'),
+                ),
+                DropdownMenuItem<NoteProjectStatus>(
+                  value: NoteProjectStatus.inProgress,
+                  child: Text('In Progress'),
+                ),
+                DropdownMenuItem<NoteProjectStatus>(
+                  value: NoteProjectStatus.done,
+                  child: Text('Done'),
+                ),
+              ],
+              onChanged: (value) {
+                if (value == null) {
+                  return;
+                }
+                setState(() {
+                  _projectStatus = value;
+                });
+                _queueAutosave();
+              },
+            ),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<String?>(
+              key: const ValueKey('note-project-calendar-link-dropdown'),
+              initialValue: selectedCalendarEventId,
+              decoration: const InputDecoration(
+                labelText: 'Related calendar event',
+              ),
+              items: [
+                const DropdownMenuItem<String?>(
+                  value: null,
+                  child: Text('Not linked'),
+                ),
+                ..._availableCalendarReminders.map((reminder) {
+                  final formatted = localizations.formatMediumDate(
+                    reminder.dateTime,
+                  );
+                  return DropdownMenuItem<String?>(
+                    value: reminder.id,
+                    child: Text('${reminder.title} ($formatted)'),
+                  );
+                }),
+              ],
+              onChanged: (value) {
+                setState(() {
+                  _relatedCalendarEventId = value;
+                });
+                _queueAutosave();
+              },
+            ),
+          ],
+        ],
       ),
     );
   }

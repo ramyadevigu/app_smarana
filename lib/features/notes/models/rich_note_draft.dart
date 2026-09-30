@@ -7,6 +7,7 @@ class RichNoteDraft {
     required this.plainContent,
     required this.sectionId,
     required this.attachments,
+    this.projectMetadata,
     required this.updatedAt,
     this.reminderId,
   });
@@ -16,6 +17,7 @@ class RichNoteDraft {
   final String plainContent;
   final String sectionId;
   final List<NoteAttachment> attachments;
+  final NoteProjectMetadata? projectMetadata;
   final DateTime updatedAt;
   final String? reminderId;
 }

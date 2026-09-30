@@ -156,4 +156,66 @@ void main() {
     expect(find.text('Workout Split'), findsOneWidget);
     expect(find.text('Plans & Goals'), findsNothing);
   });
+
+  testWidgets('switches between notebook views and updates kanban status', (
+    tester,
+  ) async {
+    final notebook = Notebook(
+      id: 'book-kanban',
+      name: 'Project Board',
+      iconType: NotebookIconType.work,
+      sections: [
+        NoteSection(
+          id: 'sec-main',
+          name: 'Main',
+          createdAt: DateTime(2026, 9, 1),
+        ),
+      ],
+      notes: [
+        NoteEntry(
+          id: 'note-kanban',
+          notebookId: 'book-kanban',
+          sectionId: 'sec-main',
+          title: 'Task A',
+          content: 'Initial task',
+          projectMetadata: NoteProjectMetadata(status: NoteProjectStatus.toDo),
+          createdAt: DateTime(2026, 9, 2),
+          updatedAt: DateTime(2026, 9, 2, 8),
+        ),
+      ],
+      createdAt: DateTime(2026, 9, 1),
+      updatedAt: DateTime(2026, 9, 2, 8),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: NotesScreen(initialNotebooks: [notebook])),
+    );
+
+    await tester.tap(find.text('Project Board'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('List'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Move status'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Move to In Progress'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('list-note-note-kanban')),
+        matching: find.textContaining('In Progress'),
+      ),
+      findsNWidgets(2),
+    );
+
+    await tester.tap(find.text('Kanban'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('kanban-column-inProgress')),
+      findsOneWidget,
+    );
+    expect(find.text('Task A'), findsOneWidget);
+  });
 }

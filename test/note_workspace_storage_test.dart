@@ -45,6 +45,15 @@ void main() {
                 addedAt: updatedAt,
               ),
             ],
+            projectMetadata: NoteProjectMetadata(
+              owner: 'Ramya',
+              tags: ['Launch', 'Q4'],
+              startDate: DateTime(2026, 9, 1),
+              endDate: DateTime(2026, 10, 1),
+              priority: NoteProjectPriority.high,
+              status: NoteProjectStatus.inProgress,
+              relatedCalendarEventId: 'event-42',
+            ),
             createdAt: createdAt,
             updatedAt: updatedAt,
           ),
@@ -70,6 +79,20 @@ void main() {
       expect(
         restored.notes.single.attachments.single.type,
         NoteAttachmentType.file,
+      );
+      expect(restored.notes.single.projectMetadata?.owner, 'Ramya');
+      expect(restored.notes.single.projectMetadata?.tags, ['Launch', 'Q4']);
+      expect(
+        restored.notes.single.projectMetadata?.priority,
+        NoteProjectPriority.high,
+      );
+      expect(
+        restored.notes.single.projectMetadata?.status,
+        NoteProjectStatus.inProgress,
+      );
+      expect(
+        restored.notes.single.projectMetadata?.relatedCalendarEventId,
+        'event-42',
       );
       expect(restored.notes.single.content, 'Review agenda');
       expect(restored.notes.single.createdAt, createdAt);
