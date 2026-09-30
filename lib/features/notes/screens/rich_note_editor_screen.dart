@@ -43,6 +43,7 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
   final _uuid = const Uuid();
   final _lastUpdated = ValueNotifier<DateTime?>(null);
   final _autosaveMessage = ValueNotifier<String>('');
+  Future<void> _reminderSaveQueue = Future<void>.value();
 
   late final quill.QuillController _quillController;
   late final ReminderStorage _reminderStorage;
@@ -209,7 +210,7 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
 
   void _toggleReminderEnabled(bool value) {
     setState(() => _reminderEnabled = value);
-    _persistReminder();
+    unawaited(_persistReminderQueued());
   }
 
   Future<void> _pickReminderDate() async {
@@ -231,7 +232,7 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
         _reminderDateTime.minute,
       );
     });
-    _persistReminder();
+    unawaited(_persistReminderQueued());
   }
 
   Future<void> _pickReminderTime() async {
@@ -251,12 +252,21 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
         time.minute,
       );
     });
-    _persistReminder();
+    unawaited(_persistReminderQueued());
   }
 
   void _selectRepeatOption(NoteRepeatOption option) {
     setState(() => _repeatOption = option);
-    _persistReminder();
+    unawaited(_persistReminderQueued());
+  }
+
+  Future<void> _persistReminderQueued() {
+    final save = _reminderSaveQueue.then((_) => _persistReminder());
+    _reminderSaveQueue = save.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
+    );
+    return save;
   }
 
   Future<void> _persistReminder() async {
@@ -411,19 +421,33 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
   }
 
   Future<void> _performAutosave() async {
-    final onAutosave = widget.onAutosave;
-    final draft = _buildDraft();
-    if (onAutosave != null) {
-      await onAutosave(draft);
+    try {
+      final onAutosave = widget.onAutosave;
+      final draft = _buildDraft();
+      if (onAutosave != null) {
+        await onAutosave(draft);
+      }
+      if (_reminderId != null) {
+        await _persistReminderQueued();
+      }
+      if (!mounted) {
+        return;
+      }
+      _lastUpdated.value = draft.updatedAt;
+      _autosaveMessage.value = 'Saved';
+    } on Exception {
+      if (!mounted) {
+        return;
+      }
+      _autosaveMessage.value = 'Autosave failed';
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Autosave failed. Your latest changes are still on screen.',
+          ),
+        ),
+      );
     }
-    if (_reminderId != null) {
-      await _persistReminder();
-    }
-    if (!mounted) {
-      return;
-    }
-    _lastUpdated.value = draft.updatedAt;
-    _autosaveMessage.value = 'Saved';
   }
 
   Future<void> _flushAutosave() async {
@@ -574,6 +598,27 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
   }
 
   Future<void> _removeAttachment(NoteAttachment attachment) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: const Icon(Icons.delete_outline),
+        title: const Text('Remove attachment?'),
+        content: Text('Remove "${attachment.name}" from this note?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) {
+      return;
+    }
     try {
       await _attachmentStorage.remove(attachment);
       if (!mounted) {
@@ -712,7 +757,31 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
             alignment: Alignment.centerRight,
             child: TextButton.icon(
               key: const ValueKey('note-remove-reminder-button'),
-              onPressed: _removeReminder,
+              onPressed: () async {
+                final confirmed = await showDialog<bool>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    icon: const Icon(Icons.delete_outline),
+                    title: const Text('Remove reminder?'),
+                    content: const Text(
+                      'This removes the reminder schedule linked to this note.',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(false),
+                        child: const Text('Cancel'),
+                      ),
+                      FilledButton(
+                        onPressed: () => Navigator.of(context).pop(true),
+                        child: const Text('Remove'),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirmed == true) {
+                  await _removeReminder();
+                }
+              },
               icon: const Icon(Icons.delete_outline),
               label: const Text('Remove reminder'),
             ),
@@ -743,6 +812,7 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
   @override
   Widget build(BuildContext context) {
     final localizations = MaterialLocalizations.of(context);
+    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
 
     return PopScope(
       canPop: false,
@@ -753,6 +823,7 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
         _exitEditor();
       },
       child: Scaffold(
+        resizeToAvoidBottomInset: true,
         appBar: AppBar(
           leading: IconButton(
             key: const ValueKey('note-editor-back'),
@@ -780,115 +851,126 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
             ),
           ],
         ),
-        body: SafeArea(
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                child: TextField(
-                  key: const ValueKey('rich-note-title-field'),
-                  controller: _titleController,
-                  textCapitalization: TextCapitalization.sentences,
-                  decoration: const InputDecoration(
-                    hintText: 'Note title',
-                    border: InputBorder.none,
+        body: GestureDetector(
+          onTap: () => FocusScope.of(context).unfocus(),
+          child: SafeArea(
+            child: AnimatedPadding(
+              duration: const Duration(milliseconds: 160),
+              curve: Curves.easeOut,
+              padding: EdgeInsets.only(bottom: bottomInset > 0 ? 8 : 0),
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                    child: TextField(
+                      key: const ValueKey('rich-note-title-field'),
+                      controller: _titleController,
+                      textCapitalization: TextCapitalization.sentences,
+                      decoration: const InputDecoration(
+                        hintText: 'Note title',
+                        border: InputBorder.none,
+                      ),
+                      style: Theme.of(context).textTheme.headlineSmall
+                          ?.copyWith(fontWeight: FontWeight.w700),
+                    ),
                   ),
-                  style: Theme.of(context).textTheme.headlineSmall
-                      ?.copyWith(fontWeight: FontWeight.w700),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                child: Row(
-                  children: [
-                    const Text('Section'),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        key: const ValueKey('rich-note-section-dropdown'),
-                        initialValue: _selectedSectionId,
-                        items: widget.sections
-                            .map(
-                              (section) => DropdownMenuItem<String>(
-                                value: section.id,
-                                child: Text(section.name),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (value) {
-                          if (value == null) {
-                            return;
-                          }
-                          setState(() {
-                            _selectedSectionId = value;
-                          });
-                          _queueAutosave();
-                        },
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    child: Row(
+                      children: [
+                        const Text('Section'),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            key: const ValueKey('rich-note-section-dropdown'),
+                            initialValue: _selectedSectionId,
+                            items: widget.sections
+                                .map(
+                                  (section) => DropdownMenuItem<String>(
+                                    value: section.id,
+                                    child: Text(section.name),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (value) {
+                              if (value == null) {
+                                return;
+                              }
+                              setState(() {
+                                _selectedSectionId = value;
+                              });
+                              _queueAutosave();
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (_toolbarExpanded) _buildToolbar(context),
+                  Expanded(
+                    child: Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 12),
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Theme.of(context).colorScheme.outlineVariant,
+                        ),
+                        color: Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerLowest,
+                      ),
+                      child: quill.QuillEditor.basic(
+                        key: const ValueKey('rich-note-content-editor'),
+                        controller: _quillController,
+                        config: const quill.QuillEditorConfig(
+                          autoFocus: true,
+                          padding: EdgeInsets.all(8),
+                        ),
                       ),
                     ),
-                  ],
-                ),
-              ),
-              if (_toolbarExpanded) _buildToolbar(context),
-              Expanded(
-                child: Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 12),
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: Theme.of(context).colorScheme.outlineVariant,
-                    ),
-                    color: Theme.of(context).colorScheme.surfaceContainerLowest,
                   ),
-                  child: quill.QuillEditor.basic(
-                    key: const ValueKey('rich-note-content-editor'),
-                    controller: _quillController,
-                    config: const quill.QuillEditorConfig(
-                      autoFocus: true,
-                      padding: EdgeInsets.all(8),
+                  _buildAttachmentSection(),
+                  _buildReminderSection(),
+                  _buildProjectMetadataSection(),
+                  const SizedBox(height: 8),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                    child: Row(
+                      children: [
+                        ValueListenableBuilder<DateTime?>(
+                          valueListenable: _lastUpdated,
+                          builder: (context, dateTime, _) {
+                            if (dateTime == null) {
+                              return const Text('Last updated: --');
+                            }
+                            final time = TimeOfDay.fromDateTime(dateTime);
+                            return Text(
+                              'Last updated ${localizations.formatShortDate(dateTime)} '
+                              '${localizations.formatTimeOfDay(time)}',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            );
+                          },
+                        ),
+                        const Spacer(),
+                        ValueListenableBuilder<String>(
+                          valueListenable: _autosaveMessage,
+                          builder: (context, value, _) {
+                            if (value.isEmpty) {
+                              return const SizedBox.shrink();
+                            }
+                            return Text(
+                              value,
+                              style: Theme.of(context).textTheme.bodySmall,
+                            );
+                          },
+                        ),
+                      ],
                     ),
                   ),
-                ),
+                ],
               ),
-              _buildAttachmentSection(),
-              _buildReminderSection(),
-              _buildProjectMetadataSection(),
-              const SizedBox(height: 8),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                child: Row(
-                  children: [
-                    ValueListenableBuilder<DateTime?>(
-                      valueListenable: _lastUpdated,
-                      builder: (context, dateTime, _) {
-                        if (dateTime == null) {
-                          return const Text('Last updated: --');
-                        }
-                        final time = TimeOfDay.fromDateTime(dateTime);
-                        return Text(
-                          'Last updated ${localizations.formatShortDate(dateTime)} ${localizations.formatTimeOfDay(time)}',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        );
-                      },
-                    ),
-                    const Spacer(),
-                    ValueListenableBuilder<String>(
-                      valueListenable: _autosaveMessage,
-                      builder: (context, value, _) {
-                        if (value.isEmpty) {
-                          return const SizedBox.shrink();
-                        }
-                        return Text(
-                          value,
-                          style: Theme.of(context).textTheme.bodySmall,
-                        );
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),

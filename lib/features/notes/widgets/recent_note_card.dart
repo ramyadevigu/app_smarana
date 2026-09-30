@@ -3,9 +3,10 @@ import 'package:flutter/material.dart';
 import '../models/note_workspace_models.dart';
 
 class RecentNoteCard extends StatelessWidget {
-  const RecentNoteCard({super.key, required this.note});
+  const RecentNoteCard({super.key, required this.note, required this.onTap});
 
   final RecentNoteView note;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -15,7 +16,7 @@ class RecentNoteCard extends StatelessWidget {
 
     return InkWell(
       borderRadius: BorderRadius.circular(12),
-      onTap: () {},
+      onTap: onTap,
       child: Ink(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
@@ -71,7 +72,8 @@ class RecentNoteCard extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '${MaterialLocalizations.of(context).formatShortDate(note.note.updatedAt)} ${MaterialLocalizations.of(context).formatTimeOfDay(editedTime)}',
+                  '${MaterialLocalizations.of(context).formatShortDate(note.note.updatedAt)} '
+                  '${MaterialLocalizations.of(context).formatTimeOfDay(editedTime)}',
                   style: theme.textTheme.labelSmall?.copyWith(
                     color: colorScheme.onSurfaceVariant,
                   ),

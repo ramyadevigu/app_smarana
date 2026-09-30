@@ -419,6 +419,16 @@ class _NotesScreenState extends State<NotesScreen> {
     await _updateNotebook(updated);
   }
 
+  Future<void> _openRecentNote(RecentNoteView recentNote) async {
+    final matchingNotebook = _notebooks.where(
+      (item) => item.name == recentNote.notebookName,
+    );
+    if (matchingNotebook.isEmpty) {
+      return;
+    }
+    await _openNotebook(matchingNotebook.first);
+  }
+
   Future<String?> _showNotebookNameDialog({
     required String title,
     required String actionLabel,
@@ -479,7 +489,7 @@ class _NotesScreenState extends State<NotesScreen> {
         actions: [if (widget.appMenu != null) widget.appMenu!],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? _buildLoadingState(context)
           : Container(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
@@ -494,49 +504,70 @@ class _NotesScreenState extends State<NotesScreen> {
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   final isWide = constraints.maxWidth >= 920;
-                  return SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (_storageError != null)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 12),
-                            child: MaterialBanner(
-                              content: Text(_storageError!),
-                              leading: const Icon(Icons.warning_amber_rounded),
-                              actions: [
-                                TextButton(
-                                  onPressed: _loadWorkspace,
-                                  child: const Text('Retry'),
+                  return GestureDetector(
+                    onTap: () => FocusScope.of(context).unfocus(),
+                    child: SingleChildScrollView(
+                      keyboardDismissBehavior:
+                          ScrollViewKeyboardDismissBehavior.onDrag,
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (_storageError != null)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: MaterialBanner(
+                                content: Text(_storageError!),
+                                leading: const Icon(
+                                  Icons.warning_amber_rounded,
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: _loadWorkspace,
+                                    child: const Text('Retry'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          _buildSearchAndCreate(context),
+                          const SizedBox(height: 16),
+                          if (isWide)
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(child: _buildNotebookSection(context)),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: _buildRecentNotesSection(context),
                                 ),
                               ],
-                            ),
-                          ),
-                        _buildSearchAndCreate(context),
-                        const SizedBox(height: 16),
-                        if (isWide)
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(child: _buildNotebookSection(context)),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: _buildRecentNotesSection(context),
-                              ),
-                            ],
-                          )
-                        else ...[
-                          _buildNotebookSection(context),
-                          const SizedBox(height: 16),
-                          _buildRecentNotesSection(context),
+                            )
+                          else ...[
+                            _buildNotebookSection(context),
+                            const SizedBox(height: 16),
+                            _buildRecentNotesSection(context),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
                   );
                 },
               ),
             ),
+    );
+  }
+
+  Widget _buildLoadingState(BuildContext context) {
+    final theme = Theme.of(context);
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const CircularProgressIndicator(),
+          const SizedBox(height: 12),
+          Text('Loading notes workspace...', style: theme.textTheme.bodyMedium),
+        ],
+      ),
     );
   }
 
@@ -614,7 +645,11 @@ class _NotesScreenState extends State<NotesScreen> {
             ),
             const SizedBox(height: 10),
             if (notebooks.isEmpty)
-              _SectionEmptyState(message: 'No notebooks match your search.')
+              _SectionEmptyState(
+                message: _query.isEmpty
+                    ? 'No notebooks yet. Create your first notebook.'
+                    : 'No notebooks match your search.',
+              )
             else
               ...notebooks.map(
                 (notebook) => Padding(
@@ -648,12 +683,23 @@ class _NotesScreenState extends State<NotesScreen> {
             ),
             const SizedBox(height: 10),
             if (notes.isEmpty)
-              _SectionEmptyState(message: 'No recent notes match your search.')
+              _SectionEmptyState(
+                message: _query.isEmpty
+                    ? 'No recent notes yet. Open a notebook and start writing.'
+                    : 'No recent notes match your search.',
+              )
             else
               ...notes.map(
                 (note) => Padding(
                   padding: const EdgeInsets.only(bottom: 8),
-                  child: RecentNoteCard(note: note),
+                  child: Semantics(
+                    button: true,
+                    label: 'Open ${note.note.title} in ${note.notebookName}',
+                    child: RecentNoteCard(
+                      note: note,
+                      onTap: () => _openRecentNote(note),
+                    ),
+                  ),
                 ),
               ),
           ],
