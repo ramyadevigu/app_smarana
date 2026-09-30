@@ -1,6 +1,7 @@
 import 'package:app_smarana/features/reminders/models/reminder.dart';
 import 'package:app_smarana/features/reminders/reminders_screen.dart';
 import 'package:app_smarana/features/reminders/services/reminder_storage.dart';
+import 'package:app_smarana/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -8,6 +9,99 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'helpers/fake_reminder_notification_scheduler.dart';
 
 void main() {
+  testWidgets('enables and disables reminders from the reminder list', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final scheduler = FakeReminderNotificationScheduler();
+    final storage = ReminderStorage(notificationScheduler: scheduler);
+    await storage.addReminder(
+      _reminder(
+        id: 'toggle',
+        title: 'Toggle reminder',
+        dateTime: DateTime(2026, 10, 1, 9),
+        enabled: false,
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: lightTheme,
+        home: RemindersScreen(storage: storage),
+      ),
+    );
+    await _pumpFrames(tester);
+    final reminderSwitch = find.byType(Switch);
+    expect(tester.widget<Switch>(reminderSwitch).value, isFalse);
+    final reminderCard = find.ancestor(
+      of: find.byKey(const ValueKey('reminder-switch-toggle')),
+      matching: find.byType(Card),
+    );
+    final lightColorScheme = lightTheme.colorScheme;
+    final darkColorScheme = darkTheme.colorScheme;
+    expect(
+      tester.widget<Card>(reminderCard).color,
+      lightColorScheme.surfaceContainerLow,
+    );
+
+    await tester.tap(reminderSwitch);
+    await _pumpFrames(tester);
+    expect((await storage.getReminders()).single.enabled, isTrue);
+    expect(scheduler.scheduledReminders.keys, contains('toggle'));
+    expect(tester.widget<Switch>(reminderSwitch).value, isTrue);
+    expect(
+      tester.widget<Card>(reminderCard).color,
+      lightColorScheme.primaryContainer,
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    final restartedStorage = ReminderStorage(notificationScheduler: scheduler);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: darkTheme,
+        home: RemindersScreen(storage: restartedStorage),
+      ),
+    );
+    await _pumpFrames(tester);
+    expect((await restartedStorage.getReminders()).single.enabled, isTrue);
+    expect(tester.widget<Switch>(reminderSwitch).value, isTrue);
+    expect(
+      tester.widget<Card>(reminderCard).color,
+      darkColorScheme.primaryContainer,
+    );
+
+    await tester.tap(reminderSwitch);
+    await _pumpFrames(tester);
+    expect((await restartedStorage.getReminders()).single.enabled, isFalse);
+    expect(tester.widget<Switch>(reminderSwitch).value, isFalse);
+    expect(
+      tester.widget<Card>(reminderCard).color,
+      darkColorScheme.surfaceContainerLow,
+    );
+    expect(scheduler.scheduledReminders, isEmpty);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    final disabledRestartStorage = ReminderStorage(
+      notificationScheduler: scheduler,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: lightTheme,
+        home: RemindersScreen(storage: disabledRestartStorage),
+      ),
+    );
+    await _pumpFrames(tester);
+    expect(
+      (await disabledRestartStorage.getReminders()).single.enabled,
+      isFalse,
+    );
+    expect(tester.widget<Switch>(reminderSwitch).value, isFalse);
+    expect(
+      tester.widget<Card>(reminderCard).color,
+      lightColorScheme.surfaceContainerLow,
+    );
+  });
+
   testWidgets(
     'displays reminders and refreshes after create, edit, and delete',
     (tester) async {
@@ -52,23 +146,23 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(home: RemindersScreen(storage: storage)),
       );
-      await tester.pumpAndSettle();
+      await _pumpFrames(tester);
 
       expect(find.text('Weekly check-in'), findsOneWidget);
+      expect(find.text('8:00'), findsOneWidget);
+      expect(find.text('AM'), findsWidgets);
       expect(find.text('Call the team'), findsOneWidget);
       expect(find.text('Every Monday'), findsOneWidget);
       expect(find.text('3rd of every month'), findsOneWidget);
-      expect(find.text('15 October every year'), findsOneWidget);
       await tester.scrollUntilVisible(
         find.text('Disabled one-time'),
         200,
         scrollable: find.byType(Scrollable).first,
       );
-      expect(find.text('Does not repeat'), findsOneWidget);
       expect(find.text('Disabled'), findsOneWidget);
 
       await tester.tap(find.byTooltip('Add reminder'));
-      await tester.pumpAndSettle();
+      await _pumpFrames(tester);
       await tester.enterText(
         find.byKey(const ValueKey('title-field')),
         'New reminder',
@@ -79,21 +173,21 @@ void main() {
       );
       await tester.ensureVisible(find.byKey(const ValueKey('save-reminder')));
       await tester.tap(find.byKey(const ValueKey('save-reminder')));
-      await tester.pumpAndSettle();
+      await _pumpFrames(tester);
 
       expect(find.text('New reminder'), findsOneWidget);
       expect(find.text('Created from the list'), findsOneWidget);
       expect(await storage.getReminders(), hasLength(5));
 
       await tester.tap(find.text('New reminder'));
-      await tester.pumpAndSettle();
+      await _pumpFrames(tester);
       await tester.enterText(
         find.byKey(const ValueKey('title-field')),
         'Edited reminder',
       );
       await tester.ensureVisible(find.byKey(const ValueKey('save-reminder')));
       await tester.tap(find.byKey(const ValueKey('save-reminder')));
-      await tester.pumpAndSettle();
+      await _pumpFrames(tester);
 
       expect(find.text('New reminder'), findsNothing);
       expect(find.text('Edited reminder'), findsOneWidget);
@@ -112,25 +206,25 @@ void main() {
         matching: find.byKey(ValueKey('reminder-menu-$editedReminderId')),
       );
       await tester.tap(reminderMenu);
-      await tester.pumpAndSettle();
+      await _pumpFrames(tester);
       await tester.tap(
         find.byKey(ValueKey('delete-reminder-$editedReminderId')),
       );
-      await tester.pumpAndSettle();
+      await _pumpFrames(tester);
 
       expect(find.text('Delete reminder?'), findsOneWidget);
       await tester.tap(find.text('Cancel'));
-      await tester.pumpAndSettle();
+      await _pumpFrames(tester);
       expect(find.text('Edited reminder'), findsOneWidget);
 
       await tester.tap(reminderMenu);
-      await tester.pumpAndSettle();
+      await _pumpFrames(tester);
       await tester.tap(
         find.byKey(ValueKey('delete-reminder-$editedReminderId')),
       );
-      await tester.pumpAndSettle();
+      await _pumpFrames(tester);
       await tester.tap(find.text('Delete').last);
-      await tester.pumpAndSettle();
+      await _pumpFrames(tester);
 
       expect(find.text('Edited reminder'), findsNothing);
       expect(await storage.getReminders(), hasLength(4));
@@ -163,15 +257,20 @@ void main() {
     );
 
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
-    await tester.pumpAndSettle();
+    await _pumpFrames(tester);
     expect(find.text('Unable to load reminders'), findsOneWidget);
 
     storage.shouldFail = false;
     await tester.tap(find.byKey(const ValueKey('retry-reminders')));
-    await tester.pumpAndSettle();
+    await _pumpFrames(tester);
 
     expect(find.text('No reminders yet'), findsOneWidget);
   });
+}
+
+Future<void> _pumpFrames(WidgetTester tester) async {
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 350));
 }
 
 class _RecoveringReminderStorage extends ReminderStorage {

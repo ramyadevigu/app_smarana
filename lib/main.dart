@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'features/reminders/services/reminder_storage.dart';
 import 'services/notification_service.dart';
+import 'theme/theme_preference_store.dart';
 
 import 'app/app.dart';
 
@@ -11,5 +12,6 @@ void main() async {
   await reminderStorage.initialize();
   await NotificationService.instance.initialize();
   await reminderStorage.rescheduleAllReminders();
-  runApp(const AppSmarana());
+  final themeMode = await const ThemePreferenceStore().loadThemeMode();
+  runApp(AppSmarana(initialThemeMode: themeMode));
 }

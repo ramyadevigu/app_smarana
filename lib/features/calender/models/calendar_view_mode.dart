@@ -1,0 +1,1 @@
+enum CalendarViewMode { stacked, split }
