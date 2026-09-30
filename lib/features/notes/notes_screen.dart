@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'models/note_workspace_models.dart';
 import 'screens/notebook_detail_screen.dart';
+import 'services/note_workspace_storage.dart';
 import 'widgets/notebook_list_tile.dart';
 import 'widgets/recent_note_card.dart';
 
@@ -11,11 +14,13 @@ class NotesScreen extends StatefulWidget {
     this.appMenu,
     this.onBackToSmarana,
     this.initialNotebooks,
+    this.workspaceStorage,
   });
 
   final Widget? appMenu;
   final VoidCallback? onBackToSmarana;
   final List<Notebook>? initialNotebooks;
+  final NoteWorkspaceStorage? workspaceStorage;
 
   @override
   State<NotesScreen> createState() => _NotesScreenState();
@@ -23,7 +28,10 @@ class NotesScreen extends StatefulWidget {
 
 class _NotesScreenState extends State<NotesScreen> {
   final TextEditingController _searchController = TextEditingController();
+  late final NoteWorkspaceStorage _workspaceStorage;
   late List<Notebook> _notebooks;
+  bool _isLoading = true;
+  String? _storageError;
 
   static final List<Notebook> _defaultNotebooks = [
     Notebook(
@@ -157,9 +165,15 @@ class _NotesScreenState extends State<NotesScreen> {
   @override
   void initState() {
     super.initState();
+    _workspaceStorage = widget.workspaceStorage ?? NoteWorkspaceStorage();
     _notebooks = List<Notebook>.of(
       widget.initialNotebooks ?? _defaultNotebooks,
     );
+    if (widget.initialNotebooks != null) {
+      _isLoading = false;
+    } else {
+      unawaited(_loadWorkspace());
+    }
   }
 
   @override
@@ -169,6 +183,68 @@ class _NotesScreenState extends State<NotesScreen> {
   }
 
   String get _query => _searchController.text.trim().toLowerCase();
+
+  Future<void> _loadWorkspace() async {
+    try {
+      final saved = await _workspaceStorage.loadWorkspace();
+      final notebooks = saved.isEmpty
+          ? List<Notebook>.of(_defaultNotebooks)
+          : saved;
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _notebooks = notebooks;
+        _isLoading = false;
+      });
+      if (saved.isEmpty) {
+        await _workspaceStorage.saveWorkspace(notebooks);
+      }
+    } on Exception catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _notebooks = List<Notebook>.of(_defaultNotebooks);
+        _isLoading = false;
+        _storageError = 'Notes could not be restored. Changes may not persist.';
+      });
+      debugPrint('Notes workspace restore failed: $error');
+    }
+  }
+
+  Future<void> _persistWorkspace() async {
+    try {
+      await _workspaceStorage.saveWorkspace(_notebooks);
+      if (mounted && _storageError != null) {
+        setState(() {
+          _storageError = null;
+        });
+      }
+    } on Exception catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _storageError = 'Notes could not be saved. Check device storage.';
+      });
+      debugPrint('Notes workspace save failed: $error');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Notes could not be saved.')),
+      );
+    }
+  }
+
+  Future<void> _updateNotebook(Notebook updated) async {
+    setState(() {
+      _notebooks = _notebooks.map((item) {
+        return item.id == updated.id ? updated : item;
+      }).toList();
+    });
+    if (widget.initialNotebooks == null) {
+      await _persistWorkspace();
+    }
+  }
 
   List<Notebook> get _filteredNotebooks {
     final query = _query;
@@ -253,6 +329,7 @@ class _NotesScreenState extends State<NotesScreen> {
     setState(() {
       _notebooks = [..._notebooks, notebook];
     });
+    await _persistWorkspace();
   }
 
   Future<void> _renameNotebook(Notebook notebook) async {
@@ -273,6 +350,7 @@ class _NotesScreenState extends State<NotesScreen> {
         return item.copyWith(name: name, updatedAt: now);
       }).toList();
     });
+    await _persistWorkspace();
   }
 
   Future<void> _deleteNotebook(Notebook notebook) async {
@@ -302,12 +380,16 @@ class _NotesScreenState extends State<NotesScreen> {
     setState(() {
       _notebooks = _notebooks.where((item) => item.id != notebook.id).toList();
     });
+    await _persistWorkspace();
   }
 
   Future<void> _openNotebook(Notebook notebook) async {
     final result = await Navigator.of(context).push<NotebookDetailResult>(
       MaterialPageRoute<NotebookDetailResult>(
-        builder: (_) => NotebookDetailScreen(notebook: notebook),
+        builder: (_) => NotebookDetailScreen(
+          notebook: notebook,
+          onNotebookChanged: _updateNotebook,
+        ),
       ),
     );
     if (!mounted || result == null) {
@@ -319,20 +401,14 @@ class _NotesScreenState extends State<NotesScreen> {
             .where((item) => item.id != notebook.id)
             .toList();
       });
+      await _persistWorkspace();
       return;
     }
     final updated = result.updatedNotebook;
     if (updated == null) {
       return;
     }
-    setState(() {
-      _notebooks = _notebooks.map((item) {
-        if (item.id != notebook.id) {
-          return item;
-        }
-        return updated;
-      }).toList();
-    });
+    await _updateNotebook(updated);
   }
 
   Future<String?> _showNotebookNameDialog({
@@ -394,44 +470,65 @@ class _NotesScreenState extends State<NotesScreen> {
         title: const Text('Notes'),
         actions: [if (widget.appMenu != null) widget.appMenu!],
       ),
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [colorScheme.surfaceContainerLowest, colorScheme.surface],
-          ),
-        ),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final isWide = constraints.maxWidth >= 920;
-            return SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _buildSearchAndCreate(context),
-                  const SizedBox(height: 16),
-                  if (isWide)
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(child: _buildNotebookSection(context)),
-                        const SizedBox(width: 16),
-                        Expanded(child: _buildRecentNotesSection(context)),
-                      ],
-                    )
-                  else ...[
-                    _buildNotebookSection(context),
-                    const SizedBox(height: 16),
-                    _buildRecentNotesSection(context),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    colorScheme.surfaceContainerLowest,
+                    colorScheme.surface,
                   ],
-                ],
+                ),
               ),
-            );
-          },
-        ),
-      ),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final isWide = constraints.maxWidth >= 920;
+                  return SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (_storageError != null)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: MaterialBanner(
+                              content: Text(_storageError!),
+                              leading: const Icon(Icons.warning_amber_rounded),
+                              actions: [
+                                TextButton(
+                                  onPressed: _loadWorkspace,
+                                  child: const Text('Retry'),
+                                ),
+                              ],
+                            ),
+                          ),
+                        _buildSearchAndCreate(context),
+                        const SizedBox(height: 16),
+                        if (isWide)
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(child: _buildNotebookSection(context)),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: _buildRecentNotesSection(context),
+                              ),
+                            ],
+                          )
+                        else ...[
+                          _buildNotebookSection(context),
+                          const SizedBox(height: 16),
+                          _buildRecentNotesSection(context),
+                        ],
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
     );
   }
 

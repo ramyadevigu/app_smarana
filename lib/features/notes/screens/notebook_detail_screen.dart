@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../models/note_workspace_models.dart';
+import '../models/rich_note_draft.dart';
+import 'rich_note_editor_screen.dart';
 
 class NotebookDetailResult {
   const NotebookDetailResult({this.updatedNotebook, this.isDeleted = false});
@@ -10,9 +12,14 @@ class NotebookDetailResult {
 }
 
 class NotebookDetailScreen extends StatefulWidget {
-  const NotebookDetailScreen({super.key, required this.notebook});
+  const NotebookDetailScreen({
+    super.key,
+    required this.notebook,
+    this.onNotebookChanged,
+  });
 
   final Notebook notebook;
+  final Future<void> Function(Notebook notebook)? onNotebookChanged;
 
   @override
   State<NotebookDetailScreen> createState() => _NotebookDetailScreenState();
@@ -54,11 +61,13 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
     }
     final now = DateTime.now();
     final section = NoteSection(id: _id('section'), name: name, createdAt: now);
-    setState(() {
-      _notebook = _notebook.copyWith(
+    await _publishNotebook(
+      _notebook.copyWith(
         sections: [..._notebook.sections, section],
         updatedAt: now,
-      );
+      ),
+    );
+    setState(() {
       _selectedSectionId = section.id;
     });
   }
@@ -81,9 +90,9 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
               section.id == current.id ? section.copyWith(name: name) : section,
         )
         .toList();
-    setState(() {
-      _notebook = _notebook.copyWith(sections: updatedSections, updatedAt: now);
-    });
+    await _publishNotebook(
+      _notebook.copyWith(sections: updatedSections, updatedAt: now),
+    );
   }
 
   Future<void> _deleteSection() async {
@@ -128,41 +137,154 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
         .where((note) => note.sectionId != section.id)
         .toList();
 
-    setState(() {
-      _notebook = _notebook.copyWith(
+    await _publishNotebook(
+      _notebook.copyWith(
         sections: remainingSections,
         notes: remainingNotes,
         updatedAt: now,
-      );
+      ),
+    );
+    setState(() {
       _selectedSectionId = remainingSections.first.id;
     });
   }
 
   Future<void> _createNote() async {
-    final draft = await showDialog<_NoteDraft>(
-      context: context,
-      builder: (context) => const _NoteDraftDialog(),
-    );
-    if (draft == null || !mounted) {
-      return;
-    }
-
     final now = DateTime.now();
     final note = NoteEntry(
       id: _id('note'),
       notebookId: _notebook.id,
       sectionId: _selectedSectionId,
-      title: draft.title,
-      content: draft.content,
+      title: '',
+      content: '',
       createdAt: now,
       updatedAt: now,
     );
+
+    var wasInserted = false;
+    final draft = await Navigator.of(context).push<RichNoteDraft>(
+      MaterialPageRoute<RichNoteDraft>(
+        builder: (_) => RichNoteEditorScreen(
+          note: note,
+          sections: _notebook.sections,
+          initialSectionId: _selectedSectionId,
+          onAutosave: (snapshot) async {
+            if (!_hasMeaningfulContent(snapshot) || !mounted) {
+              return;
+            }
+            await _publishNotebook(
+              _notebook.copyWith(
+                notes: _upsertNote(
+                  _notebook.notes,
+                  _noteFromDraft(base: note, draft: snapshot),
+                ),
+                updatedAt: snapshot.updatedAt,
+              ),
+            );
+            wasInserted = true;
+          },
+        ),
+      ),
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    if (draft == null || !_hasMeaningfulContent(draft)) {
+      if (wasInserted) {
+        await _publishNotebook(
+          _notebook.copyWith(
+            notes: _notebook.notes
+                .where((existing) => existing.id != note.id)
+                .toList(),
+            updatedAt: DateTime.now(),
+          ),
+        );
+      }
+      return;
+    }
+
+    final updated = _noteFromDraft(base: note, draft: draft);
+    await _publishNotebook(
+      _notebook.copyWith(
+        notes: _upsertNote(_notebook.notes, updated),
+        updatedAt: draft.updatedAt,
+      ),
+    );
+  }
+
+  Future<void> _editNote(NoteEntry note) async {
+    final draft = await Navigator.of(context).push<RichNoteDraft>(
+      MaterialPageRoute<RichNoteDraft>(
+        builder: (_) => RichNoteEditorScreen(
+          note: note,
+          sections: _notebook.sections,
+          initialSectionId: note.sectionId,
+          onAutosave: (snapshot) async {
+            if (!mounted) {
+              return;
+            }
+            final updated = _noteFromDraft(base: note, draft: snapshot);
+            await _publishNotebook(
+              _notebook.copyWith(
+                notes: _upsertNote(_notebook.notes, updated),
+                updatedAt: snapshot.updatedAt,
+              ),
+            );
+          },
+        ),
+      ),
+    );
+
+    if (!mounted || draft == null) {
+      return;
+    }
+
+    final updated = _noteFromDraft(base: note, draft: draft);
+    await _publishNotebook(
+      _notebook.copyWith(
+        notes: _upsertNote(_notebook.notes, updated),
+        updatedAt: draft.updatedAt,
+      ),
+    );
+  }
+
+  Future<void> _publishNotebook(Notebook updated) async {
     setState(() {
-      _notebook = _notebook.copyWith(
-        notes: [..._notebook.notes, note],
-        updatedAt: now,
-      );
+      _notebook = updated;
     });
+    await widget.onNotebookChanged?.call(updated);
+  }
+
+  NoteEntry _noteFromDraft({
+    required NoteEntry base,
+    required RichNoteDraft draft,
+  }) {
+    return base.copyWith(
+      sectionId: draft.sectionId,
+      title: draft.title,
+      content: draft.plainContent,
+      richContentDelta: draft.richContentDelta,
+      attachments: draft.attachments,
+      updatedAt: draft.updatedAt,
+    );
+  }
+
+  List<NoteEntry> _upsertNote(List<NoteEntry> notes, NoteEntry note) {
+    final next = List<NoteEntry>.of(notes);
+    final index = next.indexWhere((entry) => entry.id == note.id);
+    if (index == -1) {
+      next.add(note);
+    } else {
+      next[index] = note;
+    }
+    return next;
+  }
+
+  bool _hasMeaningfulContent(RichNoteDraft draft) {
+    return draft.title.trim().isNotEmpty ||
+        draft.plainContent.trim().isNotEmpty;
   }
 
   Future<String?> _showNameDialog({
@@ -324,6 +446,7 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
                         final note = _sectionNotes[index];
                         return Card(
                           child: ListTile(
+                            onTap: () => _editNote(note),
                             title: Text(note.title),
                             subtitle: Text(
                               note.preview,
@@ -349,76 +472,6 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
         icon: const Icon(Icons.check),
         label: const Text('Done'),
       ),
-    );
-  }
-}
-
-class _NoteDraft {
-  const _NoteDraft({required this.title, required this.content});
-
-  final String title;
-  final String content;
-}
-
-class _NoteDraftDialog extends StatefulWidget {
-  const _NoteDraftDialog();
-
-  @override
-  State<_NoteDraftDialog> createState() => _NoteDraftDialogState();
-}
-
-class _NoteDraftDialogState extends State<_NoteDraftDialog> {
-  final _titleController = TextEditingController();
-  final _contentController = TextEditingController();
-
-  @override
-  void dispose() {
-    _titleController.dispose();
-    _contentController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('New Note'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-            key: const ValueKey('new-note-title-field'),
-            controller: _titleController,
-            autofocus: true,
-            decoration: const InputDecoration(hintText: 'Title'),
-          ),
-          const SizedBox(height: 10),
-          TextField(
-            key: const ValueKey('new-note-content-field'),
-            controller: _contentController,
-            minLines: 2,
-            maxLines: 4,
-            decoration: const InputDecoration(hintText: 'Note content'),
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: () {
-            final title = _titleController.text.trim();
-            if (title.isEmpty) {
-              return;
-            }
-            Navigator.of(context).pop(
-              _NoteDraft(title: title, content: _contentController.text.trim()),
-            );
-          },
-          child: const Text('Create'),
-        ),
-      ],
     );
   }
 }

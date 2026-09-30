@@ -39,6 +39,10 @@ dependencies:
   timezone: ^0.11.1
   android_alarm_manager_plus: ^5.1.1
   flutter_timezone: ^5.1.0
+  flutter_quill: ^11.5.0
+  file_picker: ^10.3.3
+  path_provider: ^2.1.5
+  open_filex: ^4.7.0
 
 dev_dependencies:
   flutter_test:

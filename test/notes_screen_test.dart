@@ -2,10 +2,17 @@ import 'package:app_smarana/features/notes/models/note_workspace_models.dart';
 import 'package:app_smarana/features/notes/notes_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
+
   testWidgets('creates, renames, and deletes notebooks', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: NotesScreen()));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
 
     await tester.tap(find.byKey(const ValueKey('notes-new-notebook-button')));
     await tester.pumpAndSettle();
@@ -109,14 +116,10 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('section-new-note-button')));
     await tester.pumpAndSettle();
     await tester.enterText(
-      find.byKey(const ValueKey('new-note-title-field')),
+      find.byKey(const ValueKey('rich-note-title-field')),
       'Draft launch brief',
     );
-    await tester.enterText(
-      find.byKey(const ValueKey('new-note-content-field')),
-      'Share with marketing and design teams.',
-    );
-    await tester.tap(find.widgetWithText(FilledButton, 'Create'));
+    await tester.tap(find.byKey(const ValueKey('note-editor-back')));
     await tester.pumpAndSettle();
 
     expect(find.text('Draft launch brief'), findsOneWidget);
@@ -137,6 +140,8 @@ void main() {
 
   testWidgets('search filters notebook and recent note lists', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: NotesScreen()));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
 
     expect(find.text('Plans & Goals'), findsOneWidget);
     expect(find.text('Weekly Review'), findsOneWidget);
@@ -145,7 +150,7 @@ void main() {
       find.byKey(const ValueKey('notes-workspace-search')),
       'workout',
     );
-    await tester.pumpAndSettle();
+    await tester.pump();
 
     expect(find.text('Health & Fitness'), findsOneWidget);
     expect(find.text('Workout Split'), findsOneWidget);

@@ -19,6 +19,28 @@ class NoteAttachment {
   final NoteAttachmentType type;
   final DateTime addedAt;
 
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'name': name,
+    'path': path,
+    'type': type.name,
+    'addedAt': addedAt.toIso8601String(),
+  };
+
+  factory NoteAttachment.fromJson(Map<String, Object?> json) {
+    return NoteAttachment(
+      id: json['id'] is String ? json['id']! as String : '',
+      name: json['name'] is String ? json['name']! as String : 'Attachment',
+      path: json['path'] is String ? json['path']! as String : '',
+      type: NoteAttachmentType.values.firstWhere(
+        (value) => value.name == json['type'],
+        orElse: () => NoteAttachmentType.file,
+      ),
+      addedAt:
+          _readDate(json['addedAt']) ?? DateTime.fromMillisecondsSinceEpoch(0),
+    );
+  }
+
   NoteAttachment copyWith({String? name, String? path, DateTime? addedAt}) {
     return NoteAttachment(
       id: id,
@@ -51,6 +73,32 @@ class Notebook {
 
   int get noteCount => notes.length;
 
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'name': name,
+    'iconType': iconType.name,
+    'sections': sections.map((section) => section.toJson()).toList(),
+    'notes': notes.map((note) => note.toJson()).toList(),
+    'createdAt': createdAt.toIso8601String(),
+    'updatedAt': updatedAt.toIso8601String(),
+  };
+
+  factory Notebook.fromJson(Map<String, Object?> json) {
+    final createdAt = _readDate(json['createdAt']) ?? DateTime.now();
+    return Notebook(
+      id: json['id'] is String ? json['id']! as String : '',
+      name: json['name'] is String ? json['name']! as String : 'Notebook',
+      iconType: NotebookIconType.values.firstWhere(
+        (value) => value.name == json['iconType'],
+        orElse: () => NotebookIconType.general,
+      ),
+      sections: _readObjects(json['sections'], NoteSection.fromJson),
+      notes: _readObjects(json['notes'], NoteEntry.fromJson),
+      createdAt: createdAt,
+      updatedAt: _readDate(json['updatedAt']) ?? createdAt,
+    );
+  }
+
   Notebook copyWith({
     String? name,
     NotebookIconType? iconType,
@@ -81,6 +129,20 @@ class NoteSection {
   final String name;
   final DateTime createdAt;
 
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'name': name,
+    'createdAt': createdAt.toIso8601String(),
+  };
+
+  factory NoteSection.fromJson(Map<String, Object?> json) {
+    return NoteSection(
+      id: json['id'] is String ? json['id']! as String : '',
+      name: json['name'] is String ? json['name']! as String : 'General',
+      createdAt: _readDate(json['createdAt']) ?? DateTime.now(),
+    );
+  }
+
   NoteSection copyWith({String? name}) {
     return NoteSection(id: id, name: name ?? this.name, createdAt: createdAt);
   }
@@ -108,6 +170,41 @@ class NoteEntry {
   final List<NoteAttachment> attachments;
   final DateTime createdAt;
   final DateTime updatedAt;
+
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'notebookId': notebookId,
+    'sectionId': sectionId,
+    'title': title,
+    'content': content,
+    'richContentDelta': richContentDelta,
+    'attachments': attachments
+        .map((attachment) => attachment.toJson())
+        .toList(),
+    'createdAt': createdAt.toIso8601String(),
+    'updatedAt': updatedAt.toIso8601String(),
+  };
+
+  factory NoteEntry.fromJson(Map<String, Object?> json) {
+    final createdAt = _readDate(json['createdAt']) ?? DateTime.now();
+    return NoteEntry(
+      id: json['id'] is String ? json['id']! as String : '',
+      notebookId: json['notebookId'] is String
+          ? json['notebookId']! as String
+          : '',
+      sectionId: json['sectionId'] is String
+          ? json['sectionId']! as String
+          : '',
+      title: json['title'] is String ? json['title']! as String : '',
+      content: json['content'] is String ? json['content']! as String : '',
+      richContentDelta: json['richContentDelta'] is String
+          ? json['richContentDelta']! as String
+          : null,
+      attachments: _readObjects(json['attachments'], NoteAttachment.fromJson),
+      createdAt: createdAt,
+      updatedAt: _readDate(json['updatedAt']) ?? createdAt,
+    );
+  }
 
   String get preview {
     final trimmed = _richPlainText.trim().isNotEmpty
@@ -181,4 +278,23 @@ class RecentNoteView {
   final NoteEntry note;
   final String notebookName;
   final String sectionName;
+}
+
+List<T> _readObjects<T>(Object? value, T Function(Map<String, Object?>) parse) {
+  if (value is! List) {
+    return [];
+  }
+  return [
+    for (final item in value)
+      if (item is Map) parse(_stringKeyedMap(item)),
+  ];
+}
+
+Map<String, Object?> _stringKeyedMap(Map<dynamic, dynamic> value) => {
+  for (final entry in value.entries)
+    if (entry.key is String) entry.key as String: entry.value,
+};
+
+DateTime? _readDate(Object? value) {
+  return value is String ? DateTime.tryParse(value) : null;
 }
