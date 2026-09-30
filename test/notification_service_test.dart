@@ -5,6 +5,151 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
+
+  test('schedules a future one-time notification without an alarm', () async {
+    final notifications = _FakeNotificationPlatform();
+    final alarms = _FakeRecurrenceAlarmPlatform();
+    final service = _service(
+      now: () => DateTime(2026, 9, 29, 8),
+      notifications: notifications,
+      alarms: alarms,
+    );
+    await service.initialize();
+    final reminder = _reminder(
+      'one-time',
+      DateTime(2026, 9, 29, 9),
+      RecurrenceType.none,
+    );
+
+    await service.scheduleReminder(reminder);
+
+    expect(notifications.scheduled.values.single.dateTime, reminder.dateTime);
+    expect(notifications.scheduled.values.single.payload, reminder.id);
+    expect(notifications.scheduled.values.single.soundUri, isNull);
+    expect(
+      notifications.scheduled.values.single.notificationMode,
+      ReminderNotificationMode.alarmAndNotification,
+    );
+    expect(notifications.scheduled.values.single.vibrate, isTrue);
+    expect(alarms.scheduled, isEmpty);
+  });
+
+  test(
+    'notification-only reminders never use the selected alarm sound',
+    () async {
+      final notifications = _FakeNotificationPlatform();
+      final service = _service(
+        now: () => DateTime(2026, 9, 29, 8),
+        notifications: notifications,
+        alarms: _FakeRecurrenceAlarmPlatform(),
+      );
+      await service.initialize();
+      final reminder =
+          _reminder(
+            'notification-only',
+            DateTime(2026, 9, 29, 9),
+            RecurrenceType.none,
+          ).copyWith(
+            soundUri: 'content://alarms/custom-tone',
+            notificationMode: ReminderNotificationMode.notificationOnly,
+            vibrate: false,
+          );
+
+      await service.scheduleReminder(reminder);
+
+      final scheduled = notifications.scheduled.values.single;
+      expect(scheduled.soundUri, isNull);
+      expect(
+        scheduled.notificationMode,
+        ReminderNotificationMode.notificationOnly,
+      );
+      expect(scheduled.vibrate, isFalse);
+    },
+  );
+
+  test('a persisted snooze is scheduled before the next recurrence', () async {
+    final now = DateTime(2026, 9, 29, 8);
+    final snoozedUntil = now.add(const Duration(minutes: 15));
+    final notifications = _FakeNotificationPlatform();
+    final alarms = _FakeRecurrenceAlarmPlatform();
+    final service = _service(
+      now: () => now,
+      notifications: notifications,
+      alarms: alarms,
+    );
+    await service.initialize();
+    final reminder = _reminder(
+      'snoozed-daily',
+      DateTime(2026, 9, 28, 9),
+      RecurrenceType.daily,
+    ).copyWith(snoozedUntil: snoozedUntil);
+
+    await service.scheduleReminder(reminder);
+
+    expect(notifications.scheduled.values.single.dateTime, snoozedUntil);
+    expect(
+      alarms.scheduled.values.single,
+      snoozedUntil.add(const Duration(seconds: 10)),
+    );
+  });
+
+  test(
+    'requests platform permissions during foreground initialization',
+    () async {
+      final notifications = _FakeNotificationPlatform();
+      final service = _service(
+        now: () => DateTime(2026, 9, 29, 8),
+        notifications: notifications,
+        alarms: _FakeRecurrenceAlarmPlatform(),
+      );
+
+      await service.initialize();
+
+      expect(notifications.permissionRequests, [true]);
+    },
+  );
+
+  test(
+    'distinct reminder IDs with the same hash get distinct schedules',
+    () async {
+      final notifications = _FakeNotificationPlatform();
+      final service = _service(
+        now: () => DateTime(2026, 9, 29, 8),
+        notifications: notifications,
+        alarms: _FakeRecurrenceAlarmPlatform(),
+      );
+      await service.initialize();
+      final first = _reminder(
+        '34fc4ed9ff04000368feade30b1638ed',
+        DateTime(2026, 9, 29, 9),
+        RecurrenceType.none,
+      );
+      final second = _reminder(
+        '3c60bbb3b7d9c2c42ebec1f1d13d56c8',
+        DateTime(2026, 9, 29, 10),
+        RecurrenceType.none,
+      );
+
+      await service.scheduleReminder(first);
+      await service.scheduleReminder(second);
+
+      expect(notifications.scheduled, hasLength(2));
+      expect(
+        notifications.scheduled.values.map(
+          (notification) => notification.payload,
+        ),
+        containsAll([first.id, second.id]),
+      );
+
+      await service.cancelReminder(second.id);
+      expect(notifications.scheduled, hasLength(1));
+      expect(notifications.scheduled.values.single.payload, first.id);
+    },
+  );
+
   group('recurring notification scheduling', () {
     test('schedules the next daily occurrence', () async {
       await _expectNextOccurrence(
@@ -271,9 +416,13 @@ Reminder _reminder(
 
 class _FakeNotificationPlatform implements NotificationPlatform {
   final scheduled = <int, _ScheduledNotification>{};
+  final permissionRequests = <bool>[];
 
   @override
-  Future<bool> initialize({required bool requestPermissions}) async => true;
+  Future<bool> initialize({required bool requestPermissions}) async {
+    permissionRequests.add(requestPermissions);
+    return true;
+  }
 
   @override
   Future<void> schedule({
@@ -283,11 +432,17 @@ class _FakeNotificationPlatform implements NotificationPlatform {
     required String? body,
     required String payload,
     required bool exactAlarmAllowed,
+    required String? soundUri,
+    required ReminderNotificationMode notificationMode,
+    required bool vibrate,
   }) async {
     scheduled[id] = _ScheduledNotification(
       dateTime: dateTime,
       title: title,
       payload: payload,
+      soundUri: soundUri,
+      notificationMode: notificationMode,
+      vibrate: vibrate,
     );
   }
 
@@ -324,9 +479,15 @@ class _ScheduledNotification {
     required this.dateTime,
     required this.title,
     required this.payload,
+    required this.soundUri,
+    required this.notificationMode,
+    required this.vibrate,
   });
 
   final DateTime dateTime;
   final String title;
   final String payload;
+  final String? soundUri;
+  final ReminderNotificationMode notificationMode;
+  final bool vibrate;
 }

@@ -27,6 +27,13 @@ Future<void> recurringReminderAlarmCallback(
   final reminders = await ReminderStorage().getReminders();
   for (final reminder in reminders) {
     if (reminder.id == reminderId) {
+      final snoozedUntil = reminder.snoozedUntil;
+      if (snoozedUntil != null && !snoozedUntil.isAfter(DateTime.now())) {
+        await ReminderStorage().updateReminder(
+          reminder.copyWith(clearSnoozedUntil: true),
+        );
+        return;
+      }
       await notificationService.scheduleReminder(reminder);
       return;
     }
