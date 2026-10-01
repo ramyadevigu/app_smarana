@@ -96,8 +96,8 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
 
     final initialDateTime = DateTime.now().add(const Duration(minutes: 5));
     final today = DateUtils.dateOnly(DateTime.now());
-    final requestedDate = widget.initialDate ?? initialDateTime;
-    final initialDate = requestedDate.isBefore(today) ? today : requestedDate;
+    final requestedDate = widget.initialDate;
+    final initialDate = requestedDate ?? today;
     _selectedDate = DateTime(
       initialDate.year,
       initialDate.month,

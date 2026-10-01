@@ -154,11 +154,11 @@ void main() {
       expect(find.text('Call the team'), findsOneWidget);
       expect(find.text('Every Monday'), findsOneWidget);
       expect(find.text('3rd of every month'), findsOneWidget);
-      await tester.scrollUntilVisible(
-        find.text('Disabled one-time'),
-        200,
-        scrollable: find.byType(Scrollable).first,
+      await tester.drag(
+        find.byType(Scrollable).first,
+        const Offset(0, -240),
       );
+      await _pumpFrames(tester);
       expect(find.text('Disabled'), findsOneWidget);
 
       await tester.tap(find.byTooltip('Add reminder'));
@@ -174,6 +174,7 @@ void main() {
       await tester.ensureVisible(find.byKey(const ValueKey('save-reminder')));
       await tester.tap(find.byKey(const ValueKey('save-reminder')));
       await _pumpFrames(tester);
+      await _pumpFrames(tester);
 
       expect(find.text('New reminder'), findsOneWidget);
       expect(find.text('Created from the list'), findsOneWidget);
@@ -187,6 +188,7 @@ void main() {
       );
       await tester.ensureVisible(find.byKey(const ValueKey('save-reminder')));
       await tester.tap(find.byKey(const ValueKey('save-reminder')));
+      await _pumpFrames(tester);
       await _pumpFrames(tester);
 
       expect(find.text('New reminder'), findsNothing);
