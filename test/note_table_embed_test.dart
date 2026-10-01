@@ -27,12 +27,30 @@ void main() {
     expect(find.byTooltip('Add row'), findsOneWidget);
     expect(find.byType(TextField), findsNWidgets(5));
 
-    await tester.enterText(find.byType(TextField).at(1), 'Updated header');
-    await tester.tap(find.byTooltip('Add row'));
+    final headerCell = find.byType(TextField).at(1);
+    await tester.tap(headerCell);
+    await tester.enterText(headerCell, 'Updated header');
+    tester
+        .widget<IconButton>(
+          find.ancestor(
+            of: find.byTooltip('Add row'),
+            matching: find.byType(IconButton),
+          ),
+        )
+        .onPressed!
+        .call();
     await tester.pumpAndSettle();
     expect(find.byType(TextField), findsNWidgets(7));
 
-    await tester.tap(find.byTooltip('Add column'));
+    tester
+        .widget<IconButton>(
+          find.ancestor(
+            of: find.byTooltip('Add column'),
+            matching: find.byType(IconButton),
+          ),
+        )
+        .onPressed!
+        .call();
     await tester.pumpAndSettle();
     expect(find.byType(TextField), findsNWidgets(10));
     expect(find.text('Updated header'), findsOneWidget);
