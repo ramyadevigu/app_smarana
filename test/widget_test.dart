@@ -13,6 +13,7 @@ import 'package:app_smarana/features/calender/calender_screen.dart';
 import 'package:app_smarana/features/notes/notes_screen.dart';
 import 'package:app_smarana/features/reminders/reminders_screen.dart';
 import 'package:app_smarana/features/time_tools/stopwatch_screen.dart';
+import 'package:app_smarana/features/time_tools/timer_screen.dart';
 import 'package:app_smarana/theme/app_colors.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -100,7 +101,33 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('nav-timer')));
     await tester.pumpAndSettle();
-    expect(find.text('Timer'), findsNWidgets(3));
-    expect(find.text('Coming soon'), findsOneWidget);
+    expect(find.byType(TimerScreen), findsOneWidget);
+    expect(find.text('00:05:00'), findsOneWidget);
+    expect(find.byKey(const ValueKey('timer-preset-10')), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('timer-preset-1')));
+    await tester.pump();
+    expect(find.text('00:01:00'), findsOneWidget);
+
+    await tester.ensureVisible(find.byKey(const ValueKey('timer-add-minute')));
+    await tester.tap(find.byKey(const ValueKey('timer-add-minute')));
+    await tester.pump();
+    expect(find.text('00:02:00'), findsOneWidget);
+
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('timer-primary-action')),
+    );
+    await tester.tap(find.byKey(const ValueKey('timer-primary-action')));
+    await tester.pump(const Duration(milliseconds: 120));
+    expect(find.text('Pause'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('timer-primary-action')));
+    await tester.pump();
+    expect(find.text('Start'), findsOneWidget);
+
+    await tester.ensureVisible(find.byKey(const ValueKey('timer-reset')));
+    await tester.tap(find.byKey(const ValueKey('timer-reset')));
+    await tester.pump();
+    expect(find.text('00:02:00'), findsOneWidget);
   });
 }

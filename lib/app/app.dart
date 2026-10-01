@@ -13,6 +13,7 @@ import '../features/reminders/reminders_screen.dart';
 import '../features/settings/services/reminder_preferences_store.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/time_tools/stopwatch_screen.dart';
+import '../features/time_tools/timer_screen.dart';
 import '../services/notification_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/theme_preference_store.dart';
@@ -174,11 +175,7 @@ class _HomeScreenState extends State<HomeScreen> {
       NotesScreen(appMenu: _buildAppMenu(), onBackToSmarana: _returnToCalendar),
       RemindersScreen(title: 'Alarms', appMenu: _buildAppMenu()),
       StopwatchScreen(appMenu: _buildAppMenu()),
-      _TimeToolScreen(
-        title: 'Timer',
-        icon: Icons.hourglass_bottom,
-        appMenu: _buildAppMenu(),
-      ),
+      TimerScreen(appMenu: _buildAppMenu()),
     ];
 
     return Scaffold(
@@ -334,42 +331,5 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _currentIndex = 0;
     });
-  }
-}
-
-class _TimeToolScreen extends StatelessWidget {
-  const _TimeToolScreen({
-    required this.title,
-    required this.icon,
-    required this.appMenu,
-  });
-
-  final String title;
-  final IconData icon;
-  final Widget appMenu;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Scaffold(
-      appBar: AppBar(title: Text(title), actions: [appMenu]),
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 52, color: theme.colorScheme.primary),
-            const SizedBox(height: 16),
-            Text(title, style: theme.textTheme.titleLarge),
-            const SizedBox(height: 8),
-            Text(
-              'Coming soon',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }
