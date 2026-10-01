@@ -12,6 +12,7 @@ import '../features/reminders/services/reminder_storage.dart';
 import '../features/reminders/reminders_screen.dart';
 import '../features/settings/services/reminder_preferences_store.dart';
 import '../features/settings/settings_screen.dart';
+import '../features/time_tools/stopwatch_screen.dart';
 import '../services/notification_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/theme_preference_store.dart';
@@ -172,11 +173,7 @@ class _HomeScreenState extends State<HomeScreen> {
       CalendarScreen(viewMode: _calendarViewMode, appMenu: _buildAppMenu()),
       NotesScreen(appMenu: _buildAppMenu(), onBackToSmarana: _returnToCalendar),
       RemindersScreen(title: 'Alarms', appMenu: _buildAppMenu()),
-      _TimeToolScreen(
-        title: 'Stopwatch',
-        icon: Icons.av_timer,
-        appMenu: _buildAppMenu(),
-      ),
+      StopwatchScreen(appMenu: _buildAppMenu()),
       _TimeToolScreen(
         title: 'Timer',
         icon: Icons.hourglass_bottom,

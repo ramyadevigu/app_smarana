@@ -12,6 +12,7 @@ import 'package:app_smarana/app/app.dart';
 import 'package:app_smarana/features/calender/calender_screen.dart';
 import 'package:app_smarana/features/notes/notes_screen.dart';
 import 'package:app_smarana/features/reminders/reminders_screen.dart';
+import 'package:app_smarana/features/time_tools/stopwatch_screen.dart';
 import 'package:app_smarana/theme/app_colors.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -27,13 +28,7 @@ void main() {
         .widgetList<NavigationDestination>(find.byType(NavigationDestination))
         .map((destination) => destination.label)
         .toList();
-    expect(destinations, [
-      'Calendar',
-      'Notes',
-      'Alarms',
-      'Stopwatch',
-      'Timer',
-    ]);
+    expect(destinations, ['Calendar', 'Notes', 'Alarms', 'Stopwatch', 'Timer']);
     final navigationBar = tester.widget<NavigationBar>(
       find.byType(NavigationBar),
     );
@@ -81,8 +76,27 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('nav-stopwatch')));
     await tester.pumpAndSettle();
-    expect(find.text('Stopwatch'), findsNWidgets(3));
-    expect(find.text('Coming soon'), findsOneWidget);
+    expect(find.byType(StopwatchScreen), findsOneWidget);
+    expect(find.text('00:00:00.00'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('stopwatch-primary-action')));
+    await tester.pump(const Duration(milliseconds: 120));
+    expect(find.text('Pause'), findsOneWidget);
+    expect(find.text('Lap'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('stopwatch-secondary-action')));
+    await tester.pump();
+    expect(find.byKey(const ValueKey('stopwatch-laps')), findsOneWidget);
+    expect(find.text('Lap 1'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('stopwatch-primary-action')));
+    await tester.pump();
+    expect(find.text('Start'), findsOneWidget);
+    expect(find.text('Reset'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('stopwatch-secondary-action')));
+    await tester.pump();
+    expect(find.text('00:00:00.00'), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('nav-timer')));
     await tester.pumpAndSettle();
