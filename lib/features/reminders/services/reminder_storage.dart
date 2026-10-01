@@ -12,7 +12,7 @@ class ReminderStorage {
           notificationScheduler ?? NotificationService.instance;
 
   static const String _key = 'reminders';
-  static Future<void> _operationQueue = Future<void>.value();
+  static final Map<Zone, Future<void>> _operationQueues = {};
 
   final ReminderNotificationScheduler _notificationScheduler;
 
@@ -147,8 +147,10 @@ class ReminderStorage {
   }
 
   Future<T> _runSerialized<T>(Future<T> Function() operation) {
-    final result = _operationQueue.then((_) => operation());
-    _operationQueue = result.then<void>(
+    final zone = Zone.current;
+    final previous = _operationQueues[zone] ?? Future<void>.value();
+    final result = previous.then((_) => operation());
+    _operationQueues[zone] = result.then<void>(
       (_) {},
       onError: (Object _, StackTrace _) {},
     );
