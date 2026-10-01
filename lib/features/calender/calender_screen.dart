@@ -506,7 +506,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     final inDisplayedMonth = date.month == _displayedMonth.month;
     final reminders = _occurrencesFor(date);
     final dayTextColor = selected
-        ? colorScheme.onPrimary
+      ? colorScheme.onPrimaryContainer
         : inDisplayedMonth
         ? colorScheme.onSurface
         : colorScheme.onSurfaceVariant.withValues(alpha: 0.58);
@@ -538,18 +538,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
               return DecoratedBox(
                 decoration: BoxDecoration(
-                  color: today
-                      ? (selected
-                            ? colorScheme.primaryContainer
-                            : colorScheme.primaryContainer.withValues(
-                                alpha: 0.55,
-                              ))
-                      : null,
+                  color: selected ? colorScheme.primaryContainer : null,
                   border: Border.all(
-                    color: today
+                    color: selected
+                        ? colorScheme.primary
+                        : today
                         ? colorScheme.primary.withValues(alpha: 0.55)
                         : colorScheme.outlineVariant.withValues(alpha: 0.65),
-                    width: today ? 0.9 : 0.35,
+                    width: selected || today ? 0.9 : 0.35,
                   ),
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -566,7 +562,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
                         height: chipHeight,
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
-                          color: selected ? colorScheme.primary : null,
                           borderRadius: BorderRadius.circular(10),
                           border: today && !selected
                               ? Border.all(
@@ -579,9 +574,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
                           MaterialLocalizations.of(context)
                               .formatDecimal(date.day),
                           style: theme.textTheme.bodyMedium?.copyWith(
-                            color: today && !selected
-                                ? colorScheme.primary
-                                : dayTextColor,
+                          color: today && !selected
+                            ? colorScheme.primary
+                            : dayTextColor,
                             fontWeight: selected || today
                                 ? FontWeight.w700
                                 : null,
@@ -609,7 +604,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
                                     color: selected
-                                        ? colorScheme.onPrimary
+                                      ? colorScheme.onPrimaryContainer
                                         : _reminderDotColor(colorScheme, index),
                                   ),
                                 ),

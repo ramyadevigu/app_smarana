@@ -13,6 +13,7 @@ import '../models/note_workspace_models.dart';
 import '../models/rich_note_draft.dart';
 import '../services/note_attachment_storage.dart';
 import '../services/note_editor_autosave_service.dart';
+import '../widgets/note_table_embed_builder.dart';
 
 class RichNoteEditorScreen extends StatefulWidget {
   const RichNoteEditorScreen({
@@ -576,13 +577,17 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
   }
 
   void _insertTableTemplate() {
-    const tableTemplate =
-        '\n| Column 1 | Column 2 |\n| --- | --- |\n| Value | Value |\n';
     final index = _quillController.selection.baseOffset.clamp(
       0,
       _quillController.document.length - 1,
     );
-    _quillController.document.insert(index, tableTemplate);
+    _quillController.document.insert(
+      index,
+      quill.BlockEmbed(
+        NoteTableEmbedBuilder.embedType,
+        NoteTableEmbedBuilder.defaultData,
+      ),
+    );
     _queueAutosave();
   }
 
@@ -926,6 +931,7 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
                         config: const quill.QuillEditorConfig(
                           autoFocus: true,
                           padding: EdgeInsets.all(8),
+                          embedBuilders: [NoteTableEmbedBuilder()],
                         ),
                       ),
                     ),
