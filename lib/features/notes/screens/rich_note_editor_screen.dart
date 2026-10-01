@@ -581,12 +581,14 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
       0,
       _quillController.document.length - 1,
     );
-    _quillController.document.insert(
+    _quillController.replaceText(
       index,
+      0,
       quill.BlockEmbed(
         NoteTableEmbedBuilder.embedType,
         NoteTableEmbedBuilder.defaultData,
       ),
+      TextSelection.collapsed(offset: index + 1),
     );
     _queueAutosave();
   }
