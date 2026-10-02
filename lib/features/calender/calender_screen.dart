@@ -74,6 +74,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
   Map<DateTime, List<CalendarOccurrence>> _occurrencesByDate = {};
   List<CalendarOccurrence> _upcomingOccurrences = [];
   int _monthTransitionDirection = 1;
+  Offset? _monthPointerStart;
   bool _isLoading = true;
   bool _hasLoadError = false;
 
@@ -492,13 +493,20 @@ class _CalendarScreenState extends State<CalendarScreen> {
       children: [
         _buildWeekdayHeader(context),
         Expanded(
-          child: GestureDetector(
-            onHorizontalDragEnd: (details) {
-              final velocity = details.primaryVelocity ?? 0;
-              if (velocity.abs() > 100) {
-                _changeMonth(velocity < 0 ? 1 : -1);
+          child: Listener(
+            onPointerDown: (event) => _monthPointerStart = event.position,
+            onPointerUp: (event) {
+              final start = _monthPointerStart;
+              _monthPointerStart = null;
+              if (start == null) {
+                return;
+              }
+              final delta = event.position - start;
+              if (delta.dx.abs() > 48 && delta.dx.abs() > delta.dy.abs()) {
+                _changeMonth(delta.dx < 0 ? 1 : -1);
               }
             },
+            onPointerCancel: (_) => _monthPointerStart = null,
             child: AnimatedSwitcher(
               duration: const Duration(milliseconds: 250),
               switchInCurve: Curves.easeOutCubic,
@@ -1282,7 +1290,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => _buildCountdownSheet(),
+      builder: (context) => SizedBox(
+        height: MediaQuery.sizeOf(context).height * 0.7,
+        child: _buildCountdownSheet(),
+      ),
     );
   }
 
