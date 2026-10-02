@@ -430,56 +430,44 @@ class _CalendarScreenState extends State<CalendarScreen> {
       );
     }
 
-    return LayoutBuilder(
-      builder: (context, constraints) => Stack(
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _buildCalendarHeader(context),
-                const SizedBox(height: 8),
-                Expanded(
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 260),
-                    switchInCurve: Curves.easeInOutCubic,
-                    switchOutCurve: Curves.easeInOutCubic,
-                    transitionBuilder: (child, animation) => FadeTransition(
-                      opacity: animation,
-                      child: SlideTransition(
-                        position: Tween<Offset>(
-                          begin: const Offset(0, 0.025),
-                          end: Offset.zero,
-                        ).animate(animation),
-                        child: child,
-                      ),
-                    ),
-                    child: _buildViewContent(
-                      context,
-                      constraints.maxHeight - 64,
-                      key: ValueKey('calendar-view-${_activeViewMode.name}'),
-                    ),
-                  ),
+          _buildCalendarHeader(context),
+          const SizedBox(height: 8),
+          Expanded(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 260),
+              switchInCurve: Curves.easeInOutCubic,
+              switchOutCurve: Curves.easeInOutCubic,
+              transitionBuilder: (child, animation) => FadeTransition(
+                opacity: animation,
+                child: SlideTransition(
+                  position: Tween<Offset>(
+                    begin: const Offset(0, 0.025),
+                    end: Offset.zero,
+                  ).animate(animation),
+                  child: child,
                 ),
-              ],
+              ),
+              child: _buildViewContent(
+                context,
+                key: ValueKey('calendar-view-${_activeViewMode.name}'),
+              ),
             ),
           ),
-          if (_activeViewMode == CalendarViewMode.month) _buildCountdownSheet(),
         ],
       ),
     );
   }
 
-  Widget _buildViewContent(
-    BuildContext context,
-    double availableHeight, {
-    required Key key,
-  }) {
+  Widget _buildViewContent(BuildContext context, {required Key key}) {
     return switch (_activeViewMode) {
       CalendarViewMode.list => _buildUpcomingList(context, key),
       CalendarViewMode.year => _buildYearView(context, key),
-      CalendarViewMode.month => _buildMonthView(context, availableHeight, key),
+      CalendarViewMode.month => _buildMonthView(context, key),
       CalendarViewMode.week => _buildTimelineView(
         context,
         CalendarViewMode.week,
@@ -498,17 +486,12 @@ class _CalendarScreenState extends State<CalendarScreen> {
     };
   }
 
-  Widget _buildMonthView(
-    BuildContext context,
-    double availableHeight,
-    Key key,
-  ) {
+  Widget _buildMonthView(BuildContext context, Key key) {
     return Column(
       key: key,
       children: [
         _buildWeekdayHeader(context),
-        SizedBox(
-          height: availableHeight * 0.48,
+        Expanded(
           child: GestureDetector(
             onHorizontalDragEnd: (details) {
               final velocity = details.primaryVelocity ?? 0;
@@ -532,18 +515,13 @@ class _CalendarScreenState extends State<CalendarScreen> {
               },
               child: _buildMonthGridCard(
                 context,
+                monthOnly: true,
                 key: ValueKey(
                   'calendar-month-${_displayedMonth.year}-'
                   '${_displayedMonth.month}',
                 ),
               ),
             ),
-          ),
-        ),
-        Expanded(
-          child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 200),
-            child: _buildSelectedDateContent(context),
           ),
         ),
       ],
@@ -832,7 +810,16 @@ class _CalendarScreenState extends State<CalendarScreen> {
             ),
           )
         else
-          _buildTimelineDateSelector(context, dates),
+          _buildTimelineDateSelector(
+            context,
+            dates,
+            mode == CalendarViewMode.week
+                ? (date) {
+                    _selectDate(date);
+                    _selectViewMode(CalendarViewMode.day);
+                  }
+                : _selectDate,
+          ),
         Expanded(
           child: mode == CalendarViewMode.day
               ? ListView.builder(
@@ -851,6 +838,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
   Widget _buildTimelineDateSelector(
     BuildContext context,
     List<DateTime> dates,
+    ValueChanged<DateTime> onDateSelected,
   ) {
     final theme = Theme.of(context);
     final localizations = MaterialLocalizations.of(context);
@@ -874,7 +862,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     selected: _sameDay(date, _selectedDate),
                     label: localizations.formatFullDate(date),
                     child: InkWell(
-                      onTap: () => _selectDate(date),
+                      onTap: () => onDateSelected(date),
                       borderRadius: BorderRadius.circular(10),
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 180),
@@ -1071,6 +1059,21 @@ class _CalendarScreenState extends State<CalendarScreen> {
       height: 48,
       child: Row(
         children: [
+          if (_activeViewMode == CalendarViewMode.week ||
+              _activeViewMode == CalendarViewMode.day)
+            IconButton(
+              key: const ValueKey('calendar-hierarchy-back'),
+              tooltip: _activeViewMode == CalendarViewMode.day
+                  ? 'Back to Week'
+                  : 'Back to Month',
+              visualDensity: VisualDensity.compact,
+              onPressed: () => _selectViewMode(
+                _activeViewMode == CalendarViewMode.day
+                    ? CalendarViewMode.week
+                    : CalendarViewMode.month,
+              ),
+              icon: const Icon(Icons.chevron_left),
+            ),
           Expanded(
             child: Semantics(
               button: true,
@@ -1141,6 +1144,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
       onSelected: (value) {
         if (value == 'today') {
           _returnToToday();
+        } else if (value == 'countdown') {
+          _showCountdownSheet();
         } else if (value == 'previous-month') {
           _changePeriod(-1);
         } else if (value == 'next-month') {
@@ -1152,6 +1157,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
             ? 'year'
             : 'month';
         return [
+          const PopupMenuItem(
+            value: 'countdown',
+            child: ListTile(
+              leading: Icon(Icons.hourglass_bottom),
+              title: Text('Countdown'),
+              contentPadding: EdgeInsets.zero,
+            ),
+          ),
           const PopupMenuItem(
             value: 'today',
             child: ListTile(
@@ -1264,118 +1277,12 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
-  Widget _buildSelectedDateContent(BuildContext context) {
-    final occurrences = _occurrencesFor(_selectedDate);
-    if (occurrences.isEmpty) {
-      final theme = Theme.of(context);
-      return Center(
-        key: const ValueKey('calendar-empty-day'),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.calendar_month_outlined,
-              size: 56,
-              color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'You have a free day',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Take it easy',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    final localizations = MaterialLocalizations.of(context);
-    return ListView(
-      key: const ValueKey('calendar-selected-day-events'),
-      padding: const EdgeInsets.fromLTRB(4, 12, 4, 120),
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Text(
-            localizations.formatFullDate(_selectedDate),
-            style: Theme.of(context).textTheme.titleSmall,
-          ),
-        ),
-        for (final occurrence in occurrences)
-          _buildSelectedEventRow(context, occurrence),
-      ],
-    );
-  }
-
-  Widget _buildSelectedEventRow(
-    BuildContext context,
-    CalendarOccurrence occurrence,
-  ) {
-    final theme = Theme.of(context);
-    final reminder = occurrence.reminder;
-    final time = MaterialLocalizations.of(context).formatTimeOfDay(
-      TimeOfDay.fromDateTime(occurrence.dateTime),
-      alwaysUse24HourFormat: true,
-    );
-    return InkWell(
-      key: ValueKey('calendar-selected-reminder-${reminder.id}'),
-      onTap: () => _openEditReminder(reminder),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 9),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 58,
-              child: Text(
-                time,
-                style: theme.textTheme.labelMedium?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
-              ),
-            ),
-            Container(
-              width: 3,
-              height: 28,
-              margin: const EdgeInsets.only(right: 10),
-              decoration: BoxDecoration(
-                color: CalendarColors.forReminder(reminder.id)
-                    .foreground(theme.brightness == Brightness.dark),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            Expanded(
-              child: Text(
-                reminder.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            if (reminder.recurrenceRule.type != RecurrenceType.none)
-              const Padding(
-                padding: EdgeInsets.only(left: 8),
-                child: Icon(Icons.repeat, size: 16),
-              ),
-            if (reminder.notificationMode ==
-                ReminderNotificationMode.alarmAndNotification)
-              const Padding(
-                padding: EdgeInsets.only(left: 8),
-                child: Icon(Icons.alarm_outlined, size: 16),
-              ),
-          ],
-        ),
-      ),
+  void _showCountdownSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _buildCountdownSheet(),
     );
   }
 
@@ -1503,7 +1410,12 @@ class _CalendarScreenState extends State<CalendarScreen> {
       ].join(', '),
       child: InkWell(
         borderRadius: BorderRadius.circular(28),
-        onTap: () => _selectDate(date),
+        onTap: () {
+          _selectDate(date);
+          if (monthOnly) {
+            _selectViewMode(CalendarViewMode.week);
+          }
+        },
         child: Padding(
           padding: EdgeInsets.fromLTRB(
             compact ? 1 : 2,
@@ -1673,7 +1585,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
   void _openDayDetails(DateTime date) {
     _selectDate(date);
-    _selectViewMode(CalendarViewMode.month);
+    _selectViewMode(CalendarViewMode.day);
   }
 
   DateTime _weekStart(DateTime date) =>
