@@ -198,6 +198,11 @@ void main() {
     final octoberFifteenth = find.byKey(
       const ValueKey('calendar-day-2026-10-15'),
     );
+    expect(
+      (yearGrid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount)
+          .crossAxisCount,
+      3,
+    );
     await tester.scrollUntilVisible(
       octoberFifteenth,
       200,
@@ -221,18 +226,13 @@ void main() {
       contains('1 reminders'),
     );
 
-    await tester.tap(
-      find.byKey(const ValueKey('calendar-year-month-2026-10')),
-    );
+    await tester.tap(find.byKey(const ValueKey('calendar-year-month-2026-10')));
     await _pumpFrames(tester);
 
     expect(find.byKey(const ValueKey('calendar-view-month')), findsOneWidget);
     expect(find.text('October 2026'), findsOneWidget);
     expect(
-      tester
-          .widget<Semantics>(octoberFifteenth)
-          .properties
-          .selected,
+      tester.widget<Semantics>(octoberFifteenth).properties.selected,
       isTrue,
     );
   });
@@ -252,9 +252,7 @@ void main() {
     await _pumpFrames(tester);
 
     expect(find.text('2027'), findsOneWidget);
-    final selectedDate = find.byKey(
-      const ValueKey('calendar-day-2027-9-29'),
-    );
+    final selectedDate = find.byKey(const ValueKey('calendar-day-2027-9-29'));
     await tester.scrollUntilVisible(
       selectedDate,
       200,
@@ -265,9 +263,27 @@ void main() {
           )
           .first,
     );
+    expect(tester.widget<Semantics>(selectedDate).properties.selected, isTrue);
+
+    await tester.tap(find.byTooltip('More calendar views'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Next year'));
+    await _pumpFrames(tester);
+
+    final leapDay = find.byKey(const ValueKey('calendar-day-2028-2-29'));
+    await tester.scrollUntilVisible(
+      leapDay,
+      200,
+      scrollable: find
+          .descendant(
+            of: find.byKey(const ValueKey('calendar-view-year')),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
     expect(
-      tester.widget<Semantics>(selectedDate).properties.selected,
-      isTrue,
+      tester.widget<Semantics>(leapDay).properties.label,
+      contains('February 29, 2028'),
     );
   });
 

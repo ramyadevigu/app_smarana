@@ -525,10 +525,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
           crossAxisSpacing: 8,
           mainAxisSpacing: 8,
         ),
-        itemBuilder: (context, index) => _buildMiniMonth(
-          context,
-          DateTime(_displayedMonth.year, index + 1),
-        ),
+        itemBuilder: (context, index) =>
+            _buildMiniMonth(context, DateTime(_displayedMonth.year, index + 1)),
       ),
     );
   }
@@ -1401,7 +1399,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     final today = _isToday(date);
     final displayedMonth = monthContext ?? _displayedMonth;
     final inDisplayedMonth =
-      date.month == displayedMonth.month && date.year == displayedMonth.year;
+        date.month == displayedMonth.month && date.year == displayedMonth.year;
     final weekend =
         date.weekday == DateTime.saturday || date.weekday == DateTime.sunday;
     final dateColor = !inDisplayedMonth
