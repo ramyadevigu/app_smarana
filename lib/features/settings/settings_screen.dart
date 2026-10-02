@@ -334,14 +334,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   key: const ValueKey('settings-calendar-view-mode'),
                   segments: const [
                     ButtonSegment<CalendarViewMode>(
-                      value: CalendarViewMode.stacked,
+                      value: CalendarViewMode.monthAndWeek,
                       icon: Icon(Icons.view_agenda_outlined),
-                      label: Text('Top + Bottom'),
+                      label: Text('Month + Week'),
                     ),
                     ButtonSegment<CalendarViewMode>(
-                      value: CalendarViewMode.split,
+                      value: CalendarViewMode.nextThreeDays,
                       icon: Icon(Icons.view_week_outlined),
-                      label: Text('Two Pane'),
+                      label: Text('3 Days'),
+                    ),
+                    ButtonSegment<CalendarViewMode>(
+                      value: CalendarViewMode.monthOnly,
+                      icon: Icon(Icons.calendar_view_month_outlined),
+                      label: Text('Month'),
                     ),
                   ],
                   selected: {_defaults.calendarViewMode},

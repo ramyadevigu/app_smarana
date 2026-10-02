@@ -1,584 +1,1855 @@
 ---
-applyTo: "**/*.dart"
-description: Application-wide light, dark, and system theme
-  implementation for the Smarana Flutter reminder app
-name: Smarana Theme System
+applyTo: "**/calendar/**/*.dart, **/calendar*.dart"
+description: Modern multi-view Calendar workspace for the Smarana Flutter reminder app
+name: Smarana Calendar Redesign
 ---
 
-# Smaraṇa --- Theme System Instructions
+# Smaraṇa — Calendar Redesign System
 
 ## Objective
 
-Implement a complete, maintainable application-wide theme system for the
-Smaraṇa Flutter reminder app.
+Completely redesign the existing Smaraṇa Calendar screen into a modern, professional productivity-calendar workspace.
 
-The application must support:
+The Calendar should feel like a combination of:
 
--   System theme
--   Light theme
--   Dark theme
--   Automatic system-theme detection
--   User-controlled theme selection
--   Persistent theme preference
--   Immediate theme switching without restarting the app
+- Microsoft Teams Calendar
+- Microsoft Planner
+- Modern productivity applications
+- Professional mobile scheduling applications
 
-Do not change reminder, recurrence, storage, or notification behavior as
-part of this work.
+Do NOT copy Microsoft Teams or Microsoft Planner directly.
 
-------------------------------------------------------------------------
+Use them only as visual and interaction inspiration.
 
-## 1. Brand Color System
+The goal is to make Smaraṇa Calendar feel like a complete planning workspace rather than a simple date picker.
 
-Use these brand colors consistently.
+The Calendar must support three primary views:
 
-### Primary Colors
+1. Month + Week — DEFAULT
+2. Next 3 Days
+3. Month Only
 
-  Name         Hex         Usage
-  ------------ ----------- --------------------------------------
-  Deep Black   `#0B0F14`   Typography, structure, dark surfaces
-  Royal Blue   `#0066FF`   Primary brand and actions
-  Azure Blue   `#008CFF`   Secondary blue and UI accents
-  Cyan Blue    `#00AEEF`   Highlights and energy
+The same existing Smaraṇa reminder/calendar data must power all three views.
 
-### Brand Gradient
+Do not create a separate calendar data system.
 
-Use the gradient selectively:
+Do not break existing reminder, alarm, notification, recurrence, or storage functionality.
 
-`#0038B8 → #0066FF → #00AEEF`
+---
 
-Use it only for:
+# 1. IMPORTANT DESIGN PRINCIPLE — COLOR
 
--   Branding
--   Logo/orbital elements
--   Selected decorative elements
--   Premium visual accents
+DO NOT restrict the Calendar to a small fixed set of colors.
 
-Do not use the gradient throughout the entire UI.
+The Calendar should support a rich, multi-color productivity experience inspired by Microsoft Teams and Microsoft Planner.
 
-------------------------------------------------------------------------
+Do NOT prescribe a specific list of colors such as:
 
-## 2. Theme Architecture
+- Blue
+- Purple
+- Green
+- Orange
 
-Create a centralized theme implementation.
+as the only available colors.
 
-Preferred structure:
+Instead, create a flexible Calendar color system that can support many visually distinct colors.
 
-``` text
+The exact colors should be selected based on:
+
+- visual hierarchy
+- readability
+- accessibility
+- Light Mode
+- Dark Mode
+- event categorization
+- modern productivity UI aesthetics
+
+The Calendar may use a broad range of colors including, but not limited to:
+
+- blue
+- cyan
+- teal
+- green
+- lime
+- yellow
+- amber
+- orange
+- red
+- coral
+- pink
+- magenta
+- purple
+- violet
+- indigo
+- gray
+- neutral tones
+
+These are examples only.
+
+Do NOT limit the implementation to these colors.
+
+The implementation must make it easy to add more colors later.
+
+---
+
+# 2. COLOR ARCHITECTURE
+
+Create a centralized calendar color system.
+
+For example:
+
 lib/
   theme/
-    app_colors.dart
-    app_theme.dart
-```
+    calendar_colors.dart
 
-If the project already has a suitable theme structure, reuse it instead
-of creating duplicate files.
+or integrate into the existing theme architecture if an appropriate location already exists.
 
-All reusable colors must be centralized.
+Do NOT create a second independent theme system.
 
-Do not hard-code brand colors throughout widgets.
+The existing application theme remains the source of truth for:
 
-------------------------------------------------------------------------
+- application background
+- surfaces
+- primary actions
+- typography
+- borders
+- dialogs
+- controls
+- Light/Dark mode
 
-## 3. Material 3
+The Calendar color system should specifically manage:
 
-Use Material 3:
+- event colors
+- reminder category colors
+- calendar markers
+- event chips
+- schedule blocks
+- selected event states
+- calendar indicators
 
-``` dart
-ThemeData(
-  useMaterial3: true,
-)
-```
+Do not hard-code colors inside individual Calendar widgets.
 
-The application should provide:
+Bad:
 
-``` dart
-theme: lightTheme,
-darkTheme: darkTheme,
-themeMode: selectedThemeMode,
-```
+Color(0xFF123456)
 
-Do not manually determine light/dark mode inside every widget.
+inside:
 
-Use Flutter's global theme system.
+calendar_day_cell.dart
 
-------------------------------------------------------------------------
+Instead:
 
-## 4. Light Theme
+CalendarColors.someCategory
 
-Create a clean, modern light theme.
+or an equivalent centralized mechanism.
 
-### Background
+---
 
-Use a very light neutral or blue-white background.
+# 3. COLOR ADAPTATION
 
-Avoid using pure white for every surface.
+Calendar colors must work in both Light and Dark modes.
 
-### Surface
+Do not simply use the same color value unchanged in every situation.
 
-Use white or a very light neutral.
+For every calendar event color, consider:
 
-### Brand
+Light Mode:
+- background
+- foreground/text
+- border
+- icon
 
-``` text
-Primary:   #0066FF
-Secondary: #008CFF
-Tertiary:  #00AEEF
-```
+Dark Mode:
+- background
+- foreground/text
+- border
+- icon
 
-### Text
+The event must remain clearly identifiable in both themes.
 
-Primary text:
+The existing application-wide theme already defines Light, Dark, and System modes. Integrate with that system rather than creating another theme mechanism.
 
-``` text
-#0B0F14
-```
+Do not modify the application's existing theme architecture unless necessary.
 
-Secondary text should use a muted dark gray/blue with sufficient
-contrast.
+---
 
-### Cards
+# 4. COLOR CONTRAST
 
-Cards should use:
+Accessibility and readability take priority over decorative color.
 
--   Light surface
--   Subtle border
--   Subtle elevation where appropriate
--   Clear text contrast
+For every event color:
 
-### Buttons
+- text must remain readable
+- icons must remain visible
+- event boundaries must remain identifiable
+- selected states must be obvious
+- disabled states must remain understandable
 
-Primary buttons should use Royal Blue with readable white text.
+Do not use extremely bright saturated backgrounds behind small text.
 
-------------------------------------------------------------------------
+Prefer a relationship such as:
 
-## 5. Dark Theme
+strong color identity
++
+soft/tinted event surface
++
+appropriate foreground color
 
-Create a deliberately designed dark theme.
+The Calendar should feel colorful without becoming visually noisy.
 
-Do not simply invert the light theme.
+---
 
-### Main Background
+# 5. EVENT COLOR VARIETY
 
-``` text
-#0B0F14
-```
+The user should be able to visually distinguish different categories of reminders/events.
 
-Do not use pure `#000000` as the primary application background.
+For example:
 
-### Surfaces
+Work
+Personal
+Family
+Health
+Finance
+Study
+Travel
+Meetings
+Tasks
+Important reminders
 
-Use progressively lighter dark blue/gray surfaces for:
+These categories are examples only.
 
--   Cards
--   Dialogs
--   Bottom sheets
--   Input containers
--   Elevated content
+Do not force users into these categories unless the existing application already supports categories.
 
-### Text
+The visual architecture should support future categories.
 
-Primary text should be near-white.
+If the existing Reminder model has a category/color field, reuse it.
 
-Secondary text should be muted light gray/blue.
+If it does not, do not unnecessarily modify the Reminder model as part of the UI redesign.
 
-### Brand
+---
 
-Retain:
+# 6. VISUAL DESIGN LANGUAGE
 
-``` text
-Primary:   #0066FF
-Secondary: #008CFF
-Tertiary:  #00AEEF
-```
+The Calendar should have:
 
-Adjust surrounding surfaces and foreground colors for readability.
+- modern productivity-app aesthetics
+- clean spacing
+- strong hierarchy
+- thin separators
+- subtle surfaces
+- rounded event cards
+- soft event backgrounds
+- compact controls
+- readable typography
+- information density without clutter
+- minimal but purposeful shadows
+- smooth transitions
 
-------------------------------------------------------------------------
+Do NOT make the UI overly decorative.
 
-## 6. Theme Modes
+Do NOT use gradients everywhere.
 
-Support exactly three user-selectable modes:
+Do NOT use excessive glassmorphism.
 
-``` text
-System
-Light
-Dark
-```
+Do NOT make every component colorful.
 
-Default:
+Use color primarily to communicate calendar information.
 
-``` text
-System
-```
+---
 
-### System
+# 7. CALENDAR SCREEN STRUCTURE
 
-When System is selected:
+The Calendar should occupy almost the entire available screen.
 
--   Follow the operating system theme.
--   React automatically when the OS changes between light and dark.
+Do NOT use the previous narrow two-pane layout.
 
-### Light
+The calendar itself is the main workspace.
 
-Always use the light theme.
+Overall structure:
 
-### Dark
+------------------------------------------------
+TOP HEADER
+------------------------------------------------
 
-Always use the dark theme.
+------------------------------------------------
+CALENDAR CONTENT
+------------------------------------------------
 
-------------------------------------------------------------------------
+------------------------------------------------
+FLOATING ACTION BUTTON
+------------------------------------------------
 
-## 7. Theme Preference Persistence
+The bottom navigation, if already present in Smaraṇa, must remain compatible with the new Calendar design.
 
-Persist the user's theme selection locally.
+---
 
-Reuse the existing SharedPreferences implementation if the project
-already uses it.
+# 8. TOP HEADER
 
-Do not modify the existing reminder storage format.
+Create a clean modern calendar header.
 
-Store a separate preference such as:
+Suggested structure:
 
-``` text
-themeMode = system
-themeMode = light
-themeMode = dark
-```
+[Calendar/Menu Icon]     September 2026       [View] [...]
+
+The exact layout can be adapted to the available screen width.
+
+The header should contain:
+
+LEFT:
+- Calendar/navigation icon
+
+CENTER:
+- Current month and year
+
+RIGHT:
+- View selector
+- More options
+
+Do not make the header excessively tall.
+
+---
+
+# 9. MONTH NAVIGATION
+
+Support:
+
+- Previous month
+- Next month
+- Today
+
+Possible interaction:
+
+<    September 2026    >
+
+Do not make navigation controls visually dominant.
+
+The current month/year should remain the primary header information.
+
+If the application already has month navigation logic, reuse it.
+
+---
+
+# 10. VIEW SELECTOR
+
+The top view icon must allow the user to change Calendar presentation.
+
+Available views:
+
+1. Month + Week
+2. Next 3 Days
+3. Month Only
+
+Example:
+
+Calendar View
+
+✓ Month + Week
+
+  Next 3 Days
+
+  Month Only
+
+The currently selected view must be clearly highlighted.
+
+The interaction can be:
+
+- Popup menu
+- Dropdown
+- Bottom sheet
+- Compact menu
+
+Use whichever best fits the existing Smaraṇa UI architecture.
+
+Do not navigate to an unrelated settings screen.
+
+Changing views should happen immediately.
+
+---
+
+# 11. VIEW ENUMERATION
+
+Use a clean view state.
+
+Example:
+
+enum CalendarViewType {
+  monthAndWeek,
+  nextThreeDays,
+  monthOnly,
+}
+
+Adapt this to the existing architecture if an equivalent already exists.
+
+Do not create duplicate state systems.
+
+---
+
+# 12. DEFAULT VIEW — MONTH + WEEK
+
+The default Calendar view is:
+
+MONTH + WEEK
+
+This view combines:
+
+1. Full month grid
+2. Detailed weekly agenda
+
+The month grid should occupy the upper portion of the screen.
+
+The weekly agenda should appear below it.
+
+Conceptually:
+
+------------------------------------------------
+September 2026                       [View] [...]
+------------------------------------------------
+
+Mon   Tue   Wed   Thu   Fri   Sat   Sun
+------------------------------------------------
+ 1     2     3     4     5     6     7
+
+     •          •           •
+------------------------------------------------
+ 8     9    10    11    12    13    14
+
+ •          •          •
+------------------------------------------------
+15    16    17    18    19    20    21
+
+      •     •
+------------------------------------------------
+22    23    24    25    26    27    28
+------------------------------------------------
+29    30
+
+------------------------------------------------
+THIS WEEK
+------------------------------------------------
+
+Mon 29
+
+09:00   ● Team Meeting
+11:30   ● Project Review
+14:30   ● Client Call
+
+Tue 30
+
+10:00   ● Development
+15:00   ● Planning
+
+------------------------------------------------
+
+The exact layout must adapt to the mobile screen.
+
+---
+
+# 13. MONTH GRID
+
+The month grid is one of the most important components.
 
 Requirements:
 
--   Fresh installation → System
--   Select Light → persist Light
--   Select Dark → persist Dark
--   Select System → persist System
--   Restart application → restore selected mode
+- 7 columns
+- Monday/Sunday configuration should follow the existing application behavior
+- thin grid lines
+- clearly defined cells
+- readable date numbers
+- current date indicator
+- selected date indicator
+- previous/next month dates
+- event/reminder indicators
+- weekend differentiation where appropriate
 
-Theme preference must remain independent of reminder data.
+Do not make grid lines heavy.
 
-------------------------------------------------------------------------
+Use thin, subtle separators.
 
-## 8. Application Startup
+The grid should feel similar to a professional productivity application.
 
-At application startup:
+---
 
-1.  Load the saved theme preference.
-2.  If no preference exists, use System.
-3.  Convert the preference to Flutter `ThemeMode`.
-4.  Apply the selected mode globally.
-5.  Build the application.
+# 14. DATE CELL
 
-Avoid unnecessary asynchronous complexity.
+Create a reusable:
 
-Do not allow startup logic to break reminder functionality.
+CalendarDayCell
 
-------------------------------------------------------------------------
+Each date cell should support:
 
-## 9. Application-Level Source of Truth
+- date number
+- current-day state
+- selected state
+- event indicators
+- reminder indicators
+- recurrence indicators
+- overflow indicator
 
-Theme state must exist at application level.
+Example:
 
-Do not keep independent theme state inside individual screens.
+15
 
-If the project already uses Provider, Riverpod, Bloc, or another
-state-management solution, follow the existing architecture.
+● Meeting
+● Workout
++2
 
-If no state-management framework exists, use the simplest maintainable
-solution.
+Do not overcrowd cells.
 
-Do not add a state-management package solely for theme switching unless
-there is a strong architectural reason.
+If there are too many events:
 
-------------------------------------------------------------------------
+15
 
-## 10. Settings
+● Meeting
+● Workout
++3 more
 
-Provide a Theme setting in the application's Settings screen.
+Tapping the date should open the relevant daily schedule.
 
-If Settings already exists, add the option there.
+---
 
-If Settings does not exist, create a simple Settings screen.
+# 15. CURRENT DATE
 
-Use a clear UI such as:
+The current day must be visually obvious.
 
-``` text
-Appearance
+Use a distinct treatment such as:
 
-Theme
+- circular highlight
+- subtle filled background
+- outline
+- accent indicator
 
-○ System
-○ Light
-○ Dark
-```
+Do not rely only on color.
 
-The selected mode must be visually obvious.
+The current date should remain understandable in:
 
-The change must apply immediately.
+- Light Mode
+- Dark Mode
+- Month + Week
+- Next 3 Days
+- Month Only
 
-Do not add unrelated settings.
+---
 
-------------------------------------------------------------------------
+# 16. SELECTED DATE
 
-## 11. Theme-Aware Existing Screens
+The selected date must be visually different from the current date.
 
-Update existing UI so it works correctly in both themes.
+Do not confuse:
 
-At minimum inspect:
+CURRENT DATE
 
--   `RemindersScreen`
--   `AddReminderScreen`
--   Settings screen
--   AppBar
--   Reminder cards
--   Buttons
--   Text fields
--   Date picker
--   Time picker
--   Dialogs
--   Empty states
--   Error states
--   Floating action button
--   Menus and selectors
+with:
 
-Prefer theme-aware properties:
+SELECTED DATE
 
-``` dart
-Theme.of(context).colorScheme.primary
-Theme.of(context).colorScheme.surface
-Theme.of(context).colorScheme.onSurface
-Theme.of(context).colorScheme.onPrimary
-Theme.of(context).colorScheme.secondary
-```
+If today is selected, combine the two states elegantly.
 
-Avoid unnecessary direct references such as:
+Use:
 
-``` dart
-Colors.black
-Colors.white
-Colors.blue
-```
+- shape
+- border
+- background
+- typography
+- indicator
 
-when the color should respond to the active theme.
+rather than relying on color alone.
 
-------------------------------------------------------------------------
+---
 
-## 12. Material ColorScheme
+# 17. WEEKLY AGENDA
 
-Build the themes around Material 3 `ColorScheme`.
+The weekly section should show detailed reminders/events.
 
-Light mode:
+Each event may contain:
 
-``` text
-primary   = #0066FF
-secondary = #008CFF
-tertiary  = #00AEEF
-```
+- time
+- title
+- description
+- event color
+- alarm indicator
+- recurrence indicator
 
-Dark mode should retain the same brand identity while using appropriate
-dark surfaces and readable foreground colors.
+Example:
 
-Do not randomly alter the brand colors between themes.
+09:30
 
-------------------------------------------------------------------------
+┌────────────────────────────┐
+│ ● Morning Workout          │
+│   Exercise                 │
+└────────────────────────────┘
 
-## 13. Component Behavior
+14:00
 
-### AppBar
+┌────────────────────────────┐
+│ ● Project Review           │
+│   Weekly recurrence        │
+└────────────────────────────┘
 
-Light mode:
+Event colors should be visually meaningful.
 
--   Light surface
--   Dark text/icons
+Do not use one color for all events.
 
-Dark mode:
+Do not hard-code event colors inside the event widget.
 
--   Dark surface
--   Light text/icons
+---
 
-### Reminder Cards
+# 18. NEXT 3 DAYS VIEW
 
-Light mode:
+Create a dedicated:
 
--   Light surface
--   Dark text
--   Subtle border/elevation
+NEXT 3 DAYS
 
-Dark mode:
+view.
 
--   Dark elevated surface
--   Light text
--   Subtle border
+This is a focused planning view.
 
-### Primary Buttons
+Display the next three calendar days.
 
-Use the brand blue.
+Example:
 
-Ensure readable button text in both themes.
+------------------------------------------------
+Tue 29        Wed 30        Thu 1
+------------------------------------------------
 
-### Text Fields
+09:00         09:00         09:00
 
-Light mode:
+Meeting       Coffee        Project
 
--   Light surface
--   Dark text
--   Visible border
+10:00         10:00         10:00
 
-Dark mode:
+              Development
 
--   Dark surface
--   Light text
--   Visible border
+11:00                       Client Call
 
-### Date/Time Pickers
+12:00
 
-They must automatically use the active application theme.
+13:00         13:00
 
-### Dialogs
+              Lunch
 
-They must automatically use the active application theme.
+14:00         Review        Presentation
 
-------------------------------------------------------------------------
+15:00
 
-## 14. Immediate Theme Switching
+16:00                       Project
 
-When the user changes:
+------------------------------------------------
 
-``` text
-System → Light
-Light → Dark
-Dark → System
-```
+Use a vertical time-based schedule.
 
-the entire application must update immediately.
+Each day should be visually separated.
 
-A restart must not be required.
+Events should appear as colored blocks.
 
-------------------------------------------------------------------------
+The current day should receive stronger visual emphasis.
 
-## 15. Accessibility
+---
+
+# 19. THREE-DAY TIME AXIS
+
+The Next 3 Days view should support:
+
+- hourly time labels
+- event blocks
+- current-time indicator
+- scrolling
+- overlapping events
+- multiple events
+- long-duration events
+
+The view should automatically position itself near the current time when practical.
+
+Do not force the user to scroll from midnight every time.
+
+Use efficient Flutter rendering.
+
+---
+
+# 20. MONTH ONLY VIEW
+
+Create a:
+
+MONTH ONLY
+
+view.
+
+This view should maximize the month grid.
+
+There should be no detailed weekly agenda competing for space.
+
+Conceptually:
+
+------------------------------------------------
+September 2026                    [View] [...]
+------------------------------------------------
+
+Mon Tue Wed Thu Fri Sat Sun
+
+------------------------------------------------
+ 1   2   3   4   5   6   7
+     ●       ●       ●
+------------------------------------------------
+ 8   9  10  11  12  13  14
+ ●       ●       ●
+------------------------------------------------
+15  16  17  18  19  20  21
+------------------------------------------------
+22  23  24  25  26  27  28
+------------------------------------------------
+29  30
+
+The grid should use almost the entire screen.
+
+---
+
+# 21. MONTH ONLY EVENT DISPLAY
+
+Month Only mode should show high-level information.
+
+For example:
+
+15
+
+● Meeting
+● Workout
+● Payment
+
+If there are too many events:
+
+15
+
+● Meeting
+● Workout
++3 more
+
+Tapping the overflow should reveal the day's events.
+
+Do not attempt to display complete descriptions inside the month grid.
+
+---
+
+# 22. EVENT CARDS
+
+Create a reusable event component.
+
+For example:
+
+CalendarEventCard
+
+The component should support:
+
+- color
+- title
+- time
+- description
+- alarm
+- recurrence
+- selected state
+- compact mode
+- expanded mode
+
+The component should work across:
+
+- Month + Week
+- Next 3 Days
+- Month Only
+
+where appropriate.
+
+---
+
+# 23. EVENT COLORS
+
+Event colors must be independent from the application's primary brand color.
+
+The application may use Smaraṇa's brand identity for:
+
+- primary actions
+- navigation
+- selected controls
+- FAB
+- major UI elements
+
+But events should have their own rich visual categorization.
+
+Do NOT force every event to use Smaraṇa blue.
+
+Do NOT force every event to use the same color.
+
+Do NOT create a tiny palette solely because the brand has a small palette.
+
+The Calendar should support a broad visual spectrum.
+
+---
+
+# 24. EVENT COLOR GENERATION
+
+If the application does not currently have event colors, create a centralized color palette or category-color resolver.
+
+For example:
+
+CalendarColorResolver
+
+It may expose functionality such as:
+
+getEventColor(event)
+
+or:
+
+getCategoryColor(category)
+
+The resolver must:
+
+- return visually distinct colors
+- work in Light Mode
+- work in Dark Mode
+- maintain contrast
+- remain deterministic
+- avoid random colors on every rebuild
+
+Do not generate a different color every time the widget rebuilds.
+
+---
+
+# 25. ALARM INDICATORS
+
+Smarana supports reminders and alarms.
+
+Calendar events should visually communicate when an alarm or notification is enabled.
+
+Example:
+
+🔔 Team Meeting
+
+or:
+
+Team Meeting       [alarm icon]
+
+The exact icon should follow the existing application iconography.
+
+Do not create a second alarm system.
+
+Use the existing alarm/reminder state.
+
+---
+
+# 26. RECURRENCE
+
+Existing recurrence functionality must continue working.
+
+Supported recurrence may include:
+
+- none
+- daily
+- weekly
+- biweekly
+- alternate weeks
+- monthly
+- alternate months
+- yearly
+
+Do not modify recurrence business logic as part of this redesign unless absolutely necessary.
+
+The Calendar should only change how recurring reminders are displayed.
+
+Recurring events must appear correctly in all relevant views.
+
+---
+
+# 27. ADD REMINDER
+
+Keep the existing floating "+" button.
+
+The button should:
+
+- remain easily accessible
+- not cover calendar information
+- open the existing Add Reminder flow
+
+Do not rebuild Add Reminder functionality as part of this Calendar redesign.
+
+When a user taps an empty date/time area, pre-fill the selected date/time where supported by the existing implementation.
+
+---
+
+# 28. EVENT INTERACTION
+
+When the user taps an existing event:
+
+Open the existing reminder/event details UI.
+
+Do not create duplicate reminder logic.
+
+When the user taps a date:
+
+Select that date.
+
+When the user taps an empty time:
+
+Use the existing Add Reminder functionality where possible.
+
+---
+
+# 29. LIGHT MODE
+
+The Calendar must integrate with the existing application Light Theme.
+
+Use:
+
+- light neutral background
+- white or lightly tinted calendar surfaces
+- subtle borders
+- readable dark text
+- colorful event surfaces
+- appropriate selected states
+
+Do not make the entire screen pure white.
+
+Use visual hierarchy between:
+
+Background
+Calendar surface
+Date cells
+Event cards
+Selected states
+
+Do not introduce a separate Light Theme for Calendar.
+
+---
+
+# 30. DARK MODE
+
+The Calendar must integrate with the existing application Dark Theme.
+
+Do NOT simply invert the Light UI.
+
+Use:
+
+- dark neutral background
+- slightly lighter calendar surface
+- subtle separators
+- readable light text
+- adjusted event colors
+- appropriate contrast
+
+Event colors should remain visually distinct.
+
+Avoid overly bright neon colors unless they are intentionally toned down for dark surfaces.
+
+---
+
+# 31. SYSTEM THEME
+
+Use the application's existing System/Light/Dark theme mechanism.
+
+Do not create independent Calendar theme switching.
+
+The Calendar should automatically follow:
+
+System
+Light
+Dark
+
+according to the application's global theme.
+
+---
+
+# 32. RESPONSIVE DESIGN
+
+The Calendar is primarily mobile-first.
+
+Support:
+
+- small Android phones
+- large Android phones
+- tablets where practical
+
+Do not hard-code screen dimensions.
+
+Use:
+
+- LayoutBuilder
+- MediaQuery
+- Flexible
+- Expanded
+- Slivers
+- CustomScrollView
+
+where appropriate.
+
+The Calendar must not overflow horizontally.
+
+---
+
+# 33. TYPOGRAPHY
+
+Use the application's existing typography system.
+
+Prioritize:
+
+- clear date numbers
+- readable month title
+- compact event text
+- clear time labels
+- strong hierarchy
+- appropriate font weights
+
+Do not introduce a new font system just for Calendar.
+
+---
+
+# 34. GRID LINES
+
+Grid lines should be:
+
+- thin
+- subtle
+- visible
+- consistent
+
+Do not remove grid lines completely.
+
+Do not make grid lines dark/heavy.
+
+Grid lines should help the user understand the calendar structure without dominating the interface.
+
+---
+
+# 35. WEEKEND TREATMENT
+
+Weekend cells can receive subtle visual differentiation.
+
+Do not make weekends dramatically different.
+
+Use:
+
+- subtle surface tint
+- typography treatment
+- very light background distinction
+
+The treatment must work in both Light and Dark modes.
+
+---
+
+# 36. TODAY BUTTON
+
+Provide an easy way to return to today.
+
+Possible location:
+
+- month header
+- More menu
+- calendar navigation
+
+Do not add unnecessary UI if the existing application already has Today functionality.
+
+---
+
+# 37. ANIMATION
+
+Use subtle transitions when changing:
+
+- calendar month
+- selected date
+- view mode
+- event expansion
+
+For view switching use:
+
+AnimatedSwitcher
+
+or another appropriate Flutter transition.
+
+Animations should be:
+
+- fast
+- smooth
+- professional
+
+Do not use excessive animations.
+
+---
+
+# 38. PERFORMANCE
+
+The Calendar may eventually contain many reminders.
+
+Avoid:
+
+- unnecessary rebuilds
+- expensive operations inside build()
+- repeated recurrence calculations
+- repeated date conversions
+- large unnecessary widget trees
+
+Separate:
+
+calendar data processing
+
+from:
+
+calendar rendering
+
+If recurring events must be expanded, do so outside individual day cells.
+
+Use efficient Flutter widgets.
+
+---
+
+# 39. DATA INTEGRATION
+
+Before modifying the Calendar:
+
+Inspect the existing application.
+
+Identify:
+
+- Reminder model
+- Reminder storage
+- Recurrence model
+- Notification service
+- Alarm service
+- Calendar screen
+- Navigation
+- Theme system
+- State management
+
+Reuse existing implementations.
+
+Do not create duplicate data models.
+
+---
+
+# 40. NO FAKE PERMANENT DATA
+
+Do not replace the real Smaraṇa reminder data with mock data.
+
+Temporary mock data may be used during UI development only.
+
+If mock data is created:
+
+- isolate it
+- clearly identify it
+- make it easy to remove
+
+The final Calendar must use real application data.
+
+---
+
+# 41. ARCHITECTURE
+
+Before creating files, inspect the existing project structure.
+
+Do not blindly create a new architecture.
+
+A possible structure is:
+
+lib/
+
+  calendar/
+
+    calendar_screen.dart
+
+    widgets/
+
+      calendar_header.dart
+
+      calendar_view_selector.dart
+
+      month_calendar_grid.dart
+
+      calendar_day_cell.dart
+
+      calendar_event_chip.dart
+
+      weekly_agenda.dart
+
+      three_day_view.dart
+
+      month_only_view.dart
+
+      calendar_event_card.dart
+
+      calendar_time_axis.dart
+
+    models/
+
+      calendar_view_type.dart
+
+    theme/
+
+      calendar_colors.dart
+
+Adapt this to the existing Smaraṇa project structure.
+
+Reuse existing widgets when appropriate.
+
+---
+
+# 42. STATE MANAGEMENT
+
+Use the application's existing state-management approach.
+
+If the project already uses:
+
+- Provider
+- Riverpod
+- Bloc
+- Cubit
+- ChangeNotifier
+- another established approach
+
+continue using it.
+
+Do not introduce another state-management package only for Calendar.
+
+The selected Calendar view must have a single source of truth.
+
+---
+
+# 43. CALENDAR VIEW STATE
+
+The selected view should be represented by a single state.
+
+Example:
+
+enum CalendarViewType {
+  monthAndWeek,
+  nextThreeDays,
+  monthOnly,
+}
+
+The default must be:
+
+monthAndWeek
+
+The selected view should remain consistent while navigating within the Calendar.
+
+---
+
+# 44. VIEW SWITCHING
+
+Switching between:
+
+Month + Week
+Next 3 Days
+Month Only
+
+must not reload the entire application.
+
+Only the Calendar content should change.
+
+Use smooth transitions where appropriate.
+
+The top header should remain stable.
+
+---
+
+# 45. MONTH + WEEK VIEW BEHAVIOR
+
+When Month + Week is selected:
+
+1. Show the complete month grid.
+2. Show high-level event information in the grid.
+3. Show detailed weekly agenda below.
+4. Selecting a date updates the weekly agenda.
+5. Current week should be emphasized.
+6. Current day should remain visible.
+7. Existing reminders must be displayed.
+
+The weekly section should correspond to the selected date.
+
+---
+
+# 46. NEXT 3 DAYS VIEW BEHAVIOR
+
+When Next 3 Days is selected:
+
+1. Determine the current/selected starting date.
+2. Display three consecutive dates.
+3. Show time-based events.
+4. Display event duration.
+5. Display alarms.
+6. Display recurrence where appropriate.
+7. Support vertical scrolling.
+8. Highlight current time.
+9. Keep the current day visually prominent.
+
+---
+
+# 47. MONTH ONLY VIEW BEHAVIOR
+
+When Month Only is selected:
+
+1. Maximize the month grid.
+2. Display high-level events.
+3. Do not show the detailed weekly agenda.
+4. Keep the month navigation.
+5. Keep the view selector.
+6. Keep date selection.
+7. Allow the user to open detailed day information.
+
+---
+
+# 48. CURRENT TIME INDICATOR
+
+For time-based views such as Next 3 Days:
+
+Display a current-time indicator when appropriate.
+
+Example:
+
+──────────── 11:42 AM ────────────
+
+The indicator should be subtle but easy to find.
+
+It should update appropriately.
+
+Do not create unnecessary continuous rebuilds if the application does not require second-level precision.
+
+---
+
+# 49. OVERLAPPING EVENTS
+
+The Next 3 Days view should account for overlapping events.
+
+If two events overlap:
+
+- display them side-by-side where practical
+- preserve readable titles
+- preserve event colors
+- avoid one event completely covering another
+
+Do not implement an unnecessarily complex scheduling engine if the current application does not require it.
+
+---
+
+# 50. ACCESSIBILITY
 
 Verify:
 
--   Text contrast
--   Button contrast
--   Icon visibility
--   Selected/unselected states
--   Disabled states
--   Text-field readability
--   Focus states
--   Error states
+- text contrast
+- event contrast
+- icon visibility
+- selected states
+- current-day state
+- focus states
+- disabled states
+- alarm indicators
 
-The UI must remain usable in both light and dark modes.
+Do not rely on color alone to communicate important information.
 
-------------------------------------------------------------------------
+For example:
 
-## 16. Restrictions
+An alarm-enabled event should not be distinguishable only because it is red.
 
-Do not:
+Use:
 
--   Modify the Reminder model
--   Modify recurrence calculations
--   Modify notification scheduling
--   Modify reminder storage structure
--   Add unnecessary packages
--   Create duplicate theme systems
--   Put theme state inside individual screens
--   Hard-code brand colors throughout widgets
--   Redesign unrelated application functionality
--   Change reminder behavior
+- icon
+- text
+- shape
+- position
+- color
 
-This implementation is specifically for the application-wide theme
-system.
+where appropriate.
 
-------------------------------------------------------------------------
+---
 
-## 17. Testing
+# 51. COLOR ACCESSIBILITY
 
-After implementation run:
+Because the Calendar intentionally supports many colors:
 
-``` bash
-flutter analyze
-```
+Do not assume every user can distinguish colors easily.
 
-Fix all errors and warnings introduced by the theme implementation.
+Important information must remain understandable without color perception.
 
-Test the following:
+For example:
 
-### Fresh installation
+Event:
 
--   Theme defaults to System.
+[Alarm Icon] Project Review
 
-### Light
+should remain understandable even if the event color is not distinguishable.
 
--   Select Light.
--   UI changes immediately.
--   Restart application.
--   Light remains selected.
+Use icons, labels, patterns, borders, or text where necessary.
 
-### Dark
+---
 
--   Select Dark.
--   UI changes immediately.
--   Restart application.
--   Dark remains selected.
+# 52. NO HARD-CODED UI COLORS
 
-### System
+Avoid:
 
--   Select System.
--   Change operating system theme.
--   Application follows the OS theme.
+Colors.black
+Colors.white
+Colors.blue
+Colors.red
 
-### Existing functionality
+when the value should be theme-aware or calendar-category-aware.
 
-Verify that:
+Prefer:
 
--   Reminders still load.
--   Reminders can still be created.
--   Reminders can still be edited.
--   Reminders can still be deleted.
--   Recurrence behavior is unchanged.
--   Notification behavior is unchanged.
--   Local persistence is unchanged.
+Theme.of(context).colorScheme
 
-------------------------------------------------------------------------
+and:
 
-## 18. Implementation Workflow
+CalendarColors
+
+or an equivalent centralized system.
+
+Hard-coded colors are acceptable only when they represent a deliberate semantic color that is centrally defined.
+
+Do not scatter hexadecimal color values throughout widgets.
+
+---
+
+# 53. BRAND COLORS
+
+Smaraṇa's existing application theme already defines the application's brand identity.
+
+The Calendar should respect that system.
+
+However:
+
+DO NOT force the entire Calendar to use only the brand colors.
+
+Use brand colors for:
+
+- primary actions
+- navigation
+- FAB
+- selected controls
+- important UI controls
+
+Use a broader calendar color system for:
+
+- events
+- reminders
+- categories
+- schedules
+
+This separation is intentional.
+
+---
+
+# 54. NO COLOR RESTRICTION
+
+This is a critical requirement.
+
+The Calendar must NOT be implemented as:
+
+Blue events
+Purple events
+Green events
+
+only.
+
+It must be architecturally capable of supporting a rich multi-color calendar.
+
+The exact palette should remain configurable.
+
+Do not hard-code the number of colors.
+
+Do not hard-code the available categories.
+
+The color system should be extensible.
+
+---
+
+# 55. MICROSOFT-STYLE VISUAL INSPIRATION
+
+Take visual inspiration from Microsoft productivity applications:
+
+- information-rich calendar cells
+- colorful event categorization
+- clean surfaces
+- compact cards
+- clear hierarchy
+- subtle borders
+- strong alignment
+- professional typography
+- efficient use of screen space
+
+Do NOT clone Microsoft's UI.
+
+Do NOT use Microsoft's branding.
+
+Do NOT use Microsoft logos or proprietary assets.
+
+Create a distinct Smaraṇa visual identity.
+
+---
+
+# 56. FLOATING ACTION BUTTON
+
+Keep the existing Smaraṇa Add Reminder FAB.
+
+Requirements:
+
+- modern
+- compact
+- accessible
+- visually connected to application branding
+- does not obstruct important calendar content
+
+Use the existing theme's primary color where appropriate.
+
+---
+
+# 57. BOTTOM NAVIGATION
+
+If the application already has bottom navigation:
+
+Preserve it.
+
+Calendar should remain integrated with:
+
+- Notes
+- Alarms
+- Stopwatch
+- Timer
+
+Do not redesign those screens as part of this task.
+
+Only make the Calendar visually compatible with the existing application.
+
+---
+
+# 58. DO NOT CHANGE BUSINESS LOGIC
+
+Do not modify:
+
+- reminder storage
+- recurrence calculations
+- notification scheduling
+- alarm scheduling
+- reminder creation logic
+- reminder editing logic
+- reminder deletion logic
+
+unless a very small compatibility change is absolutely required.
+
+The primary task is UI/UX redesign.
+
+---
+
+# 59. IMPLEMENTATION PROCESS
+
+Work in phases.
+
+## PHASE 1 — INSPECT
 
 Before making changes:
 
-1.  Inspect the existing project.
-2.  Identify existing theme code.
-3.  Identify existing settings implementation.
-4.  Identify existing SharedPreferences usage.
-5.  Identify existing state-management approach.
-6.  Reuse existing architecture where possible.
+Inspect the existing project.
 
-Then implement the theme system.
+Identify:
 
-After implementation:
+1. Calendar screen
+2. Reminder model
+3. Recurrence model
+4. Reminder storage
+5. Notification service
+6. Alarm service
+7. Theme implementation
+8. Navigation
+9. State management
 
-1.  Run `flutter analyze`.
-2.  Fix errors.
-3.  Fix warnings introduced by this work.
-4.  Test System mode.
-5.  Test Light mode.
-6.  Test Dark mode.
-7.  Test persistence.
-8.  Test existing reminder functionality.
+Do not modify code during this phase.
 
-------------------------------------------------------------------------
+Report what you found.
 
-## 19. Final Report
+---
 
-After implementation, report:
+## PHASE 2 — CALENDAR DESIGN SYSTEM
 
-1.  Files created.
-2.  Files modified.
-3.  Theme architecture.
-4.  Theme persistence approach.
-5.  How System/Light/Dark works.
-6.  Any remaining hard-coded colors.
-7.  `flutter analyze` result.
-8.  Any limitations.
+Create or integrate:
 
-Do not declare the feature complete unless System, Light, and Dark modes
-work correctly and the selected preference survives application restart.
+- Calendar view model/state
+- Calendar color system
+- Calendar event presentation model if necessary
+- Calendar day cell
+- Calendar event component
+- Calendar header
+- View selector
+
+Do not duplicate existing models unnecessarily.
+
+---
+
+## PHASE 3 — MONTH + WEEK
+
+Implement the default view.
+
+Verify:
+
+- month grid
+- week agenda
+- selected date
+- current date
+- event colors
+- alarm indicators
+- recurrence
+- month navigation
+
+---
+
+## PHASE 4 — NEXT 3 DAYS
+
+Implement:
+
+- three-day columns
+- time axis
+- event blocks
+- current-time indicator
+- scrolling
+- overlapping events
+- event colors
+
+---
+
+## PHASE 5 — MONTH ONLY
+
+Implement:
+
+- large month grid
+- high-level events
+- overflow indicators
+- date selection
+- month navigation
+
+---
+
+## PHASE 6 — VIEW SELECTOR
+
+Implement:
+
+Month + Week
+Next 3 Days
+Month Only
+
+The default is:
+
+Month + Week
+
+---
+
+## PHASE 7 — REAL DATA
+
+Connect every Calendar view to the existing Smaraṇa reminder data.
+
+Verify recurring reminders.
+
+Verify alarms.
+
+Verify notifications.
+
+Verify date selection.
+
+---
+
+## PHASE 8 — THEME
+
+Verify the Calendar in:
+
+- Light
+- Dark
+- System
+
+Do not create a separate Calendar theme.
+
+---
+
+## PHASE 9 — RESPONSIVE TESTING
+
+Test:
+
+- small Android phone
+- large Android phone
+- tablet if available
+
+Check:
+
+- overflow
+- spacing
+- text truncation
+- event cards
+- grid
+- time axis
+- FAB
+
+---
+
+# 60. TESTING
+
+Run:
+
+flutter analyze
+
+Fix all errors.
+
+Fix warnings introduced by this work.
+
+Then test:
+
+### Month + Week
+
+- month navigation
+- date selection
+- weekly agenda
+- reminders
+- alarms
+- recurrence
+
+### Next 3 Days
+
+- correct dates
+- time axis
+- events
+- current time
+- scrolling
+- overlapping events
+
+### Month Only
+
+- complete month
+- event indicators
+- selected date
+- overflow events
+
+### Colors
+
+Test multiple event colors.
+
+Test Light Mode.
+
+Test Dark Mode.
+
+Verify readable contrast.
+
+### Existing functionality
+
+Verify:
+
+- create reminder
+- edit reminder
+- delete reminder
+- alarm
+- notification
+- recurrence
+- persistence
+- navigation
+
+---
+
+# 61. PERFORMANCE TEST
+
+Verify that:
+
+- scrolling remains smooth
+- changing months is responsive
+- switching views is responsive
+- large numbers of reminders do not cause obvious lag
+- recurring reminders do not cause excessive rebuilds
+
+Avoid unnecessary calculations inside build().
+
+---
+
+# 62. FINAL QUALITY REQUIREMENT
+
+The Calendar should NOT look like:
+
+- a basic date picker
+- a generic Flutter calendar package
+- a simple grid of numbers
+- a single-color calendar
+- a screen with excessive empty space
+
+It should look like a professional productivity workspace.
+
+The visual hierarchy should be:
+
+Smaraṇa
+↓
+Month / Date
+↓
+Calendar Grid
+↓
+Events
+↓
+Detailed Schedule
+
+---
+
+# 63. FINAL USER EXPERIENCE
+
+The user should be able to open Smaraṇa and immediately understand:
+
+- What day is today?
+- What month am I viewing?
+- Which dates contain reminders?
+- What is scheduled this week?
+- What is coming in the next three days?
+- Which reminders have alarms?
+- Which reminders belong to different categories?
+
+The three views provide three different planning modes:
+
+DEFAULT:
+
+Month + Week
+
+For broad planning plus detailed weekly scheduling.
+
+FOCUS:
+
+Next 3 Days
+
+For immediate upcoming work.
+
+OVERVIEW:
+
+Month Only
+
+For seeing the entire month at a glance.
+
+---
+
+# 64. IMPORTANT IMPLEMENTATION RULE
+
+Do not implement the design only as a visual mockup.
+
+All views must use real Smaraṇa data.
+
+Do not break existing functionality to achieve the visual design.
+
+Do not replace working services unnecessarily.
+
+Do not introduce duplicate models.
+
+Do not introduce unnecessary dependencies.
+
+Reuse the existing architecture wherever possible.
+
+---
+
+# 65. FINAL REPORT
+
+After implementation report:
+
+1. Files created
+2. Files modified
+3. Calendar architecture
+4. View architecture
+5. Color architecture
+6. How Light/Dark/System themes are handled
+7. How event colors are handled
+8. How recurrence is displayed
+9. How alarms are displayed
+10. Any hard-coded colors remaining
+11. `flutter analyze` result
+12. Any warnings
+13. Any limitations
+14. Any recommended next steps
+
+Do not declare the redesign complete until all three Calendar views work with the existing Smaraṇa reminder data.

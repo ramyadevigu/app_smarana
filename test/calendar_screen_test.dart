@@ -28,7 +28,7 @@ void main() {
     ]);
   });
 
-  testWidgets('shows full-width month grid with selected date details', (
+  testWidgets('shows full-width month grid and selected week by default', (
     tester,
   ) async {
     await _pumpCalendar(tester, () => now, storage);
@@ -41,30 +41,56 @@ void main() {
     expect(find.byKey(const ValueKey('calendar-next-month')), findsOneWidget);
     expect(find.byType(GridView), findsOneWidget);
     expect(find.text('Tuesday, September 29, 2026'), findsOneWidget);
-    expect(find.byKey(const ValueKey('calendar-view-stacked')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('calendar-view-monthAndWeek')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('calendar-week-agenda')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('calendar-view-selector')),
+      findsOneWidget,
+    );
+    final previewGrid = tester.widget<GridView>(
+      find.byKey(const ValueKey('calendar-week-preview')),
+    );
+    expect(previewGrid.childrenDelegate.estimatedChildCount, 14);
   });
 
-  testWidgets('renders two pane layout when split mode is selected', (
-    tester,
-  ) async {
+  testWidgets('renders month only layout when selected', (tester) async {
     await _pumpCalendar(
       tester,
       () => now,
       storage,
-      viewMode: CalendarViewMode.split,
+      viewMode: CalendarViewMode.monthOnly,
     );
 
-    expect(find.byKey(const ValueKey('calendar-view-split')), findsOneWidget);
     expect(
-      find.byKey(const ValueKey('calendar-split-divider')),
+      find.byKey(const ValueKey('calendar-view-monthOnly')),
       findsOneWidget,
     );
-    final selectedLabel = tester.widget<Text>(
-      find.byKey(const ValueKey('calendar-selected-date-label')),
+    expect(find.byKey(const ValueKey('calendar-week-agenda')), findsNothing);
+    expect(find.byType(GridView), findsOneWidget);
+  });
+
+  testWidgets('view selector switches to next three days immediately', (
+    tester,
+  ) async {
+    await _pumpCalendar(tester, () => now, storage);
+
+    await tester.tap(find.byKey(const ValueKey('calendar-view-selector')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Next 3 Days'));
+    await _pumpFrames(tester);
+
+    expect(
+      find.byKey(const ValueKey('calendar-view-nextThreeDays')),
+      findsOneWidget,
     );
-    expect(selectedLabel.data, contains('Tuesday'));
-    final digitsOnly = selectedLabel.data!.replaceAll(RegExp(r'[^0-9]'), '');
-    expect(digitsOnly, contains('2026'));
+    expect(
+      find.byKey(const ValueKey('calendar-three-day-agenda')),
+      findsOneWidget,
+    );
+    expect(find.text('Tomorrow reminder'), findsOneWidget);
   });
 
   testWidgets('shows the requested empty-day message', (tester) async {
@@ -175,7 +201,12 @@ void main() {
     final createdReminder = storage.reminders.singleWhere(
       (reminder) => reminder.title == 'Created from calendar',
     );
-    await tester.tap(find.text('Created from calendar'));
+    await tester.tap(find.byKey(const ValueKey('calendar-view-selector')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Next 3 Days'));
+    await tester.pumpAndSettle();
+    final createdTitle = find.text('Created from calendar');
+    await tester.tap(createdTitle);
     await _pumpFrames(tester);
     await tester.enterText(
       find.byKey(const ValueKey('title-field')),
@@ -210,7 +241,7 @@ Future<void> _pumpCalendar(
   WidgetTester tester,
   DateTime Function() clock,
   ReminderStorage storage, {
-  CalendarViewMode viewMode = CalendarViewMode.stacked,
+  CalendarViewMode viewMode = CalendarViewMode.monthAndWeek,
 }) async {
   await tester.pumpWidget(
     MaterialApp(

@@ -146,7 +146,7 @@ class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
   final ReminderPreferencesStore _preferencesStore =
       const ReminderPreferencesStore();
-  CalendarViewMode _calendarViewMode = CalendarViewMode.stacked;
+  CalendarViewMode _calendarViewMode = CalendarViewMode.monthAndWeek;
 
   @override
   void initState() {
@@ -171,7 +171,11 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final screens = [
-      CalendarScreen(viewMode: _calendarViewMode, appMenu: _buildAppMenu()),
+      CalendarScreen(
+        viewMode: _calendarViewMode,
+        onViewModeChanged: _changeCalendarViewMode,
+        appMenu: _buildAppMenu(),
+      ),
       NotesScreen(appMenu: _buildAppMenu(), onBackToSmarana: _returnToCalendar),
       RemindersScreen(title: 'Alarms', appMenu: _buildAppMenu()),
       StopwatchScreen(appMenu: _buildAppMenu()),
@@ -322,6 +326,10 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _calendarViewMode = viewMode;
     });
+    final defaults = await _preferencesStore.loadDefaults();
+    await _preferencesStore.saveDefaults(
+      defaults.copyWith(calendarViewMode: viewMode),
+    );
   }
 
   void _returnToCalendar() {

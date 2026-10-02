@@ -5,19 +5,22 @@ import '../reminders/models/reminder.dart';
 import '../reminders/screens/add_reminder_screen.dart';
 import '../reminders/services/reminder_storage.dart';
 import 'services/calendar_service.dart';
+import 'theme/calendar_colors.dart';
 
 class CalendarScreen extends StatefulWidget {
   const CalendarScreen({
     super.key,
     this.storage,
     this.clock = DateTime.now,
-    this.viewMode = CalendarViewMode.stacked,
+    this.viewMode = CalendarViewMode.monthAndWeek,
+    this.onViewModeChanged,
     this.appMenu,
   });
 
   final ReminderStorage? storage;
   final DateTime Function() clock;
   final CalendarViewMode viewMode;
+  final ValueChanged<CalendarViewMode>? onViewModeChanged;
   final Widget? appMenu;
 
   @override
@@ -30,6 +33,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
   late DateTime _selectedDate;
   late DateTime _displayedMonth;
+  late CalendarViewMode _activeViewMode;
   List<Reminder> _reminders = [];
   Map<DateTime, List<CalendarOccurrence>> _occurrencesByDate = {};
   bool _isLoading = true;
@@ -40,9 +44,33 @@ class _CalendarScreenState extends State<CalendarScreen> {
     super.initState();
     _storage = widget.storage ?? ReminderStorage();
     final today = _dateOnly(widget.clock());
+    _activeViewMode = _normalizeViewMode(widget.viewMode);
     _selectedDate = today;
     _displayedMonth = DateTime(today.year, today.month);
     _loadReminders();
+  }
+
+  @override
+  void didUpdateWidget(covariant CalendarScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.viewMode != widget.viewMode) {
+      _activeViewMode = _normalizeViewMode(widget.viewMode);
+    }
+  }
+
+  CalendarViewMode _normalizeViewMode(CalendarViewMode mode) => switch (mode) {
+    CalendarViewMode.nextThreeDays => CalendarViewMode.nextThreeDays,
+    CalendarViewMode.monthOnly ||
+    CalendarViewMode.split => CalendarViewMode.monthOnly,
+    _ => CalendarViewMode.monthAndWeek,
+  };
+
+  void _selectViewMode(CalendarViewMode mode) {
+    if (_activeViewMode == mode) {
+      return;
+    }
+    setState(() => _activeViewMode = mode);
+    widget.onViewModeChanged?.call(mode);
   }
 
   Future<void> _loadReminders({bool showLoading = false}) async {
@@ -79,12 +107,21 @@ class _CalendarScreenState extends State<CalendarScreen> {
     final firstOfMonth = DateTime(_displayedMonth.year, _displayedMonth.month);
     final leadingDays = firstOfMonth.weekday - DateTime.monday;
     final firstGridDate = firstOfMonth.subtract(Duration(days: leadingDays));
-    final endExclusive = firstGridDate.add(
+    final monthEndExclusive = firstGridDate.add(
       Duration(days: _monthGridCellCount()),
     );
+    final previewStart = _weekStart(_selectedDate)
+        .subtract(const Duration(days: 7));
+    final previewEndExclusive = previewStart.add(const Duration(days: 14));
+    final start = previewStart.isBefore(firstGridDate)
+        ? previewStart
+        : firstGridDate;
+    final endExclusive = previewEndExclusive.isAfter(monthEndExclusive)
+        ? previewEndExclusive
+        : monthEndExclusive;
     _occurrencesByDate = _calendarService.occurrencesBetween(
       _reminders,
-      start: firstGridDate,
+      start: start,
       endExclusive: endExclusive,
     );
   }
@@ -124,8 +161,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
       if (_selectedDate.month != _displayedMonth.month ||
           _selectedDate.year != _displayedMonth.year) {
         _displayedMonth = DateTime(_selectedDate.year, _selectedDate.month);
-        _refreshVisibleOccurrences();
       }
+      _refreshVisibleOccurrences();
     });
   }
 
@@ -214,32 +251,45 @@ class _CalendarScreenState extends State<CalendarScreen> {
   List<CalendarOccurrence> _occurrencesFor(DateTime date) =>
       _occurrencesByDate[_dateOnly(date)] ?? const [];
 
-  List<CalendarOccurrence> _selectedDateOccurrences() {
-    final occurrences = List<CalendarOccurrence>.of(
-      _occurrencesFor(_selectedDate),
-    );
-    occurrences.sort((first, second) {
-      final byTime = first.dateTime.compareTo(second.dateTime);
-      if (byTime != 0) {
-        return byTime;
-      }
-      return first.reminder.title.compareTo(second.reminder.title);
-    });
-    return occurrences;
-  }
-
   @override
   Widget build(BuildContext context) {
+    final localizations = MaterialLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Calendar'),
-        actions: [
-          TextButton.icon(
-            onPressed: _returnToToday,
-            icon: const Icon(Icons.today_outlined),
-            label: const Text('Today'),
+        centerTitle: true,
+        leading: IconButton(
+          tooltip: 'Go to today',
+          onPressed: _returnToToday,
+          icon: const Icon(Icons.calendar_month_outlined),
+        ),
+        titleSpacing: 0,
+        title: TextButton(
+          key: const ValueKey('calendar-select-date'),
+          onPressed: _pickDate,
+          style: TextButton.styleFrom(
+            foregroundColor: Theme.of(context).colorScheme.onSurface,
           ),
-          const SizedBox(width: 8),
+          child: Text(
+            localizations.formatMonthYear(_displayedMonth),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.titleLarge
+                ?.copyWith(fontWeight: FontWeight.w700),
+          ),
+        ),
+        actions: [
+          PopupMenuButton<CalendarViewMode>(
+            key: const ValueKey('calendar-view-selector'),
+            tooltip: 'Calendar view',
+            icon: const Icon(Icons.view_agenda_outlined),
+            initialValue: _activeViewMode,
+            onSelected: _selectViewMode,
+            itemBuilder: (context) => [
+              _viewMenuItem(CalendarViewMode.monthAndWeek, 'Month + Week'),
+              _viewMenuItem(CalendarViewMode.nextThreeDays, 'Next 3 Days'),
+              _viewMenuItem(CalendarViewMode.monthOnly, 'Month Only'),
+            ],
+          ),
           ?widget.appMenu,
         ],
       ),
@@ -249,6 +299,23 @@ class _CalendarScreenState extends State<CalendarScreen> {
         onPressed: _openAddReminder,
         tooltip: 'Add reminder for selected date',
         child: const Icon(Icons.add),
+      ),
+    );
+  }
+
+  PopupMenuItem<CalendarViewMode> _viewMenuItem(
+    CalendarViewMode mode,
+    String label,
+  ) {
+    final selected = _activeViewMode == mode;
+    return PopupMenuItem<CalendarViewMode>(
+      value: mode,
+      child: Row(
+        children: [
+          Icon(selected ? Icons.check_circle : Icons.circle_outlined, size: 18),
+          const SizedBox(width: 10),
+          Text(label),
+        ],
       ),
     );
   }
@@ -288,184 +355,155 @@ class _CalendarScreenState extends State<CalendarScreen> {
       );
     }
 
-    return widget.viewMode == CalendarViewMode.split
-        ? _buildSplitLayout(context)
-        : _buildStackedLayout(context);
-  }
-
-  Widget _buildStackedLayout(BuildContext context) {
     return Padding(
-      key: const ValueKey('calendar-view-stacked'),
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      key: ValueKey('calendar-view-${_activeViewMode.name}'),
+      padding: const EdgeInsets.fromLTRB(10, 4, 10, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _buildMonthHeader(context),
-          const SizedBox(height: 10),
-          _buildWeekdayHeader(context),
-          const SizedBox(height: 2),
-          Expanded(flex: 5, child: _buildMonthGridCard(context)),
-          const SizedBox(height: 10),
-          _buildSelectedDateHeader(context),
-          const SizedBox(height: 6),
-          Expanded(flex: 4, child: _buildSelectedDateList(context)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSplitLayout(BuildContext context) {
-    return Padding(
-      key: const ValueKey('calendar-view-split'),
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(
-            flex: 3,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _buildMonthHeader(context, isCompact: true),
-                const SizedBox(height: 10),
-                _buildWeekdayHeader(context),
-                const SizedBox(height: 2),
-                Expanded(child: _buildMonthGridCard(context)),
-              ],
+          _buildMonthNavigation(context),
+          if (_activeViewMode == CalendarViewMode.monthOnly) ...[
+            _buildWeekdayHeader(context),
+            Expanded(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 220),
+                child: _buildMonthGridCard(context, monthOnly: true),
+              ),
             ),
-          ),
-          VerticalDivider(
-            key: const ValueKey('calendar-split-divider'),
-            width: 14,
-            thickness: 0.8,
-            color: Theme.of(context).colorScheme.outlineVariant,
-          ),
-          Expanded(
-            flex: 2,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SizedBox(height: 8),
-                _buildSelectedDateHeader(context, includeMonth: false),
-                const SizedBox(height: 8),
-                Expanded(child: _buildSelectedDateList(context)),
-              ],
+          ] else if (_activeViewMode == CalendarViewMode.nextThreeDays) ...[
+            _buildAgendaHeading(context),
+            Expanded(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 220),
+                child: _buildThreeDayAgenda(context),
+              ),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMonthHeader(BuildContext context, {bool isCompact = false}) {
-    final localizations = MaterialLocalizations.of(context);
-    final title = localizations.formatMonthYear(_displayedMonth);
-    final theme = Theme.of(context);
-    final baseTextStyle =
-        (isCompact ? theme.textTheme.titleMedium : theme.textTheme.titleLarge)
-            ?.copyWith(fontWeight: FontWeight.w700);
-    final iconSize = isCompact ? 24.0 : 28.0;
-    final minButtonSize = isCompact ? 40.0 : 46.0;
-
-    return Row(
-      children: [
-        IconButton(
-          key: const ValueKey('calendar-previous-month'),
-          tooltip: 'Previous month',
-          onPressed: () => _changeMonth(-1),
-          icon: Icon(Icons.chevron_left, size: iconSize),
-          style: IconButton.styleFrom(
-            minimumSize: Size(minButtonSize, minButtonSize),
-            tapTargetSize: MaterialTapTargetSize.padded,
-          ),
-        ),
-        Expanded(
-          child: Semantics(
-            header: true,
-            child: TextButton(
-              key: const ValueKey('calendar-select-date'),
-              onPressed: _pickDate,
-              style: TextButton.styleFrom(
-                padding: EdgeInsets.symmetric(
-                  horizontal: isCompact ? 2 : 8,
-                  vertical: 6,
+          ] else ...[
+            _buildWeekdayHeader(context, compact: true),
+            SizedBox(
+              height: 38,
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 220),
+                child: _buildMonthGridCard(
+                  context,
+                  compact: true,
+                  twoWeekPreview: true,
                 ),
               ),
-              child: SizedBox(
-                height: isCompact ? 26 : 30,
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    title,
-                    maxLines: 1,
-                    textAlign: TextAlign.center,
-                    style: baseTextStyle,
+            ),
+            const SizedBox(height: 8),
+            _buildAgendaHeading(context),
+            Expanded(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 220),
+                child: _buildWeekAgenda(context),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMonthNavigation(BuildContext context) {
+    return SizedBox(
+      height: 40,
+      child: Row(
+        children: [
+          IconButton(
+            key: const ValueKey('calendar-previous-month'),
+            tooltip: 'Previous month',
+            onPressed: () => _changeMonth(-1),
+            icon: const Icon(Icons.chevron_left),
+            visualDensity: VisualDensity.compact,
+          ),
+          const Spacer(),
+          TextButton.icon(
+            onPressed: _returnToToday,
+            icon: const Icon(Icons.today_outlined, size: 18),
+            label: const Text('Today'),
+          ),
+          const Spacer(),
+          IconButton(
+            key: const ValueKey('calendar-next-month'),
+            tooltip: 'Next month',
+            onPressed: () => _changeMonth(1),
+            icon: const Icon(Icons.chevron_right),
+            visualDensity: VisualDensity.compact,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWeekdayHeader(BuildContext context, {bool compact = false}) {
+    final localizations = MaterialLocalizations.of(context);
+    const mondayFirstIndexes = [1, 2, 3, 4, 5, 6, 0];
+    final style = Theme.of(context).textTheme.labelSmall?.copyWith(
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
+      fontWeight: FontWeight.w700,
+    );
+    return SizedBox(
+      height: compact ? 18 : 28,
+      child: Row(
+        children: [
+          for (var index = 0; index < mondayFirstIndexes.length; index++)
+            Expanded(
+              child: Center(
+                child: Text(
+                  localizations.narrowWeekdays[mondayFirstIndexes[index]],
+                  style: style?.copyWith(
+                    color: index > 4
+                        ? Theme.of(context).colorScheme.tertiary
+                        : style.color,
                   ),
                 ),
               ),
             ),
-          ),
-        ),
-        IconButton(
-          key: const ValueKey('calendar-next-month'),
-          tooltip: 'Next month',
-          onPressed: () => _changeMonth(1),
-          icon: Icon(Icons.chevron_right, size: iconSize),
-          style: IconButton.styleFrom(
-            minimumSize: Size(minButtonSize, minButtonSize),
-            tapTargetSize: MaterialTapTargetSize.padded,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildWeekdayHeader(BuildContext context) {
-    final localizations = MaterialLocalizations.of(context);
-    final weekdays = localizations.narrowWeekdays;
-    final textStyle = Theme.of(context).textTheme.labelMedium?.copyWith(
-      color: Theme.of(context).colorScheme.onSurfaceVariant,
-      fontWeight: FontWeight.w600,
-    );
-    const mondayFirstIndexes = [1, 2, 3, 4, 5, 6, 0];
-
-    return Row(
-      children: [
-        for (final index in mondayFirstIndexes)
-          Expanded(
-            child: Center(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 6),
-                child: Text(weekdays[index], style: textStyle),
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-
-  Widget _buildMonthGridCard(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: Theme.of(context).colorScheme.outlineVariant,
-          width: 0.6,
-        ),
+        ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(4),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final rowCount = _monthGridCellCount() ~/ 7;
-            final cellExtent = (constraints.maxHeight / rowCount)
-                .clamp(44.0, 78.0)
-                .toDouble();
-            return _buildMonthGrid(context, cellExtent);
+    );
+  }
+
+  Widget _buildMonthGridCard(
+    BuildContext context, {
+    bool monthOnly = false,
+    bool compact = false,
+    bool twoWeekPreview = false,
+  }) {
+    return LayoutBuilder(
+      key: ValueKey('calendar-month-grid-$monthOnly-$twoWeekPreview'),
+      builder: (context, constraints) {
+        final cellCount = twoWeekPreview ? 14 : _monthGridCellCount();
+        final rowCount = cellCount ~/ 7;
+        final cellExtent = constraints.maxHeight / rowCount;
+        return GridView.builder(
+          key: ValueKey(
+            twoWeekPreview ? 'calendar-week-preview' : 'calendar-month-grid',
+          ),
+          padding: EdgeInsets.zero,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: cellCount,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 7,
+            mainAxisExtent: cellExtent,
+          ),
+          itemBuilder: (context, index) {
+            final date =
+                (twoWeekPreview
+                        ? _weekStart(_selectedDate)
+                              .subtract(const Duration(days: 7))
+                        : _monthGridStartDate())
+                    .add(Duration(days: index));
+            return _buildDateCell(
+              context,
+              date,
+              monthOnly: monthOnly,
+              compact: compact,
+            );
           },
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -480,223 +518,263 @@ class _CalendarScreenState extends State<CalendarScreen> {
     return ((leadingDays + daysInMonth + 6) ~/ 7) * 7;
   }
 
-  Widget _buildMonthGrid(BuildContext context, double cellExtent) {
+  DateTime _monthGridStartDate() {
     final firstOfMonth = DateTime(_displayedMonth.year, _displayedMonth.month);
-    final leadingDays = firstOfMonth.weekday - DateTime.monday;
-    final firstGridDate = firstOfMonth.subtract(Duration(days: leadingDays));
-
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: _monthGridCellCount(),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 7,
-        mainAxisExtent: cellExtent,
-      ),
-      itemBuilder: (context, index) =>
-          _buildDateCell(context, firstGridDate.add(Duration(days: index))),
+    return firstOfMonth.subtract(
+      Duration(days: firstOfMonth.weekday - DateTime.monday),
     );
   }
 
-  Widget _buildDateCell(BuildContext context, DateTime date) {
+  Widget _buildDateCell(
+    BuildContext context,
+    DateTime date, {
+    required bool monthOnly,
+    bool compact = false,
+  }) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final colors = theme.colorScheme;
+    final occurrences = _occurrencesFor(date);
     final selected = _sameDay(date, _selectedDate);
     final today = _isToday(date);
     final inDisplayedMonth = date.month == _displayedMonth.month;
-    final reminders = _occurrencesFor(date);
-    final dayTextColor = selected
-      ? colorScheme.onPrimaryContainer
-        : inDisplayedMonth
-        ? colorScheme.onSurface
-        : colorScheme.onSurfaceVariant.withValues(alpha: 0.58);
-    final dateLabel = MaterialLocalizations.of(context).formatFullDate(date);
-    final semanticLabel = reminders.isEmpty
-        ? dateLabel
-        : '$dateLabel, ${reminders.length} reminder'
-              '${reminders.length == 1 ? '' : 's'}';
+    final weekend =
+        date.weekday == DateTime.saturday || date.weekday == DateTime.sunday;
+    final dateColor = !inDisplayedMonth
+        ? colors.onSurfaceVariant.withValues(alpha: 0.45)
+        : selected && today
+        ? colors.onPrimary
+        : selected
+        ? colors.onPrimaryContainer
+        : today
+        ? colors.primary
+        : weekend
+        ? colors.tertiary
+        : colors.onSurface;
+    final eventCount = occurrences.length;
+    final fullDate = MaterialLocalizations.of(context).formatFullDate(date);
 
     return Semantics(
       key: ValueKey('calendar-day-${date.year}-${date.month}-${date.day}'),
       button: true,
       selected: selected,
-      label: semanticLabel,
+      label: eventCount == 0 ? fullDate : '$fullDate, $eventCount reminders',
       child: Material(
-        color: Colors.transparent,
+        color: selected
+            ? today
+                  ? colors.primary
+                  : colors.primaryContainer
+            : today
+            ? colors.primary.withValues(alpha: 0.07)
+            : weekend
+            ? colors.surfaceContainerLow.withValues(alpha: 0.55)
+            : colors.surface,
         child: InkWell(
-          borderRadius: BorderRadius.circular(10),
           onTap: () => _selectDate(date),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final chipHeight = (constraints.maxHeight - 10)
-                  .clamp(20.0, 32.0)
-                  .toDouble();
-              final chipWidth = (constraints.maxWidth - 10)
-                  .clamp(20.0, 34.0)
-                  .toDouble();
-              final dotSize = constraints.maxHeight < 40 ? 3.0 : 4.0;
-
-              return DecoratedBox(
-                decoration: BoxDecoration(
-                  color: selected ? colorScheme.primaryContainer : null,
-                  border: Border.all(
+          child: Container(
+            decoration: BoxDecoration(
+              border: Border.all(
+                color: selected || today
+                    ? colors.primary.withValues(alpha: 0.7)
+                    : colors.outlineVariant.withValues(alpha: 0.42),
+                width: selected || today ? 0.9 : 0.4,
+              ),
+            ),
+            padding: EdgeInsets.fromLTRB(
+              compact ? 1 : 2,
+              compact ? 0 : 2,
+              compact ? 1 : 2,
+              compact ? 0 : 1,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Container(
+                  width: compact ? 15 : 25,
+                  height: compact ? 15 : 25,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
                     color: selected
-                        ? colorScheme.primary
+                        ? today
+                              ? colors.primary
+                              : colors.primary.withValues(alpha: 0.14)
                         : today
-                        ? colorScheme.primary.withValues(alpha: 0.55)
-                        : colorScheme.outlineVariant.withValues(alpha: 0.65),
-                    width: selected || today ? 0.9 : 0.35,
+                        ? colors.primary
+                        : null,
+                    border: today && selected
+                        ? Border.all(color: colors.onPrimary, width: 1.2)
+                        : null,
                   ),
-                  borderRadius: BorderRadius.circular(8),
+                  child: Text(
+                    MaterialLocalizations.of(context).formatDecimal(date.day),
+                    style:
+                        (compact
+                                ? theme.textTheme.labelSmall
+                                : theme.textTheme.labelMedium)
+                            ?.copyWith(
+                              color: today && !selected
+                                  ? colors.onPrimary
+                                  : dateColor,
+                              fontWeight: selected || today
+                                  ? FontWeight.w800
+                                  : FontWeight.w500,
+                            ),
+                  ),
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 2,
-                    vertical: 3,
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                if (monthOnly)
+                  Expanded(
+                    child: _buildMonthCellEvents(context, occurrences, date),
+                  )
+                else if (compact)
+                  Padding(
+                    padding: EdgeInsets.zero,
+                    child: Wrap(
+                      alignment: WrapAlignment.center,
+                      spacing: 2,
+                      children: [
+                        for (final occurrence in occurrences.take(3))
+                          Container(
+                            width: 2.5,
+                            height: 2.5,
+                            decoration: BoxDecoration(
+                              color: CalendarColors.forReminder(
+                                occurrence.reminder.id,
+                              ).foreground(theme.brightness == Brightness.dark),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                      ],
+                    ),
+                  )
+                else ...[
+                  const SizedBox(height: 3),
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 3,
+                    runSpacing: 2,
                     children: [
-                      Container(
-                        width: chipWidth,
-                        height: chipHeight,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(10),
-                          border: today && !selected
-                              ? Border.all(
-                                  color: colorScheme.primary,
-                                  width: 1.2,
-                                )
-                              : null,
-                        ),
-                        child: Text(
-                          MaterialLocalizations.of(context)
-                              .formatDecimal(date.day),
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                          color: today && !selected
-                            ? colorScheme.primary
-                            : dayTextColor,
-                            fontWeight: selected || today
-                                ? FontWeight.w700
-                                : null,
+                      for (final occurrence in occurrences.take(4))
+                        Container(
+                          width: 5,
+                          height: 5,
+                          decoration: BoxDecoration(
+                            color: CalendarColors.forReminder(
+                              occurrence.reminder.id,
+                            ).foreground(theme.brightness == Brightness.dark),
+                            shape: BoxShape.circle,
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 2),
-                      SizedBox(
-                        height: dotSize,
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            for (
-                              var index = 0;
-                              index < reminders.length.clamp(0, 3);
-                              index++
-                            )
-                              Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 1,
-                                ),
-                                child: Container(
-                                  width: dotSize,
-                                  height: dotSize,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: selected
-                                      ? colorScheme.onPrimaryContainer
-                                        : _reminderDotColor(colorScheme, index),
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
                     ],
                   ),
-                ),
-              );
-            },
+                ],
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  Color _reminderDotColor(ColorScheme colorScheme, int index) {
-    return switch (index) {
-      0 => colorScheme.primary,
-      1 => colorScheme.secondary,
-      _ => colorScheme.tertiary,
-    };
-  }
-
-  Widget _buildSelectedDateHeader(
-    BuildContext context, {
-    bool includeMonth = true,
-  }) {
-    final localizations = MaterialLocalizations.of(context);
-    final fullDate = localizations.formatFullDate(_selectedDate);
-    final firstCommaIndex = fullDate.indexOf(',');
-    final weekday = firstCommaIndex == -1
-        ? fullDate
-        : fullDate.substring(0, firstCommaIndex);
-    final compactDate =
-        '$weekday, '
-        '${localizations.formatDecimal(_selectedDate.day)} '
-        '${localizations.formatDecimal(_selectedDate.year)}';
-
-    return Semantics(
-      header: true,
-      child: Text(
-        key: const ValueKey('calendar-selected-date-label'),
-        includeMonth ? fullDate : compactDate,
-        maxLines: 3,
-        overflow: TextOverflow.ellipsis,
-        style: Theme.of(context).textTheme.titleMedium
-            ?.copyWith(fontWeight: FontWeight.w700),
-      ),
-    );
-  }
-
-  Widget _buildSelectedDateList(BuildContext context) {
-    final occurrences = _selectedDateOccurrences();
-    if (occurrences.isEmpty) {
-      return _buildEmptyAgenda(context);
-    }
-
-    return ListView.separated(
-      key: const ValueKey('calendar-reminder-list'),
-      itemCount: occurrences.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 8),
-      itemBuilder: (context, index) =>
-          _buildReminderListTile(context, occurrences[index]),
-    );
-  }
-
-  Widget _buildEmptyAgenda(BuildContext context) {
+  Widget _buildMonthCellEvents(
+    BuildContext context,
+    List<CalendarOccurrence> occurrences,
+    DateTime date,
+  ) {
     final theme = Theme.of(context);
-    return Container(
-      key: const ValueKey('calendar-empty-day'),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: theme.colorScheme.outlineVariant),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+    final visible = occurrences.take(2).toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final occurrence in visible)
+          Expanded(
+            child: Container(
+              margin: const EdgeInsets.only(top: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              decoration: BoxDecoration(
+                color: CalendarColors.forReminder(occurrence.reminder.id)
+                    .surface(theme.brightness == Brightness.dark),
+                borderRadius: BorderRadius.circular(3),
+              ),
+              alignment: Alignment.centerLeft,
+              child: Text(
+                occurrence.reminder.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  fontSize: 9,
+                  color: CalendarColors.forReminder(occurrence.reminder.id)
+                      .foreground(theme.brightness == Brightness.dark),
+                ),
+              ),
+            ),
+          ),
+        if (occurrences.length > visible.length)
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: InkWell(
+                onTap: () => _openDayDetails(date),
+                child: Text(
+                  '+${occurrences.length - visible.length} more',
+                  maxLines: 1,
+                  overflow: TextOverflow.clip,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  void _openDayDetails(DateTime date) {
+    _selectDate(date);
+    _selectViewMode(CalendarViewMode.monthAndWeek);
+  }
+
+  Widget _buildAgendaHeading(BuildContext context) {
+    final start = _activeViewMode == CalendarViewMode.nextThreeDays
+        ? _selectedDate
+        : _weekStart(_selectedDate);
+    final end = start.add(
+      Duration(days: _activeViewMode == CalendarViewMode.nextThreeDays ? 2 : 6),
+    );
+    final localizations = MaterialLocalizations.of(context);
+    final label = _activeViewMode == CalendarViewMode.nextThreeDays
+        ? 'NEXT 3 DAYS'
+        : 'WEEKLY SCHEDULE';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 0, 4, 6),
       child: Row(
         children: [
-          Icon(
-            Icons.event_available_outlined,
-            color: theme.colorScheme.primary,
-          ),
-          const SizedBox(width: 10),
           Expanded(
-            child: Text(
-              'No Reminders today',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    letterSpacing: 0.6,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                Text(
+                  localizations.formatFullDate(_selectedDate),
+                  key: const ValueKey('calendar-selected-date-label'),
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Text(
+            '${localizations.formatShortDate(start)} – ${localizations.formatShortDate(end)}',
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
         ],
@@ -704,105 +782,350 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
-  Widget _buildReminderListTile(
+  DateTime _weekStart(DateTime date) =>
+      _dateOnly(date).subtract(Duration(days: date.weekday - DateTime.monday));
+
+  Widget _buildWeekAgenda(BuildContext context) {
+    final start = _weekStart(_selectedDate);
+    return ListView(
+      key: const ValueKey('calendar-week-agenda'),
+      padding: const EdgeInsets.only(bottom: 72),
+      children: [
+        _buildWeekDayBlock(context, start, fullWidth: true),
+        for (var dayOffset = 1; dayOffset < 7; dayOffset += 2)
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _buildWeekDayBlock(
+                  context,
+                  start.add(Duration(days: dayOffset)),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: _buildWeekDayBlock(
+                  context,
+                  start.add(Duration(days: dayOffset + 1)),
+                ),
+              ),
+            ],
+          ),
+      ],
+    );
+  }
+
+  Widget _buildWeekDayBlock(
     BuildContext context,
-    CalendarOccurrence occurrence,
-  ) {
+    DateTime date, {
+    bool fullWidth = false,
+  }) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final occurrences = _occurrencesFor(date);
+    final weekday = MaterialLocalizations.of(context)
+        .narrowWeekdays[date.weekday % 7];
+    final isToday = _isToday(date);
+    final isSelected = _sameDay(date, _selectedDate);
 
     return Material(
-      key: ValueKey('calendar-reminder-${occurrence.reminder.id}'),
-      color: colorScheme.surfaceContainerLow,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(10),
-        side: BorderSide(color: colorScheme.outlineVariant),
-      ),
+      color: isSelected
+          ? colorScheme.primaryContainer.withValues(alpha: 0.24)
+          : Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(10),
-        onTap: () => _openEditReminder(occurrence.reminder),
+        onTap: () => _selectDate(date),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(10, 8, 6, 8),
+          padding: EdgeInsets.fromLTRB(fullWidth ? 5 : 4, 4, 4, 5),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(bottom: 3),
+                child: Row(
+                  children: [
+                    Text(
+                      '$weekday ${date.day}',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: isToday
+                            ? colorScheme.primary
+                            : colorScheme.onSurface,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    if (isToday) ...[
+                      const SizedBox(width: 4),
+                      Icon(Icons.circle, size: 7, color: colorScheme.primary),
+                    ],
+                  ],
+                ),
+              ),
+              if (occurrences.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 3),
+                  child: Text(
+                    'No reminders',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                )
+              else
+                for (final occurrence in occurrences)
+                  _buildEventRow(context, occurrence, dense: true),
+              Container(
+                height: 0.5,
+                margin: const EdgeInsets.only(top: 4),
+                color: colorScheme.outlineVariant.withValues(alpha: 0.55),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildThreeDayAgenda(BuildContext context) {
+    return ListView.builder(
+      key: const ValueKey('calendar-three-day-agenda'),
+      padding: const EdgeInsets.only(bottom: 76),
+      itemCount: 3,
+      itemBuilder: (context, index) {
+        final date = _selectedDate.add(Duration(days: index));
+        return _buildAgendaDay(context, date, compact: false);
+      },
+    );
+  }
+
+  Widget _buildAgendaDay(
+    BuildContext context,
+    DateTime date, {
+    required bool compact,
+  }) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final occurrences = _occurrencesFor(date);
+    final isSelected = _sameDay(date, _selectedDate);
+    final isToday = _isToday(date);
+    final weekday = MaterialLocalizations.of(context)
+        .narrowWeekdays[date.weekday % 7];
+    return Material(
+      color: isSelected
+          ? colorScheme.primaryContainer.withValues(alpha: 0.28)
+          : Colors.transparent,
+      child: InkWell(
+        onTap: () => _selectDate(date),
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(6, compact ? 5 : 8, 4, compact ? 5 : 8),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               SizedBox(
-                width: 72,
-                child: Text(
-                  TimeOfDay.fromDateTime(occurrence.dateTime).format(context),
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    color: colorScheme.primary,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              Container(
-                width: 3,
-                height: 40,
-                margin: const EdgeInsets.only(right: 10, top: 2),
-                decoration: BoxDecoration(
-                  color: colorScheme.primary,
-                  borderRadius: BorderRadius.circular(999),
-                ),
-              ),
-              Expanded(
+                width: compact ? 58 : 68,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      occurrence.reminder.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodyLarge?.copyWith(
+                      weekday.toUpperCase(),
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: isToday
+                            ? colorScheme.primary
+                            : colorScheme.onSurfaceVariant,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                    if (occurrence.reminder.description
-                        case final String description
-                        when description.trim().isNotEmpty)
-                      Text(
-                        description,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                        ),
+                    Text(
+                      '${date.day}',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: isToday ? colorScheme.primary : null,
+                        fontWeight: FontWeight.w800,
                       ),
+                    ),
                   ],
                 ),
               ),
-              PopupMenuButton<String>(
-                tooltip: 'More actions for ${occurrence.reminder.title}',
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                iconSize: 18,
-                onSelected: (action) {
-                  if (action == 'edit') {
-                    _openEditReminder(occurrence.reminder);
-                  } else if (action == 'delete') {
-                    _deleteReminder(occurrence.reminder);
-                  }
-                },
-                itemBuilder: (context) => const [
-                  PopupMenuItem<String>(
-                    value: 'edit',
-                    child: ListTile(
-                      leading: Icon(Icons.edit_outlined),
-                      title: Text('Edit'),
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                  ),
-                  PopupMenuItem<String>(
-                    value: 'delete',
-                    child: ListTile(
-                      leading: Icon(Icons.delete_outline),
-                      title: Text('Delete'),
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                  ),
-                ],
+              Container(
+                width: 1,
+                constraints: const BoxConstraints(minHeight: 38),
+                color: colorScheme.outlineVariant.withValues(alpha: 0.6),
+                margin: const EdgeInsets.only(right: 8),
+              ),
+              Expanded(
+                child: occurrences.isEmpty
+                    ? Container(
+                        key: isSelected
+                            ? const ValueKey('calendar-empty-day')
+                            : null,
+                        padding: const EdgeInsets.only(top: 9),
+                        child: Text(
+                          isSelected && isToday
+                              ? 'No Reminders today'
+                              : 'No reminders',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      )
+                    : Column(
+                        children: [
+                          for (final occurrence in occurrences)
+                            _buildEventRow(context, occurrence),
+                        ],
+                      ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEventRow(
+    BuildContext context,
+    CalendarOccurrence occurrence, {
+    bool dense = false,
+  }) {
+    final theme = Theme.of(context);
+    final dark = theme.brightness == Brightness.dark;
+    final eventColor = CalendarColors.forReminder(occurrence.reminder.id);
+    final recurrence = occurrence.reminder.recurrenceRule.type;
+    return Padding(
+      padding: EdgeInsets.only(bottom: dense ? 2 : 5),
+      child: Material(
+        key: ValueKey(
+          'calendar-reminder-${occurrence.reminder.id}-${occurrence.dateTime.day}',
+        ),
+        color: eventColor.surface(dark),
+        borderRadius: BorderRadius.circular(dense ? 4 : 7),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(dense ? 4 : 7),
+          onTap: () => _openEditReminder(occurrence.reminder),
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              dense ? 4 : 7,
+              dense ? 2 : 6,
+              2,
+              dense ? 2 : 6,
+            ),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: dense ? 39 : 63,
+                  child: Text(
+                    dense
+                        ? MaterialLocalizations.of(context).formatTimeOfDay(
+                            TimeOfDay.fromDateTime(occurrence.dateTime),
+                            alwaysUse24HourFormat: true,
+                          )
+                        : TimeOfDay.fromDateTime(occurrence.dateTime)
+                              .format(context),
+                    maxLines: 1,
+                    overflow: TextOverflow.clip,
+                    style:
+                        (dense
+                                ? theme.textTheme.labelSmall
+                                : theme.textTheme.labelSmall)
+                            ?.copyWith(
+                              color: eventColor.foreground(dark),
+                              fontSize: dense ? 9 : null,
+                              fontWeight: FontWeight.w800,
+                            ),
+                  ),
+                ),
+                if (!dense)
+                  Container(
+                    width: 3,
+                    height: 31,
+                    margin: const EdgeInsets.only(right: 8),
+                    decoration: BoxDecoration(
+                      color: eventColor.foreground(dark),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        occurrence.reminder.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style:
+                            (dense
+                                    ? theme.textTheme.labelSmall
+                                    : theme.textTheme.bodyMedium)
+                                ?.copyWith(
+                                  fontSize: dense ? 10 : null,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                      ),
+                      if (!dense && occurrence.reminder.description
+                          case final String text when text.trim().isNotEmpty)
+                        Text(
+                          text,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                if (recurrence != RecurrenceType.none)
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: dense ? 1 : 3),
+                    child: Icon(
+                      Icons.repeat,
+                      size: dense ? 10 : 15,
+                      color: eventColor.foreground(dark),
+                    ),
+                  ),
+                if (occurrence.reminder.notificationMode ==
+                    ReminderNotificationMode.alarmAndNotification)
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: dense ? 1 : 3),
+                    child: Icon(
+                      Icons.alarm,
+                      size: dense ? 10 : 15,
+                      color: eventColor.foreground(dark),
+                    ),
+                  ),
+                PopupMenuButton<String>(
+                  tooltip: 'More actions for ${occurrence.reminder.title}',
+                  padding: EdgeInsets.zero,
+                  constraints: BoxConstraints(
+                    minWidth: dense ? 20 : 34,
+                    minHeight: dense ? 18 : 34,
+                  ),
+                  iconSize: dense ? 13 : 17,
+                  onSelected: (action) {
+                    if (action == 'edit') {
+                      _openEditReminder(occurrence.reminder);
+                    } else if (action == 'delete') {
+                      _deleteReminder(occurrence.reminder);
+                    }
+                  },
+                  itemBuilder: (context) => const [
+                    PopupMenuItem<String>(
+                      value: 'edit',
+                      child: ListTile(
+                        leading: Icon(Icons.edit_outlined),
+                        title: Text('Edit'),
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                    ),
+                    PopupMenuItem<String>(
+                      value: 'delete',
+                      child: ListTile(
+                        leading: Icon(Icons.delete_outline),
+                        title: Text('Delete'),
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),

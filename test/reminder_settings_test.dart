@@ -34,7 +34,7 @@ void main() {
       notificationScheduler: FakeReminderNotificationScheduler(),
     );
     var selectedThemeMode = ThemeMode.system;
-    var selectedCalendarViewMode = CalendarViewMode.stacked;
+    var selectedCalendarViewMode = CalendarViewMode.monthAndWeek;
 
     await tester.pumpWidget(
       MaterialApp(
@@ -109,11 +109,11 @@ void main() {
       120,
       scrollable: find.byType(Scrollable).first,
     );
-    final twoPaneFinder = find.descendant(
+    final monthOnlyFinder = find.descendant(
       of: calendarViewControl,
-      matching: find.text('Two Pane'),
+      matching: find.text('Month'),
     );
-    await tester.tap(twoPaneFinder);
+    await tester.tap(monthOnlyFinder);
     await tester.pumpAndSettle();
 
     final defaults = await preferencesStore.loadDefaults();
@@ -125,9 +125,9 @@ void main() {
     expect(defaults.soundName, 'Morning Bell');
     expect(defaults.snoozeDurationMinutes, 20);
     expect(defaults.vibrate, isFalse);
-    expect(defaults.calendarViewMode, CalendarViewMode.split);
+    expect(defaults.calendarViewMode, CalendarViewMode.monthOnly);
     expect(selectedThemeMode, ThemeMode.dark);
-    expect(selectedCalendarViewMode, CalendarViewMode.split);
+    expect(selectedCalendarViewMode, CalendarViewMode.monthOnly);
 
     await tester.pageBack();
     await tester.pumpAndSettle();
