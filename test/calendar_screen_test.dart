@@ -28,32 +28,38 @@ void main() {
     ]);
   });
 
-  testWidgets('shows full-width month grid and selected week by default', (
+  testWidgets('shows the full month grid and selected date by default', (
     tester,
   ) async {
     await _pumpCalendar(tester, () => now, storage);
 
     expect(find.text('September 2026'), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey('calendar-previous-month')),
-      findsOneWidget,
-    );
-    expect(find.byKey(const ValueKey('calendar-next-month')), findsOneWidget);
     expect(find.byType(GridView), findsOneWidget);
-    expect(find.text('Tuesday, September 29, 2026'), findsOneWidget);
+    expect(find.text('September 2026'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('calendar-view-monthAndWeek')),
       findsOneWidget,
     );
-    expect(find.byKey(const ValueKey('calendar-week-agenda')), findsOneWidget);
     expect(
       find.byKey(const ValueKey('calendar-view-selector')),
       findsOneWidget,
     );
-    final previewGrid = tester.widget<GridView>(
-      find.byKey(const ValueKey('calendar-week-preview')),
+    expect(
+      find.byKey(const ValueKey('calendar-countdown-sheet')),
+      findsOneWidget,
     );
-    expect(previewGrid.childrenDelegate.estimatedChildCount, 14);
+    final monthGrid = tester.widget<GridView>(
+      find.byKey(const ValueKey('calendar-month-grid')),
+    );
+    expect(monthGrid.childrenDelegate.estimatedChildCount, 42);
+    expect(
+      tester
+          .widget<Semantics>(
+            find.byKey(const ValueKey('calendar-day-2026-9-29')),
+          )
+          .selected,
+      isTrue,
+    );
   });
 
   testWidgets('renders month only layout when selected', (tester) async {
@@ -97,24 +103,91 @@ void main() {
     await _pumpCalendar(tester, () => now, _TestReminderStorage([]));
 
     expect(find.byKey(const ValueKey('calendar-empty-day')), findsOneWidget);
-    expect(find.text('No Reminders today'), findsOneWidget);
+    expect(find.text('You have a free day'), findsOneWidget);
+    expect(find.text('Take it easy'), findsOneWidget);
   });
 
   testWidgets('navigates between months and returns to today', (tester) async {
     await _pumpCalendar(tester, () => now, storage);
 
     expect(find.text('September 2026'), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('calendar-next-month')));
+    await tester.tap(find.byTooltip('More calendar views'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Next month'));
     await _pumpFrames(tester);
     expect(find.text('October 2026'), findsOneWidget);
 
-    await tester.tap(find.byKey(const ValueKey('calendar-previous-month')));
+    await tester.tap(find.byTooltip('More calendar views'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Previous month'));
     await _pumpFrames(tester);
     expect(find.text('September 2026'), findsOneWidget);
 
-    await tester.tap(find.text('Today'));
+    await tester.tap(find.byTooltip('More calendar views'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Go to Today'));
     await _pumpFrames(tester);
     expect(find.text('Tuesday, September 29, 2026'), findsOneWidget);
+  });
+
+  testWidgets('date selection leaves only one date selected', (tester) async {
+    await _pumpCalendar(tester, () => now, storage);
+
+    await tester.tap(find.byKey(const ValueKey('calendar-day-2026-9-30')));
+    await _pumpFrames(tester);
+
+    final selectedDays = tester
+        .widgetList<Semantics>(find.byType(Semantics))
+        .where((semantics) => semantics.selected == true)
+        .toList();
+    expect(selectedDays, hasLength(1));
+    expect(
+      tester
+          .widget<Semantics>(
+            find.byKey(const ValueKey('calendar-day-2026-9-29')),
+          )
+          .selected,
+      isFalse,
+    );
+    expect(
+      tester
+          .widget<Semantics>(
+            find.byKey(const ValueKey('calendar-day-2026-9-30')),
+          )
+          .selected,
+      isTrue,
+    );
+  });
+
+  testWidgets('swiping the month grid advances the displayed month', (
+    tester,
+  ) async {
+    await _pumpCalendar(tester, () => now, storage);
+
+    await tester.drag(
+      find.byKey(const ValueKey('calendar-month-grid')),
+      const Offset(-260, 0),
+    );
+    await _pumpFrames(tester);
+
+    expect(find.text('October 2026'), findsOneWidget);
+  });
+
+  testWidgets('Countdown sheet expands and collapses when dragged', (
+    tester,
+  ) async {
+    await _pumpCalendar(tester, () => now, storage);
+
+    final content = find.byKey(const ValueKey('calendar-countdown-content'));
+    final collapsedHeight = tester.getSize(content).height;
+    await tester.drag(content, const Offset(0, -220));
+    await tester.pumpAndSettle();
+    final expandedHeight = tester.getSize(content).height;
+    expect(expandedHeight, greaterThan(collapsedHeight));
+
+    await tester.drag(content, const Offset(0, 220));
+    await tester.pumpAndSettle();
+    expect(tester.getSize(content).height, lessThan(expandedHeight));
   });
 
   testWidgets('month heading opens date picker', (tester) async {
@@ -154,7 +227,9 @@ void main() {
     expect(find.text('Thursday, October 1, 2026'), findsOneWidget);
     expect(find.text('October 2026'), findsOneWidget);
 
-    await tester.tap(find.byKey(const ValueKey('calendar-previous-month')));
+    await tester.tap(find.byTooltip('More calendar views'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Previous month'));
     await _pumpFrames(tester);
     await tester.tap(find.byKey(const ValueKey('calendar-day-2026-8-31')));
     await _pumpFrames(tester);
