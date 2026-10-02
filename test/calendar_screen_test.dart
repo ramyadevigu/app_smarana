@@ -44,13 +44,7 @@ void main() {
     );
     expect(
       tester.getSize(find.byKey(const ValueKey('calendar-month-grid'))).height,
-      greaterThan(240),
-    );
-    expect(
-      tester
-          .getSize(find.byKey(const ValueKey('calendar-selected-day-events')))
-          .height,
-      greaterThan(100),
+      greaterThan(350),
     );
     expect(
       find.byKey(const ValueKey('calendar-countdown-sheet')),
@@ -395,13 +389,10 @@ void main() {
     );
   });
 
-  testWidgets('month view shows a free-day state without reminders', (
-    tester,
-  ) async {
+  testWidgets('month view does not show a selected-day agenda', (tester) async {
     await _pumpCalendar(tester, () => now, _TestReminderStorage([]));
 
-    expect(find.byKey(const ValueKey('calendar-empty-day')), findsOneWidget);
-    expect(find.text('You have a free day'), findsOneWidget);
+    expect(find.byKey(const ValueKey('calendar-empty-day')), findsNothing);
     expect(
       find.byKey(const ValueKey('calendar-selected-day-events')),
       findsNothing,

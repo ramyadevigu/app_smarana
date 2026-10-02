@@ -488,104 +488,50 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   Widget _buildMonthView(BuildContext context, Key key) {
-    return LayoutBuilder(
+    return Column(
       key: key,
-      builder: (context, constraints) {
-        final calendarHeight = (constraints.maxHeight * 0.53).clamp(
-          280.0,
-          390.0,
-        );
-        return Column(
-          children: [
-            _buildWeekdayHeader(context),
-            SizedBox(
-              height: calendarHeight - 28,
-              child: Listener(
-                onPointerDown: (event) => _monthPointerStart = event.position,
-                onPointerUp: (event) {
-                  final start = _monthPointerStart;
-                  _monthPointerStart = null;
-                  if (start == null) {
-                    return;
-                  }
-                  final delta = event.position - start;
-                  if (delta.dx.abs() > 48 && delta.dx.abs() > delta.dy.abs()) {
-                    _changeMonth(delta.dx < 0 ? 1 : -1);
-                  }
-                },
-                onPointerCancel: (_) => _monthPointerStart = null,
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 250),
-                  switchInCurve: Curves.easeOutCubic,
-                  switchOutCurve: Curves.easeInCubic,
-                  transitionBuilder: (child, animation) {
-                    final offset = Tween<Offset>(
-                      begin: Offset(_monthTransitionDirection * 0.12, 0),
-                      end: Offset.zero,
-                    ).animate(animation);
-                    return FadeTransition(
-                      opacity: animation,
-                      child: SlideTransition(position: offset, child: child),
-                    );
-                  },
-                  child: _buildMonthGridCard(
-                    context,
-                    monthOnly: true,
-                    key: ValueKey(
-                      'calendar-month-${_displayedMonth.year}-'
-                      '${_displayedMonth.month}',
-                    ),
-                  ),
+      children: [
+        _buildWeekdayHeader(context),
+        Expanded(
+          child: Listener(
+            onPointerDown: (event) => _monthPointerStart = event.position,
+            onPointerUp: (event) {
+              final start = _monthPointerStart;
+              _monthPointerStart = null;
+              if (start == null) {
+                return;
+              }
+              final delta = event.position - start;
+              if (delta.dx.abs() > 48 && delta.dx.abs() > delta.dy.abs()) {
+                _changeMonth(delta.dx < 0 ? 1 : -1);
+              }
+            },
+            onPointerCancel: (_) => _monthPointerStart = null,
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 250),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              transitionBuilder: (child, animation) {
+                final offset = Tween<Offset>(
+                  begin: Offset(_monthTransitionDirection * 0.12, 0),
+                  end: Offset.zero,
+                ).animate(animation);
+                return FadeTransition(
+                  opacity: animation,
+                  child: SlideTransition(position: offset, child: child),
+                );
+              },
+              child: _buildMonthGridCard(
+                context,
+                monthOnly: true,
+                key: ValueKey(
+                  'calendar-month-${_displayedMonth.year}-'
+                  '${_displayedMonth.month}',
                 ),
               ),
             ),
-            const SizedBox(height: 8),
-            Expanded(child: _buildSelectedDateContent(context)),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildSelectedDateContent(BuildContext context) {
-    final occurrences = _occurrencesFor(_selectedDate);
-    final theme = Theme.of(context);
-    if (occurrences.isEmpty) {
-      return Center(
-        key: const ValueKey('calendar-empty-day'),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.calendar_month_outlined,
-              size: 44,
-              color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.65),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'You have a free day',
-              style: theme.textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Take it easy',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
+          ),
         ),
-      );
-    }
-
-    return ListView(
-      key: const ValueKey('calendar-selected-day-events'),
-      padding: const EdgeInsets.fromLTRB(4, 4, 4, 100),
-      children: [
-        for (final occurrence in occurrences)
-          _buildEventRow(context, occurrence),
       ],
     );
   }
