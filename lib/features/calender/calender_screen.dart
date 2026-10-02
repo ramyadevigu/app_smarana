@@ -589,8 +589,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Container(
-                  width: compact ? 15 : 25,
-                  height: compact ? 15 : 25,
+                  width: compact ? 13 : 25,
+                  height: compact ? 13 : 25,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
@@ -626,21 +626,26 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     child: _buildMonthCellEvents(context, occurrences, date),
                   )
                 else if (compact)
-                  Padding(
-                    padding: EdgeInsets.zero,
-                    child: Wrap(
-                      alignment: WrapAlignment.center,
-                      spacing: 2,
+                  SizedBox(
+                    height: 2,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         for (final occurrence in occurrences.take(3))
-                          Container(
-                            width: 2.5,
-                            height: 2.5,
-                            decoration: BoxDecoration(
-                              color: CalendarColors.forReminder(
-                                occurrence.reminder.id,
-                              ).foreground(theme.brightness == Brightness.dark),
-                              shape: BoxShape.circle,
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 1),
+                            child: Container(
+                              width: 2,
+                              height: 2,
+                              decoration: BoxDecoration(
+                                color:
+                                    CalendarColors.forReminder(
+                                      occurrence.reminder.id,
+                                    ).foreground(
+                                      theme.brightness == Brightness.dark,
+                                    ),
+                                shape: BoxShape.circle,
+                              ),
                             ),
                           ),
                       ],
@@ -861,9 +866,12 @@ class _CalendarScreenState extends State<CalendarScreen> {
               ),
               if (occurrences.isEmpty)
                 Padding(
+                  key: isSelected ? const ValueKey('calendar-empty-day') : null,
                   padding: const EdgeInsets.symmetric(vertical: 3),
                   child: Text(
-                    'No reminders',
+                    isSelected && isToday
+                        ? 'No Reminders today'
+                        : 'No reminders',
                     style: theme.textTheme.labelSmall?.copyWith(
                       color: colorScheme.onSurfaceVariant,
                     ),
@@ -988,6 +996,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     final dark = theme.brightness == Brightness.dark;
     final eventColor = CalendarColors.forReminder(occurrence.reminder.id);
     final recurrence = occurrence.reminder.recurrenceRule.type;
+    final description = occurrence.reminder.description;
     return Padding(
       padding: EdgeInsets.only(bottom: dense ? 2 : 5),
       child: Material(
@@ -1058,10 +1067,11 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                   fontWeight: FontWeight.w700,
                                 ),
                       ),
-                      if (!dense && occurrence.reminder.description
-                          case final String text when text.trim().isNotEmpty)
+                      if (!dense &&
+                          description != null &&
+                          description.trim().isNotEmpty)
                         Text(
-                          text,
+                          description,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.bodySmall?.copyWith(
