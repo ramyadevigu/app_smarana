@@ -2,8 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../theme/app_colors.dart';
-
 import '../features/calender/models/calendar_view_mode.dart';
 import '../features/calender/calender_screen.dart';
 import '../features/notes/notes_screen.dart';
@@ -24,10 +22,12 @@ class AppSmarana extends StatefulWidget {
   const AppSmarana({
     super.key,
     this.initialThemeMode = ThemeMode.system,
+    this.initialColorTheme = SmaranaColorTheme.blue,
     this.themePreferenceStore = const ThemePreferenceStore(),
   });
 
   final ThemeMode initialThemeMode;
+  final SmaranaColorTheme initialColorTheme;
   final ThemePreferenceStore themePreferenceStore;
 
   @override
@@ -37,6 +37,7 @@ class AppSmarana extends StatefulWidget {
 class _AppSmaranaState extends State<AppSmarana> {
   final _navigatorKey = GlobalKey<NavigatorState>();
   late ThemeMode _themeMode;
+  late SmaranaColorTheme _colorTheme;
   StreamSubscription<String>? _notificationSubscription;
   bool _openingNotificationReminder = false;
 
@@ -44,6 +45,7 @@ class _AppSmaranaState extends State<AppSmarana> {
   void initState() {
     super.initState();
     _themeMode = widget.initialThemeMode;
+    _colorTheme = widget.initialColorTheme;
     final notifications = NotificationService.instance;
     _notificationSubscription = notifications.openedReminderIds.listen(
       _openReminderFromNotification,
@@ -111,18 +113,29 @@ class _AppSmaranaState extends State<AppSmarana> {
     await widget.themePreferenceStore.saveThemeMode(themeMode);
   }
 
+  Future<void> _changeColorTheme(SmaranaColorTheme colorTheme) async {
+    if (_colorTheme == colorTheme) {
+      return;
+    }
+
+    setState(() => _colorTheme = colorTheme);
+    await widget.themePreferenceStore.saveColorTheme(colorTheme);
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       navigatorKey: _navigatorKey,
       title: 'Smarana',
       debugShowCheckedModeBanner: false,
-      theme: lightTheme,
-      darkTheme: darkTheme,
+      theme: buildLightTheme(_colorTheme),
+      darkTheme: buildDarkTheme(_colorTheme),
       themeMode: _themeMode,
       home: HomeScreen(
         selectedThemeMode: _themeMode,
         onThemeModeChanged: _changeThemeMode,
+        selectedColorTheme: _colorTheme,
+        onColorThemeChanged: _changeColorTheme,
       ),
     );
   }
@@ -133,10 +146,14 @@ class HomeScreen extends StatefulWidget {
     super.key,
     this.selectedThemeMode = ThemeMode.system,
     this.onThemeModeChanged,
+    this.selectedColorTheme = SmaranaColorTheme.blue,
+    this.onColorThemeChanged,
   });
 
   final ThemeMode selectedThemeMode;
   final Future<void> Function(ThemeMode)? onThemeModeChanged;
+  final SmaranaColorTheme selectedColorTheme;
+  final Future<void> Function(SmaranaColorTheme)? onColorThemeChanged;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -146,7 +163,7 @@ class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
   final ReminderPreferencesStore _preferencesStore =
       const ReminderPreferencesStore();
-  CalendarViewMode _calendarViewMode = CalendarViewMode.monthAndWeek;
+  CalendarViewMode _calendarViewMode = CalendarViewMode.month;
 
   @override
   void initState() {
@@ -186,23 +203,29 @@ class _HomeScreenState extends State<HomeScreen> {
       body: screens[_currentIndex],
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
-        indicatorColor: AppColors.azureBlue,
+        indicatorColor: Theme.of(context).colorScheme.primary,
         onDestinationSelected: (index) {
           setState(() {
             _currentIndex = index;
           });
         },
-        destinations: const [
+        destinations: [
           NavigationDestination(
             key: ValueKey('nav-calendar'),
             icon: Icon(Icons.calendar_month_outlined),
-            selectedIcon: Icon(Icons.calendar_month, color: AppColors.white),
+            selectedIcon: Icon(
+              Icons.calendar_month,
+              color: Theme.of(context).colorScheme.onPrimary,
+            ),
             label: 'Calendar',
           ),
           NavigationDestination(
             key: ValueKey('nav-notes'),
             icon: Icon(Icons.sticky_note_2_outlined),
-            selectedIcon: Icon(Icons.sticky_note_2, color: AppColors.white),
+            selectedIcon: Icon(
+              Icons.sticky_note_2,
+              color: Theme.of(context).colorScheme.onPrimary,
+            ),
             label: 'Notes',
           ),
           NavigationDestination(
@@ -210,20 +233,26 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: Icon(Icons.notifications_none),
             selectedIcon: Icon(
               Icons.notifications_active,
-              color: AppColors.white,
+              color: Theme.of(context).colorScheme.onPrimary,
             ),
             label: 'Alarms',
           ),
           NavigationDestination(
             key: ValueKey('nav-stopwatch'),
             icon: Icon(Icons.av_timer_outlined),
-            selectedIcon: Icon(Icons.av_timer, color: AppColors.white),
+            selectedIcon: Icon(
+              Icons.av_timer,
+              color: Theme.of(context).colorScheme.onPrimary,
+            ),
             label: 'Stopwatch',
           ),
           NavigationDestination(
             key: ValueKey('nav-timer'),
             icon: Icon(Icons.hourglass_bottom_outlined),
-            selectedIcon: Icon(Icons.hourglass_bottom, color: AppColors.white),
+            selectedIcon: Icon(
+              Icons.hourglass_bottom,
+              color: Theme.of(context).colorScheme.onPrimary,
+            ),
             label: 'Timer',
           ),
         ],
@@ -273,9 +302,11 @@ class _HomeScreenState extends State<HomeScreen> {
           MaterialPageRoute<void>(
             builder: (_) => SettingsScreen(
               selectedThemeMode: widget.selectedThemeMode,
+              selectedColorTheme: widget.selectedColorTheme,
               selectedCalendarViewMode: _calendarViewMode,
               onCalendarViewModeChanged: _changeCalendarViewMode,
               onThemeModeChanged: _changeThemeMode,
+              onColorThemeChanged: widget.onColorThemeChanged,
             ),
           ),
         );

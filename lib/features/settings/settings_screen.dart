@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../calender/models/calendar_view_mode.dart';
 import '../../services/notification_service.dart';
 import '../reminders/models/reminder.dart';
+import '../../theme/app_theme.dart';
 import 'services/reminder_preferences_store.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -12,6 +13,8 @@ class SettingsScreen extends StatefulWidget {
     required this.selectedCalendarViewMode,
     required this.onThemeModeChanged,
     required this.onCalendarViewModeChanged,
+    this.selectedColorTheme = SmaranaColorTheme.blue,
+    this.onColorThemeChanged,
     this.preferencesStore,
   });
 
@@ -19,6 +22,8 @@ class SettingsScreen extends StatefulWidget {
   final CalendarViewMode selectedCalendarViewMode;
   final Future<void> Function(ThemeMode) onThemeModeChanged;
   final Future<void> Function(CalendarViewMode) onCalendarViewModeChanged;
+  final SmaranaColorTheme selectedColorTheme;
+  final Future<void> Function(SmaranaColorTheme)? onColorThemeChanged;
   final ReminderPreferencesStore? preferencesStore;
 
   @override
@@ -27,6 +32,7 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   late final ReminderPreferencesStore _preferencesStore;
+  late SmaranaColorTheme _selectedColorTheme;
   ReminderDefaults _defaults = const ReminderDefaults();
   List<ReminderSoundOption> _availableSounds = const [];
   Future<void> _saveQueue = Future<void>.value();
@@ -35,10 +41,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
+    _selectedColorTheme = widget.selectedColorTheme;
     _preferencesStore =
         widget.preferencesStore ?? const ReminderPreferencesStore();
     _loadDefaults();
     _loadSounds();
+  }
+
+  @override
+  void didUpdateWidget(covariant SettingsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selectedColorTheme != widget.selectedColorTheme) {
+      _selectedColorTheme = widget.selectedColorTheme;
+    }
   }
 
   Future<void> _loadDefaults() async {
@@ -178,6 +193,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Unable to save the theme setting.')),
         );
+      }
+    }
+  }
+
+  Future<void> _changeColorTheme(SmaranaColorTheme colorTheme) async {
+    if (_selectedColorTheme == colorTheme) {
+      return;
+    }
+
+    setState(() => _selectedColorTheme = colorTheme);
+    try {
+      await widget.onColorThemeChanged?.call(colorTheme);
+    } on Exception {
+      if (mounted) {
+        _showSaveError();
       }
     }
   }
@@ -322,6 +352,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               const Divider(height: 1),
               Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+                child: Text(
+                  'Color theme',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+                child: Text(
+                  _selectedColorTheme.label,
+                  style: Theme.of(context).textTheme.bodySmall
+                      ?.copyWith(color: colorScheme.onSurfaceVariant),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                child: Wrap(
+                  spacing: 4,
+                  runSpacing: 4,
+                  children: [
+                    for (final colorTheme in SmaranaColorTheme.values)
+                      _colorThemeSwatch(context, colorTheme),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              Padding(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
                 child: Text(
                   'Calendar view',
@@ -330,35 +387,71 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
-                child: SegmentedButton<CalendarViewMode>(
+                child: Wrap(
                   key: const ValueKey('settings-calendar-view-mode'),
-                  segments: const [
-                    ButtonSegment<CalendarViewMode>(
-                      value: CalendarViewMode.monthAndWeek,
-                      icon: Icon(Icons.view_agenda_outlined),
-                      label: Text('Month + Week'),
-                    ),
-                    ButtonSegment<CalendarViewMode>(
-                      value: CalendarViewMode.nextThreeDays,
-                      icon: Icon(Icons.view_week_outlined),
-                      label: Text('3 Days'),
-                    ),
-                    ButtonSegment<CalendarViewMode>(
-                      value: CalendarViewMode.monthOnly,
-                      icon: Icon(Icons.calendar_view_month_outlined),
-                      label: Text('Month'),
-                    ),
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final mode in CalendarViewMode.values)
+                      ChoiceChip(
+                        label: Text(
+                          mode.name == 'threeDay'
+                              ? '3 Day'
+                              : '${mode.name[0].toUpperCase()}${mode.name.substring(1)}',
+                        ),
+                        selected: _defaults.calendarViewMode == mode,
+                        onSelected: (_) => _changeCalendarViewMode(mode),
+                      ),
                   ],
-                  selected: {_defaults.calendarViewMode},
-                  showSelectedIcon: false,
-                  onSelectionChanged: (selection) {
-                    _changeCalendarViewMode(selection.first);
-                  },
                 ),
               ),
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _colorThemeSwatch(BuildContext context, SmaranaColorTheme colorTheme) {
+    final selected = _selectedColorTheme == colorTheme;
+    final foreground = colorTheme.color.computeLuminance() > 0.45
+        ? Colors.black
+        : Colors.white;
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: '${colorTheme.label} color theme',
+      child: Tooltip(
+        message: colorTheme.label,
+        child: InkWell(
+          key: ValueKey('settings-color-theme-${colorTheme.name}'),
+          customBorder: const CircleBorder(),
+          onTap: () => _changeColorTheme(colorTheme),
+          child: SizedBox(
+            width: 44,
+            height: 44,
+            child: Center(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 160),
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: colorTheme.color,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: selected
+                        ? Theme.of(context).colorScheme.primary
+                        : Theme.of(context).colorScheme.outlineVariant,
+                    width: selected ? 2 : 1,
+                  ),
+                ),
+                child: selected
+                    ? Icon(Icons.check_rounded, size: 18, color: foreground)
+                    : null,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

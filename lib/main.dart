@@ -12,6 +12,14 @@ void main() async {
   await reminderStorage.initialize();
   await NotificationService.instance.initialize();
   await reminderStorage.rescheduleAllReminders();
-  final themeMode = await const ThemePreferenceStore().loadThemeMode();
-  runApp(AppSmarana(initialThemeMode: themeMode));
+  const themePreferenceStore = ThemePreferenceStore();
+  final themeMode = await themePreferenceStore.loadThemeMode();
+  final colorTheme = await themePreferenceStore.loadColorTheme();
+  runApp(
+    AppSmarana(
+      initialThemeMode: themeMode,
+      initialColorTheme: colorTheme,
+      themePreferenceStore: themePreferenceStore,
+    ),
+  );
 }

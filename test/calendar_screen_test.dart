@@ -1,5 +1,6 @@
 import 'package:app_smarana/features/calender/calender_screen.dart';
 import 'package:app_smarana/features/calender/models/calendar_view_mode.dart';
+import 'package:app_smarana/features/calender/widgets/calendar_view_selector.dart';
 import 'package:app_smarana/features/reminders/models/reminder.dart';
 import 'package:app_smarana/features/reminders/services/reminder_storage.dart';
 import 'package:flutter/material.dart';
@@ -36,10 +37,7 @@ void main() {
     expect(find.text('September 2026'), findsOneWidget);
     expect(find.byType(GridView), findsOneWidget);
     expect(find.text('September 2026'), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey('calendar-view-monthAndWeek')),
-      findsOneWidget,
-    );
+    expect(find.byKey(const ValueKey('calendar-view-month')), findsOneWidget);
     expect(
       find.byKey(const ValueKey('calendar-view-selector')),
       findsOneWidget,
@@ -57,46 +55,220 @@ void main() {
           .widget<Semantics>(
             find.byKey(const ValueKey('calendar-day-2026-9-29')),
           )
+          .properties
           .selected,
       isTrue,
     );
   });
 
-  testWidgets('renders month only layout when selected', (tester) async {
+  testWidgets('renders the month layout when selected', (tester) async {
     await _pumpCalendar(
       tester,
       () => now,
       storage,
-      viewMode: CalendarViewMode.monthOnly,
+      viewMode: CalendarViewMode.month,
     );
 
-    expect(
-      find.byKey(const ValueKey('calendar-view-monthOnly')),
-      findsOneWidget,
-    );
-    expect(find.byKey(const ValueKey('calendar-week-agenda')), findsNothing);
+    expect(find.byKey(const ValueKey('calendar-view-month')), findsOneWidget);
     expect(find.byType(GridView), findsOneWidget);
   });
 
-  testWidgets('view selector switches to next three days immediately', (
+  testWidgets('view selector switches to 3 Day and keeps selected date', (
     tester,
   ) async {
     await _pumpCalendar(tester, () => now, storage);
+    await tester.tap(find.byKey(const ValueKey('calendar-day-2026-9-30')));
+    await _pumpFrames(tester);
 
     await tester.tap(find.byKey(const ValueKey('calendar-view-selector')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Next 3 Days'));
-    await _pumpFrames(tester);
+    await tester.tap(find.text('3 Day'));
+    await tester.pumpAndSettle();
 
     expect(
-      find.byKey(const ValueKey('calendar-view-nextThreeDays')),
+      find.byKey(const ValueKey('calendar-view-threeDay')),
       findsOneWidget,
     );
     expect(
-      find.byKey(const ValueKey('calendar-three-day-agenda')),
+      find.byKey(const ValueKey('calendar-timeline-threeDay')),
       findsOneWidget,
     );
+    expect(
+      tester
+          .widget<Semantics>(
+            find.byKey(const ValueKey('calendar-timeline-date-2026-9-30')),
+          )
+          .properties
+          .selected,
+      isTrue,
+    );
+    await tester.scrollUntilVisible(
+      find.text('Tomorrow reminder'),
+      250,
+      scrollable: find
+          .descendant(
+            of: find.byKey(const ValueKey('calendar-timeline-threeDay')),
+            matching: find.byType(Scrollable),
+          )
+          .last,
+    );
     expect(find.text('Tomorrow reminder'), findsOneWidget);
+  });
+
+  testWidgets('view menu has six ordered options and marks Month selected', (
+    tester,
+  ) async {
+    await _pumpCalendar(tester, () => now, storage);
+    await tester.tap(find.byKey(const ValueKey('calendar-view-selector')));
+    await tester.pumpAndSettle();
+
+    const labels = ['List', 'Year', 'Month', 'Week', '3 Day', 'Day'];
+    final positions = [
+      for (final label in labels) tester.getTopLeft(find.text(label)).dy,
+    ];
+    expect(positions, orderedEquals([...positions]..sort()));
+    expect(
+      tester
+          .widget<Semantics>(
+            find.byKey(const ValueKey('calendar-view-option-month')),
+          )
+          .properties
+          .selected,
+      isTrue,
+    );
+    expect(find.byIcon(Icons.check), findsOneWidget);
+  });
+
+  testWidgets('year, list, week and day views render', (tester) async {
+    await _pumpCalendar(tester, () => now, storage);
+
+    for (final entry in [
+      (CalendarViewMode.year, 'calendar-view-year'),
+      (CalendarViewMode.list, 'calendar-view-list'),
+      (CalendarViewMode.week, 'calendar-view-week'),
+      (CalendarViewMode.day, 'calendar-view-day'),
+    ]) {
+      await tester.tap(find.byKey(const ValueKey('calendar-view-selector')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(entry.$1.label));
+      await tester.pumpAndSettle();
+      expect(find.byKey(ValueKey(entry.$2)), findsOneWidget);
+      if (entry.$1 == CalendarViewMode.year) {
+        expect(find.text('2026'), findsOneWidget);
+        final octoberDate = find.byKey(
+          const ValueKey('calendar-day-2026-10-2'),
+        );
+        await tester.scrollUntilVisible(
+          octoberDate,
+          250,
+          scrollable: find
+              .descendant(
+                of: find.byKey(const ValueKey('calendar-view-year')),
+                matching: find.byType(Scrollable),
+              )
+              .first,
+        );
+        expect(
+          tester.widget<Semantics>(octoberDate).properties.label,
+          contains('1 reminders'),
+        );
+      }
+    }
+  });
+
+  testWidgets('year view selects a date and opens its detailed month', (
+    tester,
+  ) async {
+    await _pumpCalendar(tester, () => now, storage);
+    await tester.tap(find.byKey(const ValueKey('calendar-view-selector')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Year'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('2026'), findsOneWidget);
+    final yearGrid = tester.widget<GridView>(
+      find.byKey(const ValueKey('calendar-year-2026')),
+    );
+    expect(yearGrid.childrenDelegate.estimatedChildCount, 12);
+    expect(
+      find.byKey(const ValueKey('calendar-year-month-2026-1')),
+      findsOneWidget,
+    );
+
+    final octoberFifteenth = find.byKey(
+      const ValueKey('calendar-day-2026-10-15'),
+    );
+    await tester.scrollUntilVisible(
+      octoberFifteenth,
+      200,
+      scrollable: find
+          .descendant(
+            of: find.byKey(const ValueKey('calendar-view-year')),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    await tester.tap(octoberFifteenth);
+    await _pumpFrames(tester);
+
+    expect(find.byKey(const ValueKey('calendar-view-year')), findsOneWidget);
+    expect(
+      tester.widget<Semantics>(octoberFifteenth).properties.selected,
+      isTrue,
+    );
+    expect(
+      tester.widget<Semantics>(octoberFifteenth).properties.label,
+      contains('1 reminders'),
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey('calendar-year-month-2026-10')),
+    );
+    await _pumpFrames(tester);
+
+    expect(find.byKey(const ValueKey('calendar-view-month')), findsOneWidget);
+    expect(find.text('October 2026'), findsOneWidget);
+    expect(
+      tester
+          .widget<Semantics>(octoberFifteenth)
+          .properties
+          .selected,
+      isTrue,
+    );
+  });
+
+  testWidgets('year navigation changes year and preserves selection', (
+    tester,
+  ) async {
+    await _pumpCalendar(tester, () => now, storage);
+    await tester.tap(find.byKey(const ValueKey('calendar-view-selector')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Year'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('More calendar views'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Next year'));
+    await _pumpFrames(tester);
+
+    expect(find.text('2027'), findsOneWidget);
+    final selectedDate = find.byKey(
+      const ValueKey('calendar-day-2027-9-29'),
+    );
+    await tester.scrollUntilVisible(
+      selectedDate,
+      200,
+      scrollable: find
+          .descendant(
+            of: find.byKey(const ValueKey('calendar-view-year')),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    expect(
+      tester.widget<Semantics>(selectedDate).properties.selected,
+      isTrue,
+    );
   });
 
   testWidgets('shows the requested empty-day message', (tester) async {
@@ -138,7 +310,7 @@ void main() {
 
     final selectedDays = tester
         .widgetList<Semantics>(find.byType(Semantics))
-        .where((semantics) => semantics.selected == true)
+        .where((semantics) => semantics.properties.selected == true)
         .toList();
     expect(selectedDays, hasLength(1));
     expect(
@@ -146,6 +318,7 @@ void main() {
           .widget<Semantics>(
             find.byKey(const ValueKey('calendar-day-2026-9-29')),
           )
+          .properties
           .selected,
       isFalse,
     );
@@ -154,6 +327,7 @@ void main() {
           .widget<Semantics>(
             find.byKey(const ValueKey('calendar-day-2026-9-30')),
           )
+          .properties
           .selected,
       isTrue,
     );
@@ -241,6 +415,15 @@ void main() {
     tester,
   ) async {
     await _pumpCalendar(tester, () => now, storage);
+    final addButton = tester.widget<FloatingActionButton>(
+      find.ancestor(
+        of: find.byTooltip('Add reminder for selected date'),
+        matching: find.byType(FloatingActionButton),
+      ),
+    );
+    expect(addButton.shape, isA<CircleBorder>());
+    expect(find.byIcon(Icons.add_rounded), findsOneWidget);
+
     await tester.tap(find.byKey(const ValueKey('calendar-day-2026-9-30')));
     await _pumpFrames(tester);
     await tester.tap(find.byTooltip('Add reminder for selected date'));
@@ -278,9 +461,10 @@ void main() {
     );
     await tester.tap(find.byKey(const ValueKey('calendar-view-selector')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Next 3 Days'));
+    await tester.tap(find.text('List'));
     await tester.pumpAndSettle();
     final createdTitle = find.text('Created from calendar');
+    await tester.ensureVisible(createdTitle);
     await tester.tap(createdTitle);
     await _pumpFrames(tester);
     await tester.enterText(
@@ -316,7 +500,7 @@ Future<void> _pumpCalendar(
   WidgetTester tester,
   DateTime Function() clock,
   ReminderStorage storage, {
-  CalendarViewMode viewMode = CalendarViewMode.monthAndWeek,
+  CalendarViewMode viewMode = CalendarViewMode.month,
 }) async {
   await tester.pumpWidget(
     MaterialApp(

@@ -1,4 +1,5 @@
 import 'package:app_smarana/app/app.dart';
+import 'package:app_smarana/theme/app_theme.dart';
 import 'package:app_smarana/theme/theme_preference_store.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -73,6 +74,52 @@ void main() {
     expect(_activeBrightness(tester), Brightness.dark);
   });
 
+  testWidgets('color theme selection updates and persists all seven choices', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const AppSmarana());
+    await _openSettings(tester);
+
+    expect(SmaranaColorTheme.values, hasLength(7));
+    final lavender = find.byKey(
+      const ValueKey('settings-color-theme-lavender'),
+    );
+    await tester.ensureVisible(lavender);
+    await tester.pumpAndSettle();
+    for (final colorTheme in SmaranaColorTheme.values) {
+      expect(
+        find.byKey(ValueKey('settings-color-theme-${colorTheme.name}')),
+        findsOneWidget,
+      );
+    }
+
+    await tester.tap(lavender);
+    await tester.pumpAndSettle();
+
+    final appTheme = tester.widget<MaterialApp>(find.byType(MaterialApp));
+    expect(
+      appTheme.theme!.colorScheme.primary,
+      SmaranaColorTheme.lavender.color,
+    );
+    expect(
+      (await SharedPreferences.getInstance()).getString('colorTheme'),
+      'lavender',
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    final restoredColorTheme = await const ThemePreferenceStore()
+        .loadColorTheme();
+    await tester.pumpWidget(AppSmarana(initialColorTheme: restoredColorTheme));
+    expect(
+      tester
+          .widget<MaterialApp>(find.byType(MaterialApp))
+          .theme!
+          .colorScheme
+          .primary,
+      SmaranaColorTheme.lavender.color,
+    );
+  });
+
   testWidgets('reminders, form, and pickers use light and dark themes', (
     tester,
   ) async {
@@ -134,7 +181,10 @@ void main() {
 }
 
 Future<void> _openSettings(WidgetTester tester) async {
-  await tester.tap(find.byTooltip('More options'));
+  for (var frame = 0; frame < 6; frame++) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+  await tester.tap(find.byKey(const ValueKey('app-overflow-menu')));
   for (var frame = 0; frame < 6; frame++) {
     await tester.pump(const Duration(milliseconds: 100));
   }

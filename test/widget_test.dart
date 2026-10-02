@@ -14,7 +14,6 @@ import 'package:app_smarana/features/notes/notes_screen.dart';
 import 'package:app_smarana/features/reminders/reminders_screen.dart';
 import 'package:app_smarana/features/time_tools/stopwatch_screen.dart';
 import 'package:app_smarana/features/time_tools/timer_screen.dart';
-import 'package:app_smarana/theme/app_colors.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -33,10 +32,12 @@ void main() {
     final navigationBar = tester.widget<NavigationBar>(
       find.byType(NavigationBar),
     );
-    expect(navigationBar.indicatorColor, AppColors.azureBlue);
+    final colorScheme = Theme.of(tester.element(find.byType(NavigationBar)))
+        .colorScheme;
+    expect(navigationBar.indicatorColor, colorScheme.primary);
     expect(
       tester.widget<Icon>(find.byIcon(Icons.calendar_month)).color,
-      AppColors.white,
+      colorScheme.onPrimary,
     );
     for (final key in [
       'nav-calendar',
@@ -49,6 +50,9 @@ void main() {
     }
     expect(find.text('World Clock'), findsNothing);
 
+    for (var frame = 0; frame < 6; frame++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
     await tester.tap(find.byTooltip('More options'));
     await tester.pumpAndSettle();
     expect(find.text('Settings'), findsOneWidget);

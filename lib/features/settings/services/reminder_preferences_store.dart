@@ -10,7 +10,7 @@ class ReminderDefaults {
     this.soundName = 'Default',
     this.snoozeDurationMinutes = 10,
     this.vibrate = true,
-    this.calendarViewMode = CalendarViewMode.monthAndWeek,
+    this.calendarViewMode = CalendarViewMode.month,
   });
 
   final ReminderNotificationMode notificationMode;
@@ -62,10 +62,12 @@ class ReminderPreferencesStore {
     const availableSnoozeDurations = [5, 10, 15, 20, 30];
     final viewModeName = preferences.getString(_calendarViewModeKey);
     final calendarViewMode = switch (viewModeName) {
-      'nextThreeDays' => CalendarViewMode.nextThreeDays,
-      'monthOnly' || 'split' => CalendarViewMode.monthOnly,
-      'stacked' || 'monthAndWeek' => CalendarViewMode.monthAndWeek,
-      _ => CalendarViewMode.monthAndWeek,
+      'nextThreeDays' || 'threeDay' => CalendarViewMode.threeDay,
+      'year' => CalendarViewMode.year,
+      'week' => CalendarViewMode.week,
+      'day' => CalendarViewMode.day,
+      'list' => CalendarViewMode.list,
+      _ => CalendarViewMode.month,
     };
 
     return ReminderDefaults(

@@ -34,7 +34,7 @@ void main() {
       notificationScheduler: FakeReminderNotificationScheduler(),
     );
     var selectedThemeMode = ThemeMode.system;
-    var selectedCalendarViewMode = CalendarViewMode.monthAndWeek;
+    var selectedCalendarViewMode = CalendarViewMode.month;
 
     await tester.pumpWidget(
       MaterialApp(
@@ -125,9 +125,9 @@ void main() {
     expect(defaults.soundName, 'Morning Bell');
     expect(defaults.snoozeDurationMinutes, 20);
     expect(defaults.vibrate, isFalse);
-    expect(defaults.calendarViewMode, CalendarViewMode.monthOnly);
+    expect(defaults.calendarViewMode, CalendarViewMode.month);
     expect(selectedThemeMode, ThemeMode.dark);
-    expect(selectedCalendarViewMode, CalendarViewMode.monthOnly);
+    expect(selectedCalendarViewMode, CalendarViewMode.month);
 
     await tester.pageBack();
     await tester.pumpAndSettle();
