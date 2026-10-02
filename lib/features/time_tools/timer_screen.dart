@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class TimerScreen extends StatefulWidget {
   const TimerScreen({super.key, required this.appMenu});
@@ -12,325 +14,585 @@ class TimerScreen extends StatefulWidget {
 }
 
 class _TimerScreenState extends State<TimerScreen> {
-  static const _presets = <Duration>[
-    Duration(minutes: 1),
-    Duration(minutes: 5),
-    Duration(minutes: 10),
-    Duration(minutes: 15),
-    Duration(minutes: 30),
-    Duration(hours: 1),
-  ];
+  static const _savedTimersKey = 'savedTimers';
 
-  final _hoursController = TextEditingController(text: '00');
-  final _minutesController = TextEditingController(text: '05');
-  final _secondsController = TextEditingController(text: '00');
+  final List<_SavedTimer> _savedTimers = [];
   Timer? _ticker;
-  Duration _totalDuration = const Duration(minutes: 5);
-  Duration _remaining = const Duration(minutes: 5);
-  DateTime? _deadline;
-  bool _isRunning = false;
-  bool _isFinished = false;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedTimers();
+  }
 
   @override
   void dispose() {
     _ticker?.cancel();
-    _hoursController.dispose();
-    _minutesController.dispose();
-    _secondsController.dispose();
     super.dispose();
   }
 
-  void _start() {
-    _applyFields();
-    if (_remaining <= Duration.zero) {
-      return;
+  Future<void> _loadSavedTimers() async {
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      final encoded = preferences.getString(_savedTimersKey);
+      if (encoded != null) {
+        final decoded = jsonDecode(encoded);
+        if (decoded is List) {
+          for (final entry in decoded) {
+            if (entry is! Map<String, dynamic>) {
+              continue;
+            }
+            final id = entry['id'];
+            final seconds = entry['seconds'];
+            if (id is String && seconds is int && seconds > 0) {
+              _savedTimers.add(
+                _SavedTimer(
+                  id: id,
+                  duration: Duration(seconds: seconds),
+                ),
+              );
+            }
+          }
+        }
+      }
+    } on Exception {
+      // Keep the timer list usable if saved data cannot be decoded.
     }
-    _deadline = DateTime.now().add(_remaining);
-    _isRunning = true;
-    _isFinished = false;
-    _ticker ??= Timer.periodic(const Duration(milliseconds: 100), (_) {
-      _updateRemaining();
-    });
+    if (mounted) {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _persistSavedTimers() async {
+    final preferences = await SharedPreferences.getInstance();
+    final encoded = jsonEncode(
+      _savedTimers
+          .map((timer) => {'id': timer.id, 'seconds': timer.duration.inSeconds})
+          .toList(),
+    );
+    await preferences.setString(_savedTimersKey, encoded);
+  }
+
+  void _addTimer(Duration duration) {
+    final timer = _SavedTimer(
+      id: DateTime.now().microsecondsSinceEpoch.toString(),
+      duration: duration,
+    );
+    setState(() => _savedTimers.insert(0, timer));
+    unawaited(_persistSavedTimers());
+  }
+
+  void _deleteTimer(_SavedTimer timer) {
+    setState(() => _savedTimers.remove(timer));
+    if (!_savedTimers.any((savedTimer) => savedTimer.isRunning)) {
+      _ticker?.cancel();
+      _ticker = null;
+    }
+    unawaited(_persistSavedTimers());
+  }
+
+  void _toggleTimer(_SavedTimer timer) {
+    if (timer.isRunning) {
+      final remaining = timer.deadline!.difference(DateTime.now());
+      timer
+        ..remaining = remaining > Duration.zero ? remaining : Duration.zero
+        ..deadline = null
+        ..isRunning = false
+        ..isFinished = remaining <= Duration.zero;
+    } else {
+      if (timer.remaining <= Duration.zero) {
+        timer
+          ..remaining = timer.duration
+          ..isFinished = false;
+      }
+      timer
+        ..deadline = DateTime.now().add(timer.remaining)
+        ..isRunning = true;
+      _ticker ??= Timer.periodic(const Duration(milliseconds: 250), (_) {
+        _updateRunningTimers();
+      });
+    }
     setState(() {});
   }
 
-  void _pause() {
-    _updateRemaining();
-    _ticker?.cancel();
-    _ticker = null;
-    _deadline = null;
-    setState(() => _isRunning = false);
-  }
-
-  void _updateRemaining() {
-    final deadline = _deadline;
-    if (!_isRunning || deadline == null) {
-      return;
-    }
-    final remaining = deadline.difference(DateTime.now());
-    if (remaining <= Duration.zero) {
-      _ticker?.cancel();
-      _ticker = null;
-      _deadline = null;
-      if (mounted) {
-        setState(() {
-          _remaining = Duration.zero;
-          _isRunning = false;
-          _isFinished = true;
-        });
+  void _updateRunningTimers() {
+    final now = DateTime.now();
+    for (final timer in _savedTimers.where((timer) => timer.isRunning)) {
+      final remaining = timer.deadline!.difference(now);
+      if (remaining <= Duration.zero) {
+        timer
+          ..remaining = Duration.zero
+          ..deadline = null
+          ..isRunning = false
+          ..isFinished = true;
+      } else {
+        timer.remaining = remaining;
       }
-      return;
     }
     if (mounted) {
-      setState(() => _remaining = remaining);
+      setState(() {});
+    }
+    if (!_savedTimers.any((timer) => timer.isRunning)) {
+      _ticker?.cancel();
+      _ticker = null;
     }
   }
 
-  void _reset() {
-    _ticker?.cancel();
-    _ticker = null;
-    _deadline = null;
-    setState(() {
-      _remaining = _totalDuration;
-      _isRunning = false;
-      _isFinished = false;
-    });
-    _syncFields(_remaining);
-  }
-
-  void _addMinute() {
-    _applyFields();
-    final updated = _remaining + const Duration(minutes: 1);
-    _totalDuration += const Duration(minutes: 1);
-    if (_isRunning) {
-      _deadline = DateTime.now().add(updated);
-    }
-    setState(() {
-      _remaining = updated;
-      _isFinished = false;
-    });
-    _syncFields(updated);
-  }
-
-  void _choosePreset(Duration duration) {
-    _ticker?.cancel();
-    _ticker = null;
-    _deadline = null;
-    setState(() {
-      _totalDuration = duration;
-      _remaining = duration;
-      _isRunning = false;
-      _isFinished = false;
-    });
-    _syncFields(duration);
-  }
-
-  void _applyFields() {
-    final hours = int.tryParse(_hoursController.text) ?? 0;
-    final minutes = int.tryParse(_minutesController.text) ?? 0;
-    final seconds = int.tryParse(_secondsController.text) ?? 0;
-    final duration = Duration(
-      hours: hours.clamp(0, 99),
-      minutes: minutes.clamp(0, 59),
-      seconds: seconds.clamp(0, 59),
-    );
-    _choosePreset(duration);
-  }
-
-  void _syncFields(Duration duration) {
-    _hoursController.text = duration.inHours.toString().padLeft(2, '0');
-    _minutesController.text = (duration.inMinutes % 60).toString().padLeft(
-      2,
-      '0',
-    );
-    _secondsController.text = (duration.inSeconds % 60).toString().padLeft(
-      2,
-      '0',
+  Future<void> _showAddTimerSheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      builder: (context) => _TimerSetupSheet(onSave: _addTimer),
     );
   }
 
   String _formatDuration(Duration duration) {
+    final totalSeconds = (duration.inMilliseconds / 1000).ceil();
+    final hours = totalSeconds ~/ 3600;
+    final minutes = totalSeconds % 3600 ~/ 60;
+    final seconds = totalSeconds % 60;
+    final mm = minutes.toString().padLeft(2, '0');
+    final ss = seconds.toString().padLeft(2, '0');
+    if (hours == 0) {
+      return '$mm:$ss';
+    }
+    return '${hours.toString().padLeft(2, '0')}:$mm:$ss';
+  }
+
+  String _timerLabel(Duration duration) {
+    if (duration.inHours > 0) {
+      final minutes = duration.inMinutes % 60;
+      return minutes == 0
+          ? '${duration.inHours}h timer'
+          : '${duration.inHours}h ${minutes}m timer';
+    }
+    if (duration.inMinutes > 0) {
+      final seconds = duration.inSeconds % 60;
+      return seconds == 0
+          ? '${duration.inMinutes}m timer'
+          : '${duration.inMinutes}m ${seconds}s timer';
+    }
+    return '${duration.inSeconds}s timer';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Timers'), actions: [widget.appMenu]),
+      body: SafeArea(
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : _savedTimers.isEmpty
+            ? const _EmptyTimersState()
+            : LayoutBuilder(
+                builder: (context, constraints) {
+                  final columns = constraints.maxWidth >= 600 ? 3 : 2;
+                  return GridView.builder(
+                    key: const ValueKey('saved-timer-grid'),
+                    padding: const EdgeInsets.fromLTRB(8, 16, 8, 96),
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: columns,
+                      childAspectRatio: 0.82,
+                      crossAxisSpacing: 8,
+                      mainAxisSpacing: 8,
+                    ),
+                    itemCount: _savedTimers.length,
+                    itemBuilder: (context, index) {
+                      final timer = _savedTimers[index];
+                      return _SavedTimerCard(
+                        key: ValueKey('timer-card-${timer.id}'),
+                        timer: timer,
+                        title: _timerLabel(timer.duration),
+                        formattedRemaining: _formatDuration(timer.remaining),
+                        onToggle: () => _toggleTimer(timer),
+                        onDelete: () => _deleteTimer(timer),
+                      );
+                    },
+                  );
+                },
+              ),
+      ),
+      floatingActionButton: FloatingActionButton(
+        key: const ValueKey('timer-add'),
+        tooltip: 'Add timer',
+        onPressed: _showAddTimerSheet,
+        child: const Icon(Icons.add),
+      ),
+    );
+  }
+}
+
+class _SavedTimer {
+  _SavedTimer({required this.id, required this.duration})
+    : remaining = duration;
+
+  final String id;
+  final Duration duration;
+  Duration remaining;
+  DateTime? deadline;
+  bool isRunning = false;
+  bool isFinished = false;
+}
+
+class _SavedTimerCard extends StatelessWidget {
+  const _SavedTimerCard({
+    super.key,
+    required this.timer,
+    required this.title,
+    required this.formattedRemaining,
+    required this.onToggle,
+    required this.onDelete,
+  });
+
+  final _SavedTimer timer;
+  final String title;
+  final String formattedRemaining;
+  final VoidCallback onToggle;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final progress = timer.duration.inMilliseconds == 0
+        ? 0.0
+        : (timer.remaining.inMilliseconds / timer.duration.inMilliseconds)
+              .clamp(0.0, 1.0);
+
+    return Card(
+      color: colorScheme.surfaceContainerLow,
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 8, 12),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                ),
+                IconButton(
+                  key: ValueKey('timer-card-delete-${timer.id}'),
+                  tooltip: 'Delete $title',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: onDelete,
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+            Expanded(
+              child: Center(
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final diameter =
+                        constraints.maxWidth < constraints.maxHeight
+                        ? constraints.maxWidth
+                        : constraints.maxHeight;
+                    return SizedBox.square(
+                      dimension: diameter,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          SizedBox.square(
+                            dimension: diameter,
+                            child: CircularProgressIndicator(
+                              value: progress,
+                              strokeWidth: 5,
+                              color: timer.isFinished
+                                  ? colorScheme.error
+                                  : colorScheme.primary,
+                              backgroundColor:
+                                  colorScheme.surfaceContainerHighest,
+                            ),
+                          ),
+                          Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  formattedRemaining,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .headlineSmall
+                                      ?.copyWith(
+                                        fontFeatures: const [
+                                          FontFeature.tabularFigures(),
+                                        ],
+                                        fontWeight: FontWeight.w300,
+                                      ),
+                                ),
+                              ),
+                              IconButton(
+                                key: ValueKey('timer-card-action-${timer.id}'),
+                                tooltip: timer.isRunning
+                                    ? 'Pause $title'
+                                    : timer.isFinished
+                                    ? 'Restart $title'
+                                    : 'Start $title',
+                                onPressed: onToggle,
+                                icon: Icon(
+                                  timer.isRunning
+                                      ? Icons.pause
+                                      : timer.isFinished
+                                      ? Icons.replay
+                                      : Icons.play_arrow,
+                                  size: 30,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _EmptyTimersState extends StatelessWidget {
+  const _EmptyTimersState();
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.hourglass_empty, size: 40, color: colorScheme.primary),
+          const SizedBox(height: 12),
+          Text(
+            'No saved timers',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Add a timer to keep it here for later.',
+            style: Theme.of(context).textTheme.bodyMedium
+                ?.copyWith(color: colorScheme.onSurfaceVariant),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TimerSetupSheet extends StatefulWidget {
+  const _TimerSetupSheet({required this.onSave});
+
+  final ValueChanged<Duration> onSave;
+
+  @override
+  State<_TimerSetupSheet> createState() => _TimerSetupSheetState();
+}
+
+class _TimerSetupSheetState extends State<_TimerSetupSheet> {
+  static const _quickPresets = <Duration>[
+    Duration(seconds: 30),
+    Duration(minutes: 1),
+    Duration(minutes: 5),
+    Duration(minutes: 10),
+    Duration(minutes: 30),
+  ];
+  static const _keypadValues = <String>[
+    '1',
+    '2',
+    '3',
+    '4',
+    '5',
+    '6',
+    '7',
+    '8',
+    '9',
+    '00',
+    '0',
+    'backspace',
+  ];
+
+  String _digits = '';
+
+  Duration get _selectedDuration {
+    final time = _digits.padLeft(6, '0');
+    return Duration(
+      hours: int.parse(time.substring(0, 2)),
+      minutes: int.parse(time.substring(2, 4)),
+      seconds: int.parse(time.substring(4, 6)),
+    );
+  }
+
+  String get _timeDigits => _digits.padLeft(6, '0');
+
+  void _append(String value) {
+    if (_digits.length >= 6) {
+      return;
+    }
+    setState(() {
+      _digits = (_digits + value).substring(
+        0,
+        (_digits.length + value.length).clamp(0, 6),
+      );
+    });
+  }
+
+  void _backspace() {
+    if (_digits.isEmpty) {
+      return;
+    }
+    setState(() => _digits = _digits.substring(0, _digits.length - 1));
+  }
+
+  void _selectPreset(Duration duration) {
     final hours = duration.inHours.toString().padLeft(2, '0');
     final minutes = (duration.inMinutes % 60).toString().padLeft(2, '0');
     final seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
-    return '$hours:$minutes:$seconds';
+    setState(() {
+      _digits = '$hours$minutes$seconds'.replaceFirst(RegExp(r'^0+'), '');
+    });
   }
 
-  Widget _timeField({
-    required TextEditingController controller,
-    required String label,
-    required String keyName,
-  }) {
-    return SizedBox(
-      width: 76,
-      child: TextField(
-        key: ValueKey(keyName),
-        controller: controller,
-        textAlign: TextAlign.center,
-        keyboardType: TextInputType.number,
-        maxLength: 2,
-        onSubmitted: (_) => _applyFields(),
-        decoration: InputDecoration(labelText: label, counterText: ''),
-      ),
-    );
+  String _presetLabel(Duration duration) {
+    if (duration.inSeconds < 60) {
+      return '${duration.inSeconds} sec';
+    }
+    return '${duration.inMinutes}m';
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final progress = _totalDuration.inMilliseconds == 0
-        ? 0.0
-        : (_remaining.inMilliseconds / _totalDuration.inMilliseconds).clamp(
-            0.0,
-            1.0,
-          );
+    final canSave = _selectedDuration > Duration.zero;
+    final screenHeight = MediaQuery.sizeOf(context).height;
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Timer'), actions: [widget.appMenu]),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(24, 20, 24, 28),
-          child: Column(
-            children: [
-              Wrap(
-                alignment: WrapAlignment.center,
-                spacing: 10,
-                runSpacing: 8,
-                children: [
-                  _timeField(
-                    controller: _hoursController,
-                    label: 'Hours',
-                    keyName: 'timer-hours-field',
-                  ),
-                  _timeField(
-                    controller: _minutesController,
-                    label: 'Minutes',
-                    keyName: 'timer-minutes-field',
-                  ),
-                  _timeField(
-                    controller: _secondsController,
-                    label: 'Seconds',
-                    keyName: 'timer-seconds-field',
-                  ),
-                ],
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: screenHeight * 0.92),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 48,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.outlineVariant,
+                borderRadius: BorderRadius.circular(4),
               ),
-              const SizedBox(height: 20),
-              Wrap(
-                alignment: WrapAlignment.center,
-                spacing: 8,
-                children: [
-                  for (final preset in _presets)
-                    ChoiceChip(
-                      key: ValueKey('timer-preset-${preset.inMinutes}'),
-                      label: Text(
-                        preset.inHours > 0
-                            ? '${preset.inHours} hr'
-                            : '${preset.inMinutes} min',
-                      ),
-                      selected: _totalDuration == preset && !_isRunning,
-                      onSelected: (_) => _choosePreset(preset),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 28),
-              Semantics(
-                label: _isFinished
-                    ? 'Timer finished'
-                    : 'Timer ${_formatDuration(_remaining)} remaining',
-                liveRegion: true,
-                child: SizedBox(
-                  width: 260,
-                  height: 260,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      SizedBox.square(
-                        dimension: 248,
-                        child: CircularProgressIndicator(
-                          value: progress,
-                          strokeWidth: 12,
-                          backgroundColor: colorScheme.surfaceContainerHighest,
-                          color: _isFinished
-                              ? colorScheme.error
-                              : colorScheme.primary,
-                        ),
-                      ),
-                      Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            _isFinished
-                                ? Icons.notifications_active_outlined
-                                : Icons.timer_outlined,
-                            color: _isFinished
-                                ? colorScheme.error
-                                : colorScheme.primary,
-                            size: 28,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            _isFinished
-                                ? "Time's up"
-                                : _formatDuration(_remaining),
-                            key: const ValueKey('timer-display'),
-                            style: theme.textTheme.displaySmall?.copyWith(
-                              fontFeatures: const [
-                                FontFeature.tabularFigures(),
-                              ],
-                              fontWeight: FontWeight.w300,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
+            ),
+            const SizedBox(height: 22),
+            Row(
+              children: [
+                _TimeDigit(value: _timeDigits.substring(0, 2), label: 'Hours'),
+                _TimeDigit(
+                  value: _timeDigits.substring(2, 4),
+                  label: 'Minutes',
                 ),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  IconButton.filledTonal(
-                    key: const ValueKey('timer-add-minute'),
-                    tooltip: 'Add one minute',
-                    onPressed: _addMinute,
-                    icon: const Icon(Icons.add),
-                  ),
-                  const SizedBox(width: 20),
-                  FilledButton.icon(
-                    key: const ValueKey('timer-primary-action'),
-                    onPressed: _isRunning
-                        ? _pause
-                        : (_remaining > Duration.zero ? _start : _reset),
-                    icon: Icon(_isRunning ? Icons.pause : Icons.play_arrow),
-                    label: Text(
-                      _isRunning
-                          ? 'Pause'
-                          : (_isFinished ? 'Restart' : 'Start'),
-                    ),
-                  ),
-                  const SizedBox(width: 20),
-                  IconButton.filledTonal(
-                    key: const ValueKey('timer-reset'),
-                    tooltip: 'Reset timer',
-                    onPressed: _reset,
-                    icon: const Icon(Icons.restart_alt),
-                  ),
-                ],
-              ),
-              if (_isFinished) ...[
-                const SizedBox(height: 12),
-                Text(
-                  'Timer finished',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    color: colorScheme.error,
-                  ),
+                _TimeDigit(
+                  value: _timeDigits.substring(4, 6),
+                  label: 'Seconds',
                 ),
               ],
-            ],
-          ),
+            ),
+            const SizedBox(height: 20),
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final preset in _quickPresets)
+                  ChoiceChip(
+                    key: ValueKey('timer-preset-${preset.inSeconds}'),
+                    label: Text(_presetLabel(preset)),
+                    selected: _selectedDuration == preset,
+                    onSelected: (_) => _selectPreset(preset),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 360),
+              child: GridView.count(
+                crossAxisCount: 3,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                childAspectRatio: 2.3,
+                mainAxisSpacing: 4,
+                crossAxisSpacing: 8,
+                children: [
+                  for (final value in _keypadValues)
+                    TextButton(
+                      key: ValueKey('timer-key-$value'),
+                      onPressed: value == 'backspace'
+                          ? _backspace
+                          : () => _append(value),
+                      child: value == 'backspace'
+                          ? const Icon(Icons.backspace_outlined)
+                          : Text(value, style: theme.textTheme.titleLarge),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: FilledButton.icon(
+                key: const ValueKey('timer-save'),
+                onPressed: canSave
+                    ? () {
+                        widget.onSave(_selectedDuration);
+                        Navigator.of(context).pop();
+                      }
+                    : null,
+                icon: const Icon(Icons.bookmark_add_outlined),
+                label: const Text('Save timer'),
+              ),
+            ),
+          ],
         ),
+      ),
+    );
+  }
+}
+
+class _TimeDigit extends StatelessWidget {
+  const _TimeDigit({required this.value, required this.label});
+
+  final String value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Expanded(
+      child: Column(
+        children: [
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              value,
+              style: theme.textTheme.displayMedium?.copyWith(
+                fontFeatures: const [FontFeature.tabularFigures()],
+                fontWeight: FontWeight.w300,
+              ),
+            ),
+          ),
+          Text(label, style: theme.textTheme.labelLarge),
+        ],
       ),
     );
   }

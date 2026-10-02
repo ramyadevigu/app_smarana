@@ -102,32 +102,30 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('nav-timer')));
     await tester.pumpAndSettle();
     expect(find.byType(TimerScreen), findsOneWidget);
-    expect(find.text('00:05:00'), findsOneWidget);
-    expect(find.byKey(const ValueKey('timer-preset-10')), findsOneWidget);
+    expect(find.text('No saved timers'), findsOneWidget);
 
-    await tester.tap(find.byKey(const ValueKey('timer-preset-1')));
-    await tester.pump();
-    expect(find.text('00:01:00'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('timer-add')));
+    await tester.pumpAndSettle();
+    for (final preset in [30, 60, 300, 600, 1800]) {
+      expect(find.byKey(ValueKey('timer-preset-$preset')), findsOneWidget);
+    }
 
-    await tester.ensureVisible(find.byKey(const ValueKey('timer-add-minute')));
-    await tester.tap(find.byKey(const ValueKey('timer-add-minute')));
-    await tester.pump();
-    expect(find.text('00:02:00'), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const ValueKey('timer-preset-30')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('timer-preset-30')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const ValueKey('timer-save')));
+    await tester.tap(find.byKey(const ValueKey('timer-save')));
+    await tester.pumpAndSettle();
 
-    await tester.ensureVisible(
-      find.byKey(const ValueKey('timer-primary-action')),
-    );
-    await tester.tap(find.byKey(const ValueKey('timer-primary-action')));
+    expect(find.text('30s timer'), findsOneWidget);
+    expect(find.text('00:30'), findsOneWidget);
+    await tester.tap(find.byTooltip('Start 30s timer'));
     await tester.pump(const Duration(milliseconds: 120));
-    expect(find.text('Pause'), findsOneWidget);
+    expect(find.byTooltip('Pause 30s timer'), findsOneWidget);
 
-    await tester.tap(find.byKey(const ValueKey('timer-primary-action')));
+    await tester.tap(find.byTooltip('Pause 30s timer'));
     await tester.pump();
-    expect(find.text('Start'), findsOneWidget);
-
-    await tester.ensureVisible(find.byKey(const ValueKey('timer-reset')));
-    await tester.tap(find.byKey(const ValueKey('timer-reset')));
-    await tester.pump();
-    expect(find.text('00:02:00'), findsOneWidget);
+    expect(find.byTooltip('Start 30s timer'), findsOneWidget);
   });
 }

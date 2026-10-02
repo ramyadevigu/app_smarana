@@ -39,6 +39,14 @@ void main() {
     );
     final lightColorScheme = lightTheme.colorScheme;
     final darkColorScheme = darkTheme.colorScheme;
+    final lightEnabledCardColor = Color.alphaBlend(
+      lightColorScheme.primary.withValues(alpha: 0.06),
+      lightColorScheme.surfaceContainerLow,
+    );
+    final darkEnabledCardColor = Color.alphaBlend(
+      darkColorScheme.primary.withValues(alpha: 0.06),
+      darkColorScheme.surfaceContainerLow,
+    );
     expect(
       tester.widget<Card>(reminderCard).color,
       lightColorScheme.surfaceContainerLow,
@@ -48,10 +56,13 @@ void main() {
     await _pumpFrames(tester);
     expect((await storage.getReminders()).single.enabled, isTrue);
     expect(scheduler.scheduledReminders.keys, contains('toggle'));
-    expect(tester.widget<Switch>(reminderSwitch).value, isTrue);
+    final enabledSwitch = tester.widget<Switch>(reminderSwitch);
+    expect(enabledSwitch.value, isTrue);
+    expect(enabledSwitch.activeTrackColor, lightColorScheme.primary);
+    expect(enabledSwitch.activeThumbColor, lightColorScheme.onPrimary);
     expect(
       tester.widget<Card>(reminderCard).color,
-      lightColorScheme.primaryContainer,
+      lightEnabledCardColor,
     );
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -64,10 +75,13 @@ void main() {
     );
     await _pumpFrames(tester);
     expect((await restartedStorage.getReminders()).single.enabled, isTrue);
-    expect(tester.widget<Switch>(reminderSwitch).value, isTrue);
+    final darkEnabledSwitch = tester.widget<Switch>(reminderSwitch);
+    expect(darkEnabledSwitch.value, isTrue);
+    expect(darkEnabledSwitch.activeTrackColor, darkColorScheme.primary);
+    expect(darkEnabledSwitch.activeThumbColor, darkColorScheme.onPrimary);
     expect(
       tester.widget<Card>(reminderCard).color,
-      darkColorScheme.primaryContainer,
+      darkEnabledCardColor,
     );
 
     await tester.tap(reminderSwitch);
