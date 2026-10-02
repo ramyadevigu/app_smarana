@@ -61,6 +61,7 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
   List<ReminderSoundOption> _availableAlarmSounds = const [];
   bool _isSaving = false;
   bool _defaultsReady = false;
+  bool _textFieldsCanRequestFocus = true;
 
   @override
   void initState() {
@@ -135,15 +136,40 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
     super.dispose();
   }
 
+  void _dismissKeyboard() {
+    FocusScope.of(context).unfocus();
+  }
+
+  Future<T?> _showOptionOverlay<T>(Future<T?> Function() showOverlay) async {
+    setState(() => _textFieldsCanRequestFocus = false);
+    _dismissKeyboard();
+    try {
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted) {
+        return null;
+      }
+      return await showOverlay();
+    } finally {
+      if (mounted) {
+        setState(() => _textFieldsCanRequestFocus = true);
+        _dismissKeyboard();
+      }
+    }
+  }
+
   Future<void> _selectDate(FormFieldState<DateTime> field) async {
     final today = DateUtils.dateOnly(DateTime.now());
     final firstDate = widget.isEditing ? DateTime(1900) : today;
     final selectedDate = _selectedDate ?? today;
-    final date = await showDatePicker(
-      context: context,
-      initialDate: selectedDate.isBefore(firstDate) ? firstDate : selectedDate,
-      firstDate: firstDate,
-      lastDate: DateTime(2100),
+    final date = await _showOptionOverlay(
+      () => showDatePicker(
+        context: context,
+        initialDate: selectedDate.isBefore(firstDate)
+            ? firstDate
+            : selectedDate,
+        firstDate: firstDate,
+        lastDate: DateTime(2100),
+      ),
     );
 
     if (date == null) {
@@ -157,10 +183,12 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
   }
 
   Future<void> _selectTime(FormFieldState<TimeOfDay> field) async {
-    final time = await showTimePicker(
-      context: context,
-      initialTime: _selectedTime ?? TimeOfDay.now(),
-      initialEntryMode: TimePickerEntryMode.dial,
+    final time = await _showOptionOverlay(
+      () => showTimePicker(
+        context: context,
+        initialTime: _selectedTime ?? TimeOfDay.now(),
+        initialEntryMode: TimePickerEntryMode.dial,
+      ),
     );
 
     if (time == null) {
@@ -174,6 +202,7 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
   }
 
   Future<void> _saveReminder() async {
+    _dismissKeyboard();
     if (!(_formKey.currentState?.validate() ?? false)) {
       return;
     }
@@ -255,14 +284,16 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
   };
 
   Future<void> _selectRecurrence() async {
-    final selection = await showModalBottomSheet<_RecurrenceSelection>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      showDragHandle: true,
-      builder: (_) => _RecurrenceSheet(
-        initialRule: _recurrenceRule,
-        initialDate: _selectedDate ?? DateTime.now(),
+    final selection = await _showOptionOverlay(
+      () => showModalBottomSheet<_RecurrenceSelection>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        showDragHandle: true,
+        builder: (_) => _RecurrenceSheet(
+          initialRule: _recurrenceRule,
+          initialDate: _selectedDate ?? DateTime.now(),
+        ),
       ),
     );
 
@@ -288,34 +319,39 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
       const ReminderSoundOption(name: 'Default', uri: null),
       ..._availableAlarmSounds,
     ];
-    final selection = await showModalBottomSheet<ReminderSoundOption>(
-      context: context,
-      useSafeArea: true,
-      showDragHandle: true,
-      builder: (context) => ListView(
-        shrinkWrap: true,
-        padding: const EdgeInsets.only(bottom: 16),
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
-            child: Text('Sound', style: Theme.of(context).textTheme.titleLarge),
-          ),
-          for (final sound in choices)
-            ListTile(
-              leading: Icon(
-                _soundUri == sound.uri && _soundName == sound.name
-                    ? Icons.radio_button_checked
-                    : Icons.radio_button_unchecked,
+    final selection = await _showOptionOverlay(
+      () => showModalBottomSheet<ReminderSoundOption>(
+        context: context,
+        useSafeArea: true,
+        showDragHandle: true,
+        builder: (context) => ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.only(bottom: 16),
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+              child: Text(
+                'Sound',
+                style: Theme.of(context).textTheme.titleLarge,
               ),
-              title: Text(sound.name),
-              onTap: () => Navigator.of(context).pop(sound),
             ),
-          if (_availableAlarmSounds.isEmpty)
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 0, 20, 16),
-              child: Text('No additional alarm sounds are available.'),
-            ),
-        ],
+            for (final sound in choices)
+              ListTile(
+                leading: Icon(
+                  _soundUri == sound.uri && _soundName == sound.name
+                      ? Icons.radio_button_checked
+                      : Icons.radio_button_unchecked,
+                ),
+                title: Text(sound.name),
+                onTap: () => Navigator.of(context).pop(sound),
+              ),
+            if (_availableAlarmSounds.isEmpty)
+              const Padding(
+                padding: EdgeInsets.fromLTRB(20, 0, 20, 16),
+                child: Text('No additional alarm sounds are available.'),
+              ),
+          ],
+        ),
       ),
     );
     if (selection != null && mounted) {
@@ -327,39 +363,41 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
   }
 
   Future<void> _selectNotificationMode() async {
-    final selection = await showModalBottomSheet<ReminderNotificationMode>(
-      context: context,
-      useSafeArea: true,
-      showDragHandle: true,
-      builder: (context) => ListView(
-        shrinkWrap: true,
-        padding: const EdgeInsets.only(bottom: 12),
-        children: [
-          ListTile(
-            title: const Text('Alarm + Notification'),
-            subtitle: const Text('Ringtone, snooze, and dismiss'),
-            trailing:
-                _notificationMode ==
-                    ReminderNotificationMode.alarmAndNotification
-                ? const Icon(Icons.check)
-                : null,
-            onTap: () =>
-                Navigator.of(context)
-                    .pop(ReminderNotificationMode.alarmAndNotification),
-          ),
-          ListTile(
-            title: const Text('Notification only'),
-            subtitle: const Text('No alarm ringtone'),
-            trailing:
-                _notificationMode == ReminderNotificationMode.notificationOnly
-                ? const Icon(Icons.check)
-                : null,
-            onTap: () =>
-                Navigator.of(context)
-                    .pop(ReminderNotificationMode.notificationOnly),
-          ),
-          const SizedBox(height: 12),
-        ],
+    final selection = await _showOptionOverlay(
+      () => showModalBottomSheet<ReminderNotificationMode>(
+        context: context,
+        useSafeArea: true,
+        showDragHandle: true,
+        builder: (context) => ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.only(bottom: 12),
+          children: [
+            ListTile(
+              title: const Text('Alarm + Notification'),
+              subtitle: const Text('Ringtone, snooze, and dismiss'),
+              trailing:
+                  _notificationMode ==
+                      ReminderNotificationMode.alarmAndNotification
+                  ? const Icon(Icons.check)
+                  : null,
+              onTap: () =>
+                  Navigator.of(context)
+                      .pop(ReminderNotificationMode.alarmAndNotification),
+            ),
+            ListTile(
+              title: const Text('Notification only'),
+              subtitle: const Text('No alarm ringtone'),
+              trailing:
+                  _notificationMode == ReminderNotificationMode.notificationOnly
+                  ? const Icon(Icons.check)
+                  : null,
+              onTap: () =>
+                  Navigator.of(context)
+                      .pop(ReminderNotificationMode.notificationOnly),
+            ),
+            const SizedBox(height: 12),
+          ],
+        ),
       ),
     );
     if (selection != null && mounted) {
@@ -369,24 +407,26 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
 
   Future<void> _selectSnoozeDuration() async {
     const durations = [5, 10, 15, 20, 30];
-    final selection = await showModalBottomSheet<int>(
-      context: context,
-      useSafeArea: true,
-      showDragHandle: true,
-      builder: (context) => ListView(
-        shrinkWrap: true,
-        padding: const EdgeInsets.only(bottom: 12),
-        children: [
-          for (final minutes in durations)
-            ListTile(
-              title: Text('$minutes minutes'),
-              trailing: _snoozeDurationMinutes == minutes
-                  ? const Icon(Icons.check)
-                  : null,
-              onTap: () => Navigator.of(context).pop(minutes),
-            ),
-          const SizedBox(height: 12),
-        ],
+    final selection = await _showOptionOverlay(
+      () => showModalBottomSheet<int>(
+        context: context,
+        useSafeArea: true,
+        showDragHandle: true,
+        builder: (context) => ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.only(bottom: 12),
+          children: [
+            for (final minutes in durations)
+              ListTile(
+                title: Text('$minutes minutes'),
+                trailing: _snoozeDurationMinutes == minutes
+                    ? const Icon(Icons.check)
+                    : null,
+                onTap: () => Navigator.of(context).pop(minutes),
+              ),
+            const SizedBox(height: 12),
+          ],
+        ),
       ),
     );
     if (selection != null && mounted) {
@@ -435,178 +475,192 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
           ),
         ),
       ),
-      body: Form(
-        key: _formKey,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              TextFormField(
-                key: const ValueKey('title-field'),
-                controller: _titleController,
-                textInputAction: TextInputAction.next,
-                decoration: const InputDecoration(
-                  labelText: 'Title',
-                  hintText: 'What do you want to remember?',
-                  prefixIcon: Icon(Icons.edit_outlined),
+      body: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: () => FocusScope.of(context).unfocus(),
+        child: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextFormField(
+                  key: const ValueKey('title-field'),
+                  controller: _titleController,
+                  canRequestFocus: _textFieldsCanRequestFocus,
+                  textInputAction: TextInputAction.next,
+                  onTapOutside: (_) => FocusScope.of(context).unfocus(),
+                  decoration: const InputDecoration(
+                    labelText: 'Title',
+                    hintText: 'What do you want to remember?',
+                    prefixIcon: Icon(Icons.edit_outlined),
+                  ),
+                  validator: (value) => value == null || value.trim().isEmpty
+                      ? 'Title is required.'
+                      : null,
                 ),
-                validator: (value) => value == null || value.trim().isEmpty
-                    ? 'Title is required.'
-                    : null,
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                key: const ValueKey('description-field'),
-                controller: _descriptionController,
-                maxLines: 3,
-                decoration: const InputDecoration(
-                  labelText: 'Description',
-                  hintText: 'Optional details',
-                  alignLabelWithHint: true,
-                  prefixIcon: Icon(Icons.notes_outlined),
+                const SizedBox(height: 16),
+                TextFormField(
+                  key: const ValueKey('description-field'),
+                  controller: _descriptionController,
+                  canRequestFocus: _textFieldsCanRequestFocus,
+                  maxLines: 3,
+                  onTapOutside: (_) => FocusScope.of(context).unfocus(),
+                  decoration: const InputDecoration(
+                    labelText: 'Description',
+                    hintText: 'Optional details',
+                    alignLabelWithHint: true,
+                    prefixIcon: Icon(Icons.notes_outlined),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 28),
-              Text(
-                'DATE & TIME',
-                style: Theme.of(context).textTheme.labelLarge,
-              ),
-              const SizedBox(height: 10),
-              Material(
-                color: colorScheme.surfaceContainerLow,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  side: BorderSide(color: colorScheme.outlineVariant),
+                const SizedBox(height: 28),
+                Text(
+                  'DATE & TIME',
+                  style: Theme.of(context).textTheme.labelLarge,
                 ),
-                clipBehavior: Clip.antiAlias,
-                child: Column(
-                  children: [
-                    FormField<DateTime>(
-                      initialValue: _selectedDate,
-                      validator: (value) =>
-                          value == null ? 'Date is required.' : null,
-                      builder: (field) => Column(
-                        children: [
-                          ListTile(
-                            key: const ValueKey('date-field'),
-                            leading: Icon(
-                              Icons.calendar_month_outlined,
-                              color: colorScheme.primary,
+                const SizedBox(height: 10),
+                Material(
+                  color: colorScheme.surfaceContainerLow,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: BorderSide(color: colorScheme.outlineVariant),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: Column(
+                    children: [
+                      FormField<DateTime>(
+                        initialValue: _selectedDate,
+                        validator: (value) =>
+                            value == null ? 'Date is required.' : null,
+                        builder: (field) => Column(
+                          children: [
+                            ListTile(
+                              key: const ValueKey('date-field'),
+                              leading: Icon(
+                                Icons.calendar_month_outlined,
+                                color: colorScheme.primary,
+                              ),
+                              title: const Text('Date'),
+                              subtitle: Text(
+                                _formatDate(context, _selectedDate),
+                              ),
+                              trailing: const Icon(Icons.chevron_right),
+                              onTap: () => _selectDate(field),
                             ),
-                            title: const Text('Date'),
-                            subtitle: Text(_formatDate(context, _selectedDate)),
-                            trailing: const Icon(Icons.chevron_right),
-                            onTap: () => _selectDate(field),
-                          ),
-                          _fieldError(field.errorText),
-                        ],
+                            _fieldError(field.errorText),
+                          ],
+                        ),
                       ),
-                    ),
-                    Divider(height: 1, color: colorScheme.outlineVariant),
-                    ListTile(
-                      key: const ValueKey('repeat-field'),
-                      leading: Icon(
-                        Icons.repeat_rounded,
-                        color: colorScheme.primary,
+                      Divider(height: 1, color: colorScheme.outlineVariant),
+                      ListTile(
+                        key: const ValueKey('repeat-field'),
+                        leading: Icon(
+                          Icons.repeat_rounded,
+                          color: colorScheme.primary,
+                        ),
+                        title: const Text('Repeat'),
+                        subtitle: Text(
+                          _recurrenceLabel(_recurrenceRule, _selectedDate),
+                        ),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: _selectRecurrence,
                       ),
-                      title: const Text('Repeat'),
-                      subtitle: Text(
-                        _recurrenceLabel(_recurrenceRule, _selectedDate),
-                      ),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: _selectRecurrence,
-                    ),
-                    Divider(height: 1, color: colorScheme.outlineVariant),
-                    FormField<TimeOfDay>(
-                      initialValue: _selectedTime,
-                      validator: (value) =>
-                          value == null ? 'Time is required.' : null,
-                      builder: (field) => Column(
-                        children: [
-                          ListTile(
-                            key: const ValueKey('time-field'),
-                            leading: Icon(
-                              Icons.schedule_outlined,
-                              color: colorScheme.primary,
+                      Divider(height: 1, color: colorScheme.outlineVariant),
+                      FormField<TimeOfDay>(
+                        initialValue: _selectedTime,
+                        validator: (value) =>
+                            value == null ? 'Time is required.' : null,
+                        builder: (field) => Column(
+                          children: [
+                            ListTile(
+                              key: const ValueKey('time-field'),
+                              leading: Icon(
+                                Icons.schedule_outlined,
+                                color: colorScheme.primary,
+                              ),
+                              title: const Text('Time'),
+                              subtitle: Text(_formatTime(context, field.value)),
+                              trailing: const Icon(Icons.chevron_right),
+                              onTap: () => _selectTime(field),
                             ),
-                            title: const Text('Time'),
-                            subtitle: Text(_formatTime(context, field.value)),
-                            trailing: const Icon(Icons.chevron_right),
-                            onTap: () => _selectTime(field),
-                          ),
-                          _fieldError(field.errorText),
-                        ],
+                            _fieldError(field.errorText),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 28),
-              Text('ALERTS', style: Theme.of(context).textTheme.labelLarge),
-              const SizedBox(height: 10),
-              Material(
-                color: colorScheme.surfaceContainerLow,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  side: BorderSide(color: colorScheme.outlineVariant),
+                const SizedBox(height: 28),
+                Text('ALERTS', style: Theme.of(context).textTheme.labelLarge),
+                const SizedBox(height: 10),
+                Material(
+                  color: colorScheme.surfaceContainerLow,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: BorderSide(color: colorScheme.outlineVariant),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: Column(
+                    children: [
+                      ListTile(
+                        key: const ValueKey('sound-option'),
+                        leading: Icon(
+                          Icons.music_note_outlined,
+                          color: colorScheme.primary,
+                        ),
+                        title: const Text('Sound'),
+                        subtitle: Text(_soundName),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: _selectSound,
+                      ),
+                      Divider(height: 1, color: colorScheme.outlineVariant),
+                      ListTile(
+                        key: const ValueKey('vibrate-option'),
+                        leading: Icon(
+                          Icons.vibration_outlined,
+                          color: colorScheme.primary,
+                        ),
+                        title: const Text('Vibrate'),
+                        subtitle: Text(_vibrate ? 'On' : 'Off'),
+                        trailing: Switch(
+                          value: _vibrate,
+                          onChanged: (value) {
+                            _dismissKeyboard();
+                            setState(() => _vibrate = value);
+                          },
+                        ),
+                      ),
+                      Divider(height: 1, color: colorScheme.outlineVariant),
+                      ListTile(
+                        key: const ValueKey('notification-mode-option'),
+                        leading: Icon(
+                          Icons.notifications_active_outlined,
+                          color: colorScheme.primary,
+                        ),
+                        title: const Text('Notification'),
+                        subtitle: Text(_notificationModeLabel),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: _selectNotificationMode,
+                      ),
+                      Divider(height: 1, color: colorScheme.outlineVariant),
+                      ListTile(
+                        key: const ValueKey('snooze-option'),
+                        leading: Icon(
+                          Icons.snooze_outlined,
+                          color: colorScheme.primary,
+                        ),
+                        title: const Text('Snooze'),
+                        subtitle: Text('$_snoozeDurationMinutes minutes'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: _selectSnoozeDuration,
+                      ),
+                    ],
+                  ),
                 ),
-                clipBehavior: Clip.antiAlias,
-                child: Column(
-                  children: [
-                    ListTile(
-                      key: const ValueKey('sound-option'),
-                      leading: Icon(
-                        Icons.music_note_outlined,
-                        color: colorScheme.primary,
-                      ),
-                      title: const Text('Sound'),
-                      subtitle: Text(_soundName),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: _selectSound,
-                    ),
-                    Divider(height: 1, color: colorScheme.outlineVariant),
-                    ListTile(
-                      key: const ValueKey('vibrate-option'),
-                      leading: Icon(
-                        Icons.vibration_outlined,
-                        color: colorScheme.primary,
-                      ),
-                      title: const Text('Vibrate'),
-                      subtitle: Text(_vibrate ? 'On' : 'Off'),
-                      trailing: Switch(
-                        value: _vibrate,
-                        onChanged: (value) => setState(() => _vibrate = value),
-                      ),
-                    ),
-                    Divider(height: 1, color: colorScheme.outlineVariant),
-                    ListTile(
-                      key: const ValueKey('notification-mode-option'),
-                      leading: Icon(
-                        Icons.notifications_active_outlined,
-                        color: colorScheme.primary,
-                      ),
-                      title: const Text('Notification'),
-                      subtitle: Text(_notificationModeLabel),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: _selectNotificationMode,
-                    ),
-                    Divider(height: 1, color: colorScheme.outlineVariant),
-                    ListTile(
-                      key: const ValueKey('snooze-option'),
-                      leading: Icon(
-                        Icons.snooze_outlined,
-                        color: colorScheme.primary,
-                      ),
-                      title: const Text('Snooze'),
-                      subtitle: Text('$_snoozeDurationMinutes minutes'),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: _selectSnoozeDuration,
-                    ),
-                  ],
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

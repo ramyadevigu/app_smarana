@@ -9,6 +9,79 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'helpers/fake_reminder_notification_scheduler.dart';
 
 void main() {
+  testWidgets('dismisses keyboard on outside tap and when scrolling form', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final storage = ReminderStorage(
+      notificationScheduler: FakeReminderNotificationScheduler(),
+    );
+
+    await _openForm(tester, storage: storage);
+    await tester.enterText(
+      find.byKey(const ValueKey('title-field')),
+      'Reminder title',
+    );
+    expect(tester.testTextInput.isVisible, isTrue);
+
+    await tester.tapAt(const Offset(10, 200));
+    await tester.pumpAndSettle();
+    expect(tester.testTextInput.isVisible, isFalse);
+
+    await tester.enterText(
+      find.byKey(const ValueKey('description-field')),
+      'Reminder details',
+    );
+    expect(tester.testTextInput.isVisible, isTrue);
+
+    await tester.drag(
+      find.byType(SingleChildScrollView),
+      const Offset(0, -200),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.testTextInput.isVisible, isFalse);
+  });
+
+  testWidgets('dismisses keyboard before opening form options', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final storage = ReminderStorage(
+      notificationScheduler: FakeReminderNotificationScheduler(),
+    );
+
+    await _openForm(tester, storage: storage);
+    await tester.enterText(
+      find.byKey(const ValueKey('title-field')),
+      'Reminder title',
+    );
+    expect(tester.testTextInput.isVisible, isTrue);
+
+    final dateOption = find.byKey(const ValueKey('date-field'));
+    await tester.ensureVisible(dateOption);
+    await tester.tap(dateOption);
+    await tester.pumpAndSettle();
+    expect(tester.testTextInput.isVisible, isFalse);
+    expect(find.byType(DatePickerDialog), findsOneWidget);
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(tester.testTextInput.isVisible, isFalse);
+
+    await tester.tap(find.byKey(const ValueKey('title-field')));
+    await tester.enterText(
+      find.byKey(const ValueKey('title-field')),
+      'Reminder title',
+    );
+    final vibrateSwitch = find.descendant(
+      of: find.byKey(const ValueKey('vibrate-option')),
+      matching: find.byType(Switch),
+    );
+    await tester.ensureVisible(vibrateSwitch);
+    expect(tester.testTextInput.isVisible, isTrue);
+    await tester.tap(vibrateSwitch);
+    await tester.pumpAndSettle();
+    expect(tester.testTextInput.isVisible, isFalse);
+  });
+
   testWidgets('saves the requested fields and preserves edit metadata', (
     tester,
   ) async {
