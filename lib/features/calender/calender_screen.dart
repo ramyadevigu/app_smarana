@@ -59,12 +59,16 @@ class CalendarScreen extends StatefulWidget {
 }
 
 class _CalendarScreenState extends State<CalendarScreen> {
+  static const _initialYearPage = 10000;
+
   late final ReminderStorage _storage;
+  late PageController _yearPageController;
   final CalendarService _calendarService = CalendarService();
 
   late DateTime _selectedDate;
   late DateTime _displayedMonth;
   late DateTime _today;
+  late int _yearPageBaseYear;
   late CalendarViewMode _activeViewMode;
   List<Reminder> _reminders = [];
   Map<DateTime, List<CalendarOccurrence>> _occurrencesByDate = {};
@@ -82,13 +86,25 @@ class _CalendarScreenState extends State<CalendarScreen> {
     _activeViewMode = widget.viewMode;
     _selectedDate = today;
     _displayedMonth = DateTime(today.year, today.month);
+    _yearPageBaseYear = today.year;
+    _yearPageController = PageController(initialPage: _initialYearPage);
     _loadReminders();
+  }
+
+  @override
+  void dispose() {
+    _yearPageController.dispose();
+    super.dispose();
   }
 
   @override
   void didUpdateWidget(covariant CalendarScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.viewMode != widget.viewMode) {
+      if (widget.viewMode == CalendarViewMode.year &&
+          !_yearPageController.hasClients) {
+        _resetYearPageController();
+      }
       _activeViewMode = widget.viewMode;
       _refreshVisibleOccurrences();
     }
@@ -97,6 +113,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
   void _selectViewMode(CalendarViewMode mode) {
     if (_activeViewMode == mode) {
       return;
+    }
+    if (mode == CalendarViewMode.year && !_yearPageController.hasClients) {
+      _resetYearPageController();
     }
     setState(() {
       _activeViewMode = mode;
@@ -153,8 +172,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
         : monthEndExclusive;
     switch (_activeViewMode) {
       case CalendarViewMode.year:
-        start = DateTime(_selectedDate.year);
-        endExclusive = DateTime(_selectedDate.year + 1);
+        start = DateTime(_displayedMonth.year);
+        endExclusive = DateTime(_displayedMonth.year + 1);
       case CalendarViewMode.week:
         start = _weekStart(_selectedDate);
         endExclusive = start.add(const Duration(days: 7));
@@ -210,8 +229,21 @@ class _CalendarScreenState extends State<CalendarScreen> {
       _changeMonth(offset);
       return;
     }
-    final year = _displayedMonth.year + offset;
-    final lastDay = DateTime(year, _displayedMonth.month + 1, 0).day;
+    if (_yearPageController.hasClients) {
+      _yearPageController.animateToPage(
+        _yearPageController.page!.round() + offset,
+        duration: const Duration(milliseconds: 240),
+        curve: Curves.easeInOutCubic,
+      );
+    }
+  }
+
+  void _showYearPage(int page) {
+    final year = _yearPageBaseYear + page - _initialYearPage;
+    if (year == _displayedMonth.year) {
+      return;
+    }
+    final lastDay = DateTime(year, _selectedDate.month + 1, 0).day;
     setState(() {
       _displayedMonth = DateTime(year, _displayedMonth.month);
       _selectedDate = DateTime(
@@ -221,6 +253,15 @@ class _CalendarScreenState extends State<CalendarScreen> {
       );
       _refreshVisibleOccurrences();
     });
+  }
+
+  int _pageForYear(int year) => _initialYearPage + year - _yearPageBaseYear;
+
+  void _resetYearPageController() {
+    _yearPageController.dispose();
+    _yearPageController = PageController(
+      initialPage: _pageForYear(_displayedMonth.year),
+    );
   }
 
   Future<void> _pickDate() async {
@@ -510,24 +551,57 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   Widget _buildYearView(BuildContext context, Key key) {
-    return AnimatedSwitcher(
+    return PageView.builder(
       key: key,
-      duration: const Duration(milliseconds: 240),
-      switchInCurve: Curves.easeInOutCubic,
-      switchOutCurve: Curves.easeInOutCubic,
-      child: GridView.builder(
-        key: ValueKey('calendar-year-${_displayedMonth.year}'),
-        padding: const EdgeInsets.fromLTRB(2, 4, 2, 100),
-        itemCount: 12,
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 3,
-          childAspectRatio: 0.82,
-          crossAxisSpacing: 8,
-          mainAxisSpacing: 8,
-        ),
-        itemBuilder: (context, index) =>
-            _buildMiniMonth(context, DateTime(_displayedMonth.year, index + 1)),
-      ),
+      controller: _yearPageController,
+      scrollDirection: Axis.vertical,
+      onPageChanged: _showYearPage,
+      itemBuilder: (context, page) {
+        final year = _yearPageBaseYear + page - _initialYearPage;
+        return _buildYearMonths(context, year);
+      },
+    );
+  }
+
+  Widget _buildYearMonths(BuildContext context, int year) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const horizontalPadding = 2.0;
+        const verticalPadding = 8.0;
+        const bottomPadding = 64.0;
+        const crossAxisSpacing = 8.0;
+        const mainAxisSpacing = 8.0;
+        final monthWidth =
+            (constraints.maxWidth -
+                horizontalPadding * 2 -
+                crossAxisSpacing * 2) /
+            3;
+        final monthHeight =
+            (constraints.maxHeight -
+                verticalPadding -
+                bottomPadding -
+                mainAxisSpacing * 3) /
+            4;
+        return GridView.builder(
+          key: ValueKey('calendar-year-$year'),
+          padding: const EdgeInsets.fromLTRB(
+            horizontalPadding,
+            verticalPadding,
+            horizontalPadding,
+            bottomPadding,
+          ),
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: 12,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 3,
+            childAspectRatio: monthWidth / monthHeight,
+            crossAxisSpacing: crossAxisSpacing,
+            mainAxisSpacing: mainAxisSpacing,
+          ),
+          itemBuilder: (context, index) =>
+              _buildMiniMonth(context, DateTime(year, index + 1)),
+        );
+      },
     );
   }
 
@@ -582,26 +656,29 @@ class _CalendarScreenState extends State<CalendarScreen> {
           ),
         ),
         Expanded(
-          child: GridView.builder(
-            padding: EdgeInsets.zero,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: cellCount,
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 7,
+          child: LayoutBuilder(
+            builder: (context, constraints) => GridView.builder(
+              padding: EdgeInsets.zero,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: cellCount,
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 7,
+                mainAxisExtent: constraints.maxHeight / (cellCount ~/ 7),
+              ),
+              itemBuilder: (context, index) {
+                final day = index - leadingDays + 1;
+                if (day < 1 || day > dayCount) {
+                  return const SizedBox.shrink();
+                }
+                return _buildDateCell(
+                  context,
+                  DateTime(month.year, month.month, day),
+                  monthOnly: false,
+                  compact: true,
+                  monthContext: month,
+                );
+              },
             ),
-            itemBuilder: (context, index) {
-              final day = index - leadingDays + 1;
-              if (day < 1 || day > dayCount) {
-                return const SizedBox.shrink();
-              }
-              return _buildDateCell(
-                context,
-                DateTime(month.year, month.month, day),
-                monthOnly: false,
-                compact: true,
-                monthContext: month,
-              );
-            },
           ),
         ),
       ],
@@ -1438,10 +1515,13 @@ class _CalendarScreenState extends State<CalendarScreen> {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               AnimatedContainer(
+                key: ValueKey(
+                  'calendar-day-marker-${date.year}-${date.month}-${date.day}',
+                ),
                 duration: const Duration(milliseconds: 210),
                 curve: Curves.easeOutCubic,
-                width: compact ? 13 : 32,
-                height: compact ? 13 : 32,
+                width: compact ? 11 : 32,
+                height: compact ? 11 : 32,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
@@ -1467,9 +1547,17 @@ class _CalendarScreenState extends State<CalendarScreen> {
                             fontWeight: selected || today
                                 ? FontWeight.w700
                                 : FontWeight.w500,
+                            fontSize: compact ? 7 : null,
+                            height: compact ? 1 : null,
                           ),
                   child: Text(
+                    key: ValueKey(
+                      'calendar-day-number-${date.year}-${date.month}-${date.day}',
+                    ),
                     MaterialLocalizations.of(context).formatDecimal(date.day),
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    softWrap: false,
                   ),
                 ),
               ),
@@ -1479,7 +1567,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 )
               else if (compact)
                 SizedBox(
-                  height: 2,
+                  height: 1,
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [

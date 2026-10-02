@@ -194,6 +194,14 @@ void main() {
       find.byKey(const ValueKey('calendar-year-month-2026-1')),
       findsOneWidget,
     );
+    final selectedMarker = tester.getCenter(
+      find.byKey(const ValueKey('calendar-day-marker-2026-9-29')),
+    );
+    final selectedNumber = tester.getCenter(
+      find.byKey(const ValueKey('calendar-day-number-2026-9-29')),
+    );
+    expect(selectedNumber.dx, closeTo(selectedMarker.dx, 0.1));
+    expect(selectedNumber.dy, closeTo(selectedMarker.dy, 0.1));
 
     final octoberFifteenth = find.byKey(
       const ValueKey('calendar-day-2026-10-15'),
@@ -284,6 +292,61 @@ void main() {
     expect(
       tester.widget<Semantics>(leapDay).properties.label,
       contains('February 29, 2028'),
+    );
+  });
+
+  testWidgets('vertical year scrolling advances to the following year', (
+    tester,
+  ) async {
+    await _pumpCalendar(tester, () => now, storage);
+    await tester.tap(find.byKey(const ValueKey('calendar-view-selector')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Year'));
+    await tester.pumpAndSettle();
+
+    await tester.drag(
+      find.byKey(const ValueKey('calendar-view-year')),
+      const Offset(0, -420),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('2027'), findsOneWidget);
+    expect(
+      tester
+          .widget<Semantics>(
+            find.byKey(const ValueKey('calendar-day-2027-9-29')),
+          )
+          .properties
+          .selected,
+      isTrue,
+    );
+  });
+
+  testWidgets('entering year view keeps the currently displayed year', (
+    tester,
+  ) async {
+    await _pumpCalendar(tester, () => now, storage);
+
+    await tester.tap(find.byKey(const ValueKey('calendar-select-date')));
+    await tester.pumpAndSettle();
+    Navigator.of(tester.element(find.byType(DatePickerDialog)))
+        .pop(DateTime(2027, 10, 2));
+    await _pumpFrames(tester);
+
+    await tester.tap(find.byKey(const ValueKey('calendar-view-selector')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Year'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('2027'), findsOneWidget);
+    expect(
+      tester
+          .widget<Semantics>(
+            find.byKey(const ValueKey('calendar-day-2027-10-2')),
+          )
+          .properties
+          .selected,
+      isTrue,
     );
   });
 
