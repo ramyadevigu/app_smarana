@@ -113,7 +113,15 @@ class CalendarViewSelector extends StatelessWidget {
       menuPadding: const EdgeInsets.symmetric(vertical: 6),
       constraints: const BoxConstraints(minWidth: 188, maxWidth: 220),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      icon: CalendarViewIcon(mode: selectedMode),
+      icon: Container(
+        key: const ValueKey('calendar-active-view-icon'),
+        padding: const EdgeInsets.all(6),
+        decoration: BoxDecoration(
+          color: colors.primaryContainer,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: CalendarViewIcon(mode: selectedMode, color: colors.primary),
+      ),
       itemBuilder: (context) => [
         for (final mode in modes)
           PopupMenuItem<CalendarViewMode>(
