@@ -255,10 +255,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('2026'), findsOneWidget);
-    final yearGrid = tester.widget<GridView>(
-      find.byKey(const ValueKey('calendar-year-2026')),
-    );
-    expect(yearGrid.childrenDelegate.estimatedChildCount, 12);
     expect(
       find.byKey(const ValueKey('calendar-year-month-2026-1')),
       findsOneWidget,
@@ -274,11 +270,6 @@ void main() {
 
     final octoberFifteenth = find.byKey(
       const ValueKey('calendar-day-2026-10-15'),
-    );
-    expect(
-      (yearGrid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount)
-          .crossAxisCount,
-      3,
     );
     await tester.scrollUntilVisible(
       octoberFifteenth,
@@ -364,7 +355,7 @@ void main() {
     );
   });
 
-  testWidgets('vertical year scrolling advances to the following year', (
+  testWidgets('vertical year scrolling springs back without changing year', (
     tester,
   ) async {
     await _pumpCalendar(tester, () => now, storage);
@@ -379,16 +370,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('2027'), findsOneWidget);
-    expect(
-      tester
-          .widget<Semantics>(
-            find.byKey(const ValueKey('calendar-day-2027-9-29')),
-          )
-          .properties
-          .selected,
-      isTrue,
-    );
+    expect(find.text('2026'), findsOneWidget);
+    expect(find.text('2027'), findsNothing);
   });
 
   testWidgets('entering year view keeps the currently displayed year', (

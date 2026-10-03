@@ -126,7 +126,7 @@ class _AppSmaranaState extends State<AppSmarana> {
   Widget build(BuildContext context) {
     return MaterialApp(
       navigatorKey: _navigatorKey,
-      title: 'Smarana',
+      title: 'Total Reminder',
       debugShowCheckedModeBanner: false,
       theme: buildLightTheme(_colorTheme),
       darkTheme: buildDarkTheme(_colorTheme),

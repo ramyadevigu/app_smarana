@@ -1,15 +1,15 @@
 ---
 applyTo: "**"
-description: "Project-wide instructions for the local-first Smaraṇa Flutter reminder app"
+description: "Project-wide instructions for the local-first Total Reminder Flutter reminder app"
 ---
 
-# Smaraṇa — Flutter Reminder App
+# Total Reminder — Flutter Reminder App
 
 ## 1. Project Goal
 
-Build a reliable, polished, local-first Flutter reminder application called **Smaraṇa**.
+Build a reliable, polished, local-first Flutter reminder application called **Total Reminder**.
 
-Smaraṇa is a personal planning application centered around:
+Total Reminder is a personal planning application centered around:
 
 - Calendar
 - Reminders
@@ -291,7 +291,7 @@ Do not create a second notification scheduling mechanism.
 
 # 10. UI/UX Direction
 
-Smaraṇa should feel like a modern productivity application.
+Total Reminder should feel like a modern productivity application.
 
 Visual inspiration may come from applications such as:
 
@@ -305,7 +305,7 @@ Use these only as design inspiration.
 
 Do not copy proprietary layouts, logos, branding, or assets.
 
-Smaraṇa must have its own visual identity.
+Total Reminder must have its own visual identity.
 
 Prioritize:
 
@@ -331,7 +331,7 @@ Do not introduce visual effects that reduce readability or performance.
 
 ---
 
-# 11. Smaraṇa Theme System — Critical
+# 11. Total Reminder Theme System — Critical
 
 The application must NOT be restricted to one brand color.
 
@@ -360,7 +360,7 @@ Do NOT:
 - add an eighth user-selectable theme
 - remove any of the seven themes
 - replace them with arbitrary colors
-- restrict the application to Smaraṇa blue
+- restrict the application to Total Reminder blue
 - force every screen to use the same accent
 - introduce the previous broad rainbow-style event palette
 - add red, orange, purple, indigo, or other colors as additional user-selectable themes
@@ -407,7 +407,7 @@ For example:
 Theme.of(context).colorScheme
 ```
 
-or an equivalent centralized Smaraṇa theme provider.
+or an equivalent centralized Total Reminder theme provider.
 
 The selected theme should control appropriate semantic roles such as:
 
@@ -463,7 +463,7 @@ Do not create a separate storage mechanism if the project already has theme/sett
 
 # 14. Light, Dark and System Themes
 
-Smaraṇa must support the application's existing:
+Total Reminder must support the application's existing:
 
 - Light
 - Dark
@@ -532,7 +532,7 @@ Prefer:
 Theme.of(context).colorScheme
 ```
 
-or the centralized Smaraṇa theme system.
+or the centralized Total Reminder theme system.
 
 Hard-coded hexadecimal values are acceptable when they represent:
 
@@ -545,9 +545,9 @@ Do not scatter arbitrary hexadecimal colors throughout the application.
 
 # 17. Calendar
 
-The Calendar is a major Smaraṇa workspace.
+The Calendar is a major Total Reminder workspace.
 
-It must use real Smaraṇa reminder data.
+It must use real Total Reminder reminder data.
 
 The Calendar should support three primary views:
 
@@ -661,7 +661,7 @@ Temporary mock data may be used during UI development but must be isolated and r
 
 # 22. Calendar — Event Colors
 
-Calendar event colors must use the Smaraṇa theme system.
+Calendar event colors must use the Total Reminder theme system.
 
 Do NOT create an unlimited arbitrary event color palette.
 
@@ -820,7 +820,7 @@ When a date/time is selected before creating a reminder, pre-fill it where suppo
 
 # 29. Other Core Screens
 
-The application should remain compatible with the broader Smaraṇa workspace:
+The application should remain compatible with the broader Total Reminder workspace:
 
 1. Calendar
 2. Notes
@@ -838,7 +838,7 @@ Maintain consistent navigation and theme behavior across these screens.
 
 If Notes functionality already exists, preserve it.
 
-Notes should remain compatible with the Smaraṇa theme system.
+Notes should remain compatible with the Total Reminder theme system.
 
 Do not create a second theme architecture for Notes.
 
@@ -907,7 +907,7 @@ Preserve existing Stopwatch and Timer functionality.
 
 Do not modify unrelated logic during Calendar or reminder work.
 
-If these screens need theme updates, use the centralized seven-color Smaraṇa theme system.
+If these screens need theme updates, use the centralized seven-color Total Reminder theme system.
 
 ---
 
@@ -1360,4 +1360,4 @@ Always prioritize:
 
 **Simple maintainable code > clever code**
 
-Smaraṇa should ultimately feel like a polished, reliable personal productivity application while remaining technically simple, local-first, maintainable, and extensible.
+Total Reminder should ultimately feel like a polished, reliable personal productivity application while remaining technically simple, local-first, maintainable, and extensible.

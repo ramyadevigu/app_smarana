@@ -1,6 +1,7 @@
-# app_smarana
+# Total Reminder
 
-A new Flutter project.
+Total Reminder is a local-first Flutter app for managing reminders, calendar
+events, notes, alarms, and timers.
 
 ## Getting Started
 

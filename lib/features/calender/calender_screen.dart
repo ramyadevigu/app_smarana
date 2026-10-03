@@ -60,16 +60,12 @@ class CalendarScreen extends StatefulWidget {
 }
 
 class _CalendarScreenState extends State<CalendarScreen> {
-  static const _initialYearPage = 10000;
-
   late final ReminderStorage _storage;
-  late PageController _yearPageController;
   final CalendarService _calendarService = CalendarService();
 
   late DateTime _selectedDate;
   late DateTime _displayedMonth;
   late DateTime _today;
-  late int _yearPageBaseYear;
   late CalendarViewMode _activeViewMode;
   List<Reminder> _reminders = [];
   Map<DateTime, List<CalendarOccurrence>> _occurrencesByDate = {};
@@ -88,14 +84,11 @@ class _CalendarScreenState extends State<CalendarScreen> {
     _activeViewMode = widget.viewMode;
     _selectedDate = today;
     _displayedMonth = DateTime(today.year, today.month);
-    _yearPageBaseYear = today.year;
-    _yearPageController = PageController(initialPage: _initialYearPage);
     _loadReminders();
   }
 
   @override
   void dispose() {
-    _yearPageController.dispose();
     super.dispose();
   }
 
@@ -103,10 +96,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
   void didUpdateWidget(covariant CalendarScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.viewMode != widget.viewMode) {
-      if (widget.viewMode == CalendarViewMode.year &&
-          !_yearPageController.hasClients) {
-        _resetYearPageController();
-      }
       _activeViewMode = widget.viewMode;
       _refreshVisibleOccurrences();
     }
@@ -115,9 +104,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
   void _selectViewMode(CalendarViewMode mode) {
     if (_activeViewMode == mode) {
       return;
-    }
-    if (mode == CalendarViewMode.year && !_yearPageController.hasClients) {
-      _resetYearPageController();
     }
     setState(() {
       _activeViewMode = mode;
@@ -231,22 +217,16 @@ class _CalendarScreenState extends State<CalendarScreen> {
       _changeMonth(offset);
       return;
     }
-    if (_yearPageController.hasClients) {
-      _yearPageController.animateToPage(
-        _yearPageController.page!.round() + offset,
-        duration: const Duration(milliseconds: 240),
-        curve: Curves.easeInOutCubic,
-      );
-    }
+    _setYear(_displayedMonth.year + offset);
   }
 
-  void _showYearPage(int page) {
-    final year = _yearPageBaseYear + page - _initialYearPage;
+  void _setYear(int year) {
     if (year == _displayedMonth.year) {
       return;
     }
     final lastDay = DateTime(year, _selectedDate.month + 1, 0).day;
     setState(() {
+      _monthTransitionDirection = year > _displayedMonth.year ? 1 : -1;
       _displayedMonth = DateTime(year, _displayedMonth.month);
       _selectedDate = DateTime(
         year,
@@ -255,15 +235,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
       );
       _refreshVisibleOccurrences();
     });
-  }
-
-  int _pageForYear(int year) => _initialYearPage + year - _yearPageBaseYear;
-
-  void _resetYearPageController() {
-    _yearPageController.dispose();
-    _yearPageController = PageController(
-      initialPage: _pageForYear(_displayedMonth.year),
-    );
   }
 
   Future<void> _pickYear() async {
@@ -278,9 +249,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     if (year == null || !mounted || year == _displayedMonth.year) {
       return;
     }
-    if (_yearPageController.hasClients) {
-      _yearPageController.jumpToPage(_pageForYear(year));
-    }
+    _setYear(year);
   }
 
   Future<void> _pickDate() async {
@@ -600,55 +569,84 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   Widget _buildYearView(BuildContext context, Key key) {
-    return PageView.builder(
+    final year = _displayedMonth.year;
+    final direction = _monthTransitionDirection;
+    return AnimatedSwitcher(
       key: key,
-      controller: _yearPageController,
-      scrollDirection: Axis.vertical,
-      onPageChanged: _showYearPage,
-      itemBuilder: (context, page) {
-        final year = _yearPageBaseYear + page - _initialYearPage;
-        return _buildYearMonths(context, year);
+      duration: const Duration(milliseconds: 280),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      transitionBuilder: (child, animation) {
+        final incoming = child.key == ValueKey('calendar-year-$year');
+        final offset = Tween<Offset>(
+          begin: Offset(0, incoming ? 0.08 * direction : -0.08 * direction),
+          end: Offset.zero,
+        ).animate(animation);
+        return FadeTransition(
+          opacity: animation,
+          child: SlideTransition(position: offset, child: child),
+        );
       },
+      child: _buildYearMonths(context, year),
     );
   }
 
   Widget _buildYearMonths(BuildContext context, int year) {
     return LayoutBuilder(
+      key: ValueKey('calendar-year-$year'),
       builder: (context, constraints) {
         const horizontalPadding = 2.0;
         const verticalPadding = 8.0;
         const bottomPadding = 64.0;
-        const crossAxisSpacing = 8.0;
-        const mainAxisSpacing = 8.0;
+        const spacing = 8.0;
         final monthWidth =
-            (constraints.maxWidth -
-                horizontalPadding * 2 -
-                crossAxisSpacing * 2) /
-            3;
+            (constraints.maxWidth - horizontalPadding * 2 - spacing * 2) / 3;
         final monthHeight =
             (constraints.maxHeight -
                 verticalPadding -
                 bottomPadding -
-                mainAxisSpacing * 3) /
+                spacing * 3) /
             4;
-        return GridView.builder(
-          key: ValueKey('calendar-year-$year'),
+        // Content fits the viewport; bouncing physics gives a spring-back
+        // overscroll instead of changing the year.
+        return SingleChildScrollView(
+          physics: const BouncingScrollPhysics(
+            parent: AlwaysScrollableScrollPhysics(),
+          ),
           padding: const EdgeInsets.fromLTRB(
             horizontalPadding,
             verticalPadding,
             horizontalPadding,
             bottomPadding,
           ),
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: 12,
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 3,
-            childAspectRatio: monthWidth / monthHeight,
-            crossAxisSpacing: crossAxisSpacing,
-            mainAxisSpacing: mainAxisSpacing,
+          child: RepaintBoundary(
+            child: Column(
+              children: [
+                for (var row = 0; row < 4; row++) ...[
+                  if (row > 0) const SizedBox(height: spacing),
+                  SizedBox(
+                    height: monthHeight,
+                    child: Row(
+                      children: [
+                        for (var col = 0; col < 3; col++) ...[
+                          if (col > 0) const SizedBox(width: spacing),
+                          SizedBox(
+                            width: monthWidth,
+                            child: RepaintBoundary(
+                              child: _buildMiniMonth(
+                                context,
+                                DateTime(year, row * 3 + col + 1),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ),
-          itemBuilder: (context, index) =>
-              _buildMiniMonth(context, DateTime(year, index + 1)),
         );
       },
     );
@@ -656,10 +654,16 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
   Widget _buildMiniMonth(BuildContext context, DateTime month) {
     final theme = Theme.of(context);
+    final colors = theme.colorScheme;
     final firstDay = DateTime(month.year, month.month);
     final leadingDays = firstDay.weekday % DateTime.daysPerWeek;
     final dayCount = DateTime(month.year, month.month + 1, 0).day;
-    final cellCount = ((leadingDays + dayCount + 6) ~/ 7) * 7;
+    final rows = (leadingDays + dayCount + 6) ~/ 7;
+    final localizations = MaterialLocalizations.of(context);
+    final dayStyle = (theme.textTheme.labelSmall ?? const TextStyle()).copyWith(
+      fontSize: 7,
+      height: 1,
+    );
     return Column(
       children: [
         SizedBox(
@@ -696,7 +700,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                       weekday,
                       style: theme.textTheme.labelSmall?.copyWith(
                         fontSize: 9,
-                        color: theme.colorScheme.onSurfaceVariant,
+                        color: colors.onSurfaceVariant,
                       ),
                     ),
                   ),
@@ -705,32 +709,96 @@ class _CalendarScreenState extends State<CalendarScreen> {
           ),
         ),
         Expanded(
-          child: LayoutBuilder(
-            builder: (context, constraints) => GridView.builder(
-              padding: EdgeInsets.zero,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: cellCount,
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 7,
-                mainAxisExtent: constraints.maxHeight / (cellCount ~/ 7),
-              ),
-              itemBuilder: (context, index) {
-                final day = index - leadingDays + 1;
-                if (day < 1 || day > dayCount) {
-                  return const SizedBox.shrink();
-                }
-                return _buildDateCell(
-                  context,
-                  DateTime(month.year, month.month, day),
-                  monthOnly: false,
-                  compact: true,
-                  monthContext: month,
-                );
-              },
-            ),
+          child: Column(
+            children: [
+              for (var row = 0; row < rows; row++)
+                Expanded(
+                  child: Row(
+                    children: [
+                      for (var col = 0; col < 7; col++)
+                        Expanded(
+                          child: _buildYearDay(
+                            month,
+                            row * 7 + col - leadingDays + 1,
+                            dayCount,
+                            dayStyle,
+                            colors,
+                            localizations,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+            ],
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildYearDay(
+    DateTime month,
+    int day,
+    int dayCount,
+    TextStyle style,
+    ColorScheme colors,
+    MaterialLocalizations localizations,
+  ) {
+    if (day < 1 || day > dayCount) {
+      return const SizedBox.shrink();
+    }
+    final date = DateTime(month.year, month.month, day);
+    final selected = _sameDay(date, _selectedDate);
+    final today = _isToday(date);
+    final eventCount = _occurrencesFor(date).length;
+    final hasEvents = eventCount > 0;
+    return Semantics(
+      key: ValueKey('calendar-day-${date.year}-${date.month}-${date.day}'),
+      button: true,
+      selected: selected,
+      label: [
+        localizations.formatFullDate(date),
+        if (today) 'today',
+        if (selected) 'selected',
+        if (hasEvents) '$eventCount reminders',
+      ].join(', '),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => _selectDate(date),
+        child: Center(
+          child: DecoratedBox(
+            key: ValueKey(
+              'calendar-day-marker-${date.year}-${date.month}-${date.day}',
+            ),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: selected ? colors.primary : null,
+              border: today && !selected
+                  ? Border.all(color: colors.primary.withValues(alpha: 0.7))
+                  : null,
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(1.5),
+              child: Text(
+                key: ValueKey(
+                  'calendar-day-number-${date.year}-${date.month}-${date.day}',
+                ),
+                '$day',
+                style: style.copyWith(
+                  color: selected
+                      ? colors.onPrimary
+                      : hasEvents
+                      ? colors.primary
+                      : colors.onSurface,
+                  fontWeight: selected || today || hasEvents
+                      ? FontWeight.w700
+                      : FontWeight.w500,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 
