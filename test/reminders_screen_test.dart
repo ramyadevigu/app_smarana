@@ -60,10 +60,7 @@ void main() {
     expect(enabledSwitch.value, isTrue);
     expect(enabledSwitch.activeTrackColor, lightColorScheme.primary);
     expect(enabledSwitch.activeThumbColor, lightColorScheme.onPrimary);
-    expect(
-      tester.widget<Card>(reminderCard).color,
-      lightEnabledCardColor,
-    );
+    expect(tester.widget<Card>(reminderCard).color, lightEnabledCardColor);
 
     await tester.pumpWidget(const SizedBox.shrink());
     final restartedStorage = ReminderStorage(notificationScheduler: scheduler);
@@ -79,10 +76,7 @@ void main() {
     expect(darkEnabledSwitch.value, isTrue);
     expect(darkEnabledSwitch.activeTrackColor, darkColorScheme.primary);
     expect(darkEnabledSwitch.activeThumbColor, darkColorScheme.onPrimary);
-    expect(
-      tester.widget<Card>(reminderCard).color,
-      darkEnabledCardColor,
-    );
+    expect(tester.widget<Card>(reminderCard).color, darkEnabledCardColor);
 
     await tester.tap(reminderSwitch);
     await _pumpFrames(tester);
@@ -168,10 +162,7 @@ void main() {
       expect(find.text('Call the team'), findsOneWidget);
       expect(find.text('Every Monday'), findsOneWidget);
       expect(find.text('3rd of every month'), findsOneWidget);
-      await tester.drag(
-        find.byType(Scrollable).first,
-        const Offset(0, -240),
-      );
+      await tester.drag(find.byType(Scrollable).first, const Offset(0, -240));
       await _pumpFrames(tester);
       expect(find.text('Disabled'), findsOneWidget);
 
@@ -194,6 +185,11 @@ void main() {
       expect(find.text('Created from the list'), findsOneWidget);
       expect(await storage.getReminders(), hasLength(5));
 
+      await tester.drag(
+        find.byType(Scrollable).first,
+        const Offset(0, -240),
+      );
+      await _pumpFrames(tester);
       await tester.tap(find.text('New reminder'));
       await _pumpFrames(tester);
       await tester.enterText(
