@@ -215,6 +215,36 @@ void main() {
     }
   });
 
+  testWidgets('list keeps the calendar fixed while its agenda scrolls', (
+    tester,
+  ) async {
+    await _pumpCalendar(tester, () => now, storage);
+    await tester.tap(find.byKey(const ValueKey('calendar-view-selector')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('List'));
+    await tester.pumpAndSettle();
+
+    final grid = find.byKey(const ValueKey('calendar-month-grid'));
+    final agenda = find.byKey(const ValueKey('calendar-list-content'));
+    expect(grid, findsOneWidget);
+    expect(find.text('Countdown'), findsOneWidget);
+    expect(find.text('Daily reminder'), findsWidgets);
+    final gridTop = tester.getTopLeft(grid).dy;
+
+    await tester.drag(agenda, const Offset(0, -400));
+    await tester.pumpAndSettle();
+
+    final scrollable = find.descendant(
+      of: agenda,
+      matching: find.byType(Scrollable),
+    );
+    expect(
+      tester.state<ScrollableState>(scrollable).position.pixels,
+      greaterThan(0),
+    );
+    expect(tester.getTopLeft(grid).dy, closeTo(gridTop, 0.1));
+  });
+
   testWidgets('year view selects a date and opens its detailed month', (
     tester,
   ) async {
@@ -603,7 +633,11 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('List'));
     await tester.pumpAndSettle();
-    final createdTitle = find.text('Created from calendar');
+    final createdTitle = find.descendant(
+      of: find.byKey(const ValueKey('calendar-list-content')),
+      matching: find.text('Created from calendar'),
+    );
+    expect(createdTitle, findsOneWidget);
     await tester.ensureVisible(createdTitle);
     await tester.tap(createdTitle);
     await _pumpFrames(tester);

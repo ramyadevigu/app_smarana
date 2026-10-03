@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/material.dart';
 
 import 'app_colors.dart';
@@ -76,6 +77,12 @@ ThemeData _buildTheme(
   return ThemeData(
     useMaterial3: true,
     colorScheme: colorScheme,
+    pageTransitionsTheme: const PageTransitionsTheme(
+      builders: {
+        TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+        TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+      },
+    ),
     scaffoldBackgroundColor: isLight
         ? AppColors.lightBackground
         : AppColors.deepBlack,
