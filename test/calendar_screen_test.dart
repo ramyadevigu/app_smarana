@@ -355,6 +355,40 @@ void main() {
     );
   });
 
+  testWidgets('year picker selects a year directly from the centered dialog', (
+    tester,
+  ) async {
+    await _pumpCalendar(tester, () => now, storage);
+    await tester.tap(find.byKey(const ValueKey('calendar-view-selector')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Year'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('calendar-select-date')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(Dialog), findsOneWidget);
+    expect(find.byKey(const ValueKey('calendar-year-picker')), findsOneWidget);
+    expect(find.text('Select year'), findsNothing);
+    expect(find.text('Cancel'), findsNothing);
+    expect(find.text('Select'), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('calendar-year-option-2027')));
+    await _pumpFrames(tester);
+
+    expect(find.byType(Dialog), findsNothing);
+    expect(find.text('2027'), findsOneWidget);
+    expect(
+      tester
+          .widget<Semantics>(
+            find.byKey(const ValueKey('calendar-day-2027-9-29')),
+          )
+          .properties
+          .selected,
+      isTrue,
+    );
+  });
+
   testWidgets('vertical year scrolling springs back without changing year', (
     tester,
   ) async {

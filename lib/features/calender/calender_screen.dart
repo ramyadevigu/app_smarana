@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import 'models/calendar_view_mode.dart';
 import 'widgets/calendar_view_selector.dart';
@@ -238,10 +237,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   Future<void> _pickYear() async {
-    final year = await showModalBottomSheet<int>(
+    final year = await showDialog<int>(
       context: context,
-      showDragHandle: true,
-      builder: (_) => _YearPickerSheet(
+      builder: (_) => _YearPickerDialog(
         selectedYear: _displayedMonth.year,
         currentYear: _today.year,
       ),
@@ -1910,8 +1908,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 }
 
-class _YearPickerSheet extends StatefulWidget {
-  const _YearPickerSheet({
+class _YearPickerDialog extends StatefulWidget {
+  const _YearPickerDialog({
     required this.selectedYear,
     required this.currentYear,
   });
@@ -1923,20 +1921,20 @@ class _YearPickerSheet extends StatefulWidget {
   static const lastYear = 2100;
 
   @override
-  State<_YearPickerSheet> createState() => _YearPickerSheetState();
+  State<_YearPickerDialog> createState() => _YearPickerDialogState();
 }
 
-class _YearPickerSheetState extends State<_YearPickerSheet> {
-  static const _itemExtent = 52.0;
-  late final FixedExtentScrollController _controller;
-  late int _year;
+class _YearPickerDialogState extends State<_YearPickerDialog> {
+  static const _columnCount = 4;
+  static const _rowExtent = 48.0;
+  late final ScrollController _controller;
 
   @override
   void initState() {
     super.initState();
-    _year = widget.selectedYear;
-    _controller = FixedExtentScrollController(
-      initialItem: _year - _YearPickerSheet.firstYear,
+    final selectedIndex = widget.selectedYear - _YearPickerDialog.firstYear;
+    _controller = ScrollController(
+      initialScrollOffset: (selectedIndex ~/ _columnCount) * (_rowExtent + 4),
     );
   }
 
@@ -1946,143 +1944,60 @@ class _YearPickerSheetState extends State<_YearPickerSheet> {
     super.dispose();
   }
 
-  void _jumpTo(int year) {
-    _controller.animateToItem(
-      year - _YearPickerSheet.firstYear,
-      duration: const Duration(milliseconds: 250),
-      curve: Curves.easeOutCubic,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Select year',
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                TextButton(
-                  onPressed: () => _jumpTo(widget.currentYear),
-                  child: const Text('This year'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            SizedBox(
-              height: _itemExtent * 5,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  IgnorePointer(
-                    child: Container(
-                      height: _itemExtent,
-                      decoration: BoxDecoration(
-                        color: scheme.primaryContainer.withValues(alpha: 0.6),
-                        borderRadius: BorderRadius.circular(14),
+    return Dialog(
+      child: SizedBox(
+        width: 340,
+        height: 360,
+        child: GridView.builder(
+          key: const ValueKey('calendar-year-picker'),
+          controller: _controller,
+          padding: const EdgeInsets.all(12),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: _columnCount,
+            mainAxisExtent: _rowExtent,
+            crossAxisSpacing: 4,
+            mainAxisSpacing: 4,
+          ),
+          itemCount:
+              _YearPickerDialog.lastYear - _YearPickerDialog.firstYear + 1,
+          itemBuilder: (context, index) {
+            final year = _YearPickerDialog.firstYear + index;
+            final selected = year == widget.selectedYear;
+            final isCurrent = year == widget.currentYear;
+            return Semantics(
+              key: ValueKey('calendar-year-option-$year'),
+              button: true,
+              selected: selected,
+              label: '$year',
+              child: Material(
+                color: selected ? scheme.primaryContainer : Colors.transparent,
+                borderRadius: BorderRadius.circular(12),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () => Navigator.of(context).pop(year),
+                  child: Center(
+                    child: Text(
+                      '$year',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: selected
+                            ? scheme.onPrimaryContainer
+                            : isCurrent
+                            ? scheme.primary
+                            : scheme.onSurfaceVariant,
+                        fontWeight: selected || isCurrent
+                            ? FontWeight.w700
+                            : FontWeight.w400,
                       ),
                     ),
                   ),
-                  ListWheelScrollView.useDelegate(
-                    key: const ValueKey('calendar-year-picker'),
-                    controller: _controller,
-                    itemExtent: _itemExtent,
-                    perspective: 0.003,
-                    diameterRatio: 2.2,
-                    physics: const FixedExtentScrollPhysics(),
-                    onSelectedItemChanged: (index) {
-                      HapticFeedback.selectionClick();
-                      setState(
-                        () => _year = _YearPickerSheet.firstYear + index,
-                      );
-                    },
-                    childDelegate: ListWheelChildBuilderDelegate(
-                      childCount:
-                          _YearPickerSheet.lastYear -
-                          _YearPickerSheet.firstYear +
-                          1,
-                      builder: (context, index) {
-                        final year = _YearPickerSheet.firstYear + index;
-                        final selected = year == _year;
-                        final isCurrent = year == widget.currentYear;
-                        return Semantics(
-                          button: true,
-                          selected: selected,
-                          label: isCurrent ? '$year, this year' : '$year',
-                          child: GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onTap: () => _jumpTo(year),
-                            child: Center(
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  AnimatedDefaultTextStyle(
-                                    duration: const Duration(milliseconds: 150),
-                                    style:
-                                        (selected
-                                                ? theme.textTheme.headlineSmall
-                                                : theme.textTheme.titleLarge)!
-                                            .copyWith(
-                                              fontWeight: selected
-                                                  ? FontWeight.w700
-                                                  : FontWeight.w400,
-                                              color: selected
-                                                  ? scheme.onPrimaryContainer
-                                                  : scheme.onSurfaceVariant,
-                                            ),
-                                    child: Text('$year'),
-                                  ),
-                                  if (isCurrent) ...[
-                                    const SizedBox(width: 8),
-                                    Icon(
-                                      Icons.circle,
-                                      size: 6,
-                                      color: scheme.primary,
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ],
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('Cancel'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: FilledButton(
-                    onPressed: () => Navigator.of(context).pop(_year),
-                    child: const Text('Select'),
-                  ),
-                ),
-              ],
-            ),
-          ],
+            );
+          },
         ),
       ),
     );
