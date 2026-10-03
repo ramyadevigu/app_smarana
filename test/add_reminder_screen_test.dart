@@ -28,8 +28,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.testTextInput.isVisible, isFalse);
 
+    await tester.tap(find.byKey(const ValueKey('title-field')));
     await tester.enterText(
-      find.byKey(const ValueKey('description-field')),
+      find.byKey(const ValueKey('title-field')),
       'Reminder details',
     );
     expect(tester.testTextInput.isVisible, isTrue);
@@ -100,17 +101,18 @@ void main() {
     final selectedDate = DateTime(2030, 1, 15);
 
     await _openForm(tester, storage: storage, initialDate: selectedDate);
-    await _saveForm(tester);
-    expect(find.text('Title is required.'), findsOneWidget);
-    expect(await storage.getReminders(), isEmpty);
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const ValueKey('title-field')))
+          .controller!
+          .text,
+      'Untitled Reminder',
+    );
+    expect(find.byKey(const ValueKey('description-field')), findsNothing);
 
     await tester.enterText(
       find.byKey(const ValueKey('title-field')),
       'Dentist appointment',
-    );
-    await tester.enterText(
-      find.byKey(const ValueKey('description-field')),
-      'Bring the insurance card',
     );
     final soundOption = find.byKey(const ValueKey('sound-option'));
     await tester.ensureVisible(soundOption);
@@ -119,7 +121,13 @@ void main() {
     await tester.tap(find.text('Morning Bell').last);
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const ValueKey('date-field')));
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pumpAndSettle();
+    final dateOption = find.byKey(const ValueKey('date-field'));
+    await tester.ensureVisible(dateOption);
+    await tester.tap(
+      find.descendant(of: dateOption, matching: find.byType(InkWell)),
+    );
     await tester.pumpAndSettle();
     expect(find.byType(DatePickerDialog), findsOneWidget);
     await tester.tap(find.text('OK'));
@@ -131,11 +139,14 @@ void main() {
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
 
-    final timeLabel =
-        tester
-                .widget<ListTile>(find.byKey(const ValueKey('time-field')))
-                .subtitle!
-            as Text;
+    final timeLabel = tester.widget<Text>(
+      find
+          .descendant(
+            of: find.byKey(const ValueKey('time-field')),
+            matching: find.byType(Text),
+          )
+          .last,
+    );
     final localizations = MaterialLocalizations.of(
       tester.element(find.byType(AddReminderScreen)),
     );
@@ -168,7 +179,7 @@ void main() {
 
     final saved = (await storage.getReminders()).single;
     expect(saved.title, 'Dentist appointment');
-    expect(saved.description, 'Bring the insurance card');
+    expect(saved.description, isNull);
     expect(saved.dateTime.year, selectedDate.year);
     expect(saved.dateTime.month, selectedDate.month);
     expect(saved.dateTime.day, selectedDate.day);
@@ -235,6 +246,8 @@ void main() {
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.tap(find.byKey(const ValueKey('repeat-field')));
     await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('repeat-frequency')));
+    await tester.pumpAndSettle();
     for (final label in [
       'Does not repeat',
       'Every day',
@@ -250,9 +263,7 @@ void main() {
       expect(find.text(label), findsAtLeastNWidgets(1));
     }
 
-    final weeklyOption = find.text('Every week');
-    await tester.ensureVisible(weeklyOption);
-    await tester.tap(weeklyOption);
+    await tester.tap(find.text('Every week').last);
     await tester.pumpAndSettle();
     for (final weekday in [
       DateTime.monday,
@@ -274,14 +285,14 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('repeat-field')));
     await tester.pumpAndSettle();
-    final customOption = find.text('Custom');
-    await tester.ensureVisible(customOption);
-    await tester.tap(customOption);
+    await tester.tap(find.byKey(const ValueKey('repeat-frequency')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Custom').last);
     await tester.pumpAndSettle();
     final intervalField = find.byKey(const ValueKey('repeat-interval-custom'));
     await tester.ensureVisible(intervalField);
     await tester.enterText(intervalField, '2');
-    final startDateOption = find.text('Start date');
+    final startDateOption = find.text('Starts');
     await tester.ensureVisible(startDateOption);
     await tester.tap(startDateOption);
     await tester.pumpAndSettle();
@@ -306,10 +317,15 @@ void main() {
     );
     expect(find.textContaining('until'), findsOneWidget);
     expect(
-      (tester
-                  .widget<ListTile>(find.byKey(const ValueKey('date-field')))
-                  .subtitle!
-              as Text)
+      tester
+          .widget<Text>(
+            find
+                .descendant(
+                  of: find.byKey(const ValueKey('date-field')),
+                  matching: find.byType(Text),
+                )
+                .last,
+          )
           .data,
       contains('18'),
     );

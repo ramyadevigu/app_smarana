@@ -172,23 +172,21 @@ void main() {
         find.byKey(const ValueKey('title-field')),
         'New reminder',
       );
-      await tester.enterText(
-        find.byKey(const ValueKey('description-field')),
-        'Created from the list',
-      );
       await tester.ensureVisible(find.byKey(const ValueKey('save-reminder')));
       await tester.tap(find.byKey(const ValueKey('save-reminder')));
       await _pumpFrames(tester);
       await _pumpFrames(tester);
 
       expect(find.text('New reminder'), findsOneWidget);
-      expect(find.text('Created from the list'), findsOneWidget);
+      expect(
+        (await storage.getReminders())
+            .singleWhere((reminder) => reminder.title == 'New reminder')
+            .description,
+        isNull,
+      );
       expect(await storage.getReminders(), hasLength(5));
 
-      await tester.drag(
-        find.byType(Scrollable).first,
-        const Offset(0, -240),
-      );
+      await tester.drag(find.byType(Scrollable).first, const Offset(0, -240));
       await _pumpFrames(tester);
       await tester.tap(find.text('New reminder'));
       await _pumpFrames(tester);
