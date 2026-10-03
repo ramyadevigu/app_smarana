@@ -141,7 +141,7 @@ class _SplashScaffold extends StatelessWidget {
                       onPressed: onRetry,
                       style: FilledButton.styleFrom(
                         backgroundColor: Colors.white,
-                        foregroundColor: Color(0xFF1737A6),
+                        foregroundColor: Theme.of(context).colorScheme.primary,
                       ),
                       child: const Text('Retry'),
                     ),
