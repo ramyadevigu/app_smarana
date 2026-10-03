@@ -479,22 +479,39 @@ void main() {
     expect(find.text('October 2026'), findsOneWidget);
   });
 
-  testWidgets('Countdown sheet expands and collapses when dragged', (
+  testWidgets('List Countdown opens a draggable, scrollable sheet', (
     tester,
   ) async {
     await _pumpCalendar(tester, () => now, storage);
 
-    await tester.tap(find.byTooltip('More calendar views'));
+    await tester.tap(find.byKey(const ValueKey('calendar-view-selector')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Countdown'));
+    await tester.tap(find.text('List'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('calendar-countdown-toggle')));
     await tester.pumpAndSettle();
 
+    expect(
+      find.byKey(const ValueKey('calendar-countdown-sheet')),
+      findsOneWidget,
+    );
     final content = find.byKey(const ValueKey('calendar-countdown-content'));
     final collapsedHeight = tester.getSize(content).height;
     await tester.drag(content, const Offset(0, -220));
     await tester.pumpAndSettle();
     final expandedHeight = tester.getSize(content).height;
     expect(expandedHeight, greaterThan(collapsedHeight));
+    final countdownScrollable = find.descendant(
+      of: content,
+      matching: find.byType(Scrollable),
+    );
+    expect(
+      tester
+          .state<ScrollableState>(countdownScrollable)
+          .position
+          .maxScrollExtent,
+      greaterThan(0),
+    );
 
     await tester.drag(content, const Offset(0, 220));
     await tester.pumpAndSettle();

@@ -1,6 +1,6 @@
 {
-    "name": "Total Reminder",
-    "short_name": "Total Reminder",
+    "name": "Total Reminders",
+    "short_name": "Total Reminders",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

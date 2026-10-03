@@ -1,6 +1,6 @@
-# Total Reminder
+# Total Reminders
 
-Total Reminder is a local-first Flutter app for managing reminders, calendar
+Total Reminders is a local-first Flutter app for managing reminders, calendar
 events, notes, alarms, and timers.
 
 ## Getting Started

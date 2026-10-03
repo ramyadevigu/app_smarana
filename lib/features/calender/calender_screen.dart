@@ -485,7 +485,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             SizedBox(
-              height: constraints.maxHeight * 0.58,
+              height: constraints.maxHeight * 0.55,
               child: Column(
                 children: [
                   _buildWeekdayHeader(context),
@@ -500,11 +500,32 @@ class _CalendarScreenState extends State<CalendarScreen> {
               ),
             ),
             const Divider(height: 1),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(4, 10, 4, 6),
-              child: Text(
-                'Countdown',
-                style: Theme.of(context).textTheme.titleSmall,
+            Semantics(
+              button: true,
+              label: 'Expand Countdown reminders',
+              hint: 'Open the scrollable Countdown panel',
+              child: InkWell(
+                key: const ValueKey('calendar-countdown-toggle'),
+                onTap: _showCountdownSheet,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    children: [
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          'Countdown',
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                      ),
+                      Icon(
+                        Icons.expand_less,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: 4),
+                    ],
+                  ),
+                ),
               ),
             ),
             Expanded(

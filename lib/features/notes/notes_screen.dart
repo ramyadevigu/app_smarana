@@ -477,7 +477,7 @@ class _NotesScreenState extends State<NotesScreen> {
       appBar: AppBar(
         leading: IconButton(
           key: const ValueKey('notes-back-to-smarana'),
-          tooltip: 'Back to Total Reminder',
+          tooltip: 'Back to Total Reminders',
           icon: const Icon(Icons.arrow_back_rounded),
           onPressed:
               widget.onBackToSmarana ??

@@ -2,17 +2,17 @@
 
 applyTo: "\*\*/calendar/\*\*/\*.dart, \*\*/calendar\*.dart"
 
-description: Modern multi-view Calendar workspace for the Total Reminder Flutter reminder app
+description: Modern multi-view Calendar workspace for the Total Reminders Flutter reminder app
 
-name: Total Reminder Calendar Redesign
+name: Total Reminders Calendar Redesign
 
 \---
 
-**# Total Reminder — Calendar Redesign System**
+**# Total Reminders — Calendar Redesign System**
 
 **## Objective**
 
-Completely redesign the existing Total Reminder Calendar screen into a modern, professional productivity-calendar workspace.
+Completely redesign the existing Total Reminders Calendar screen into a modern, professional productivity-calendar workspace.
 
 The Calendar should feel like a combination of:
 
@@ -28,7 +28,7 @@ Do NOT copy Microsoft Teams or Microsoft Planner directly.
 
 Use them only as visual and interaction inspiration.
 
-The goal is to make Total Reminder Calendar feel like a complete planning workspace rather than a simple date picker.
+The goal is to make Total Reminders Calendar feel like a complete planning workspace rather than a simple date picker.
 
 The Calendar must support three primary views:
 
@@ -38,7 +38,7 @@ The Calendar must support three primary views:
 
 3\. Month Only
 
-The same existing Total Reminder reminder/calendar data must power all three views.
+The same existing Total Reminders reminder/calendar data must power all three views.
 
 Do not create a separate calendar data system.
 
@@ -49,7 +49,7 @@ Do not break existing reminder, alarm, notification, recurrence, or storage func
 **# 1. IMPORTANT DESIGN PRINCIPLE — COLOR**
 
 
-Do NOT restrict Total Reminder's visual theme to the existing brand palette.
+Do NOT restrict Total Reminderss' visual theme to the existing brand palette.
 
 The user must be able to choose the application's theme from the seven theme colors shown in the supplied reference screenshot.
 
@@ -70,7 +70,7 @@ IMPORTANT:
 - Do NOT add extra theme colors.
 - Do NOT remove any of the seven colors.
 - Do NOT replace them with arbitrary brand colors.
-- Do NOT force Total Reminder blue or any other brand color across the application.
+- Do NOT force Total Reminders blue or any other brand color across the application.
 - Do NOT introduce gradients into the theme swatches.
 - Preserve the visual character of the reference screenshot: soft, modern, calm, pastel-oriented surfaces with a clearly identifiable accent color.
 
@@ -267,7 +267,7 @@ FLOATING ACTION BUTTON
 
 **------------------------------------------------**
 
-The bottom navigation, if already present in Total Reminder, must remain compatible with the new Calendar design.
+The bottom navigation, if already present in Total Reminders, must remain compatible with the new Calendar design.
 
 **---**
 
@@ -357,7 +357,7 @@ The interaction can be:
 
 \- Compact menu
 
-Use whichever best fits the existing Total Reminder UI architecture.
+Use whichever best fits the existing Total Reminders UI architecture.
 
 Do not navigate to an unrelated settings screen.
 
@@ -859,7 +859,7 @@ where appropriate.
 
 Event colors must be independent from the application's primary brand color.
 
-The application may use Total Reminder's brand identity for:
+The application may use Total Reminderss' brand identity for:
 
 \- primary actions
 
@@ -873,7 +873,7 @@ The application may use Total Reminder's brand identity for:
 
 But events should have their own rich visual categorization.
 
-Do NOT force every event to use Total Reminder blue.
+Do NOT force every event to use Total Reminders blue.
 
 Do NOT force every event to use the same color.
 
@@ -919,7 +919,7 @@ Do not generate a different color every time the widget rebuilds.
 
 **# 25. ALARM INDICATORS**
 
-Total Reminder supports reminders and alarms.
+Total Reminders supports reminders and alarms.
 
 Calendar events should visually communicate when an alarm or notification is enabled.
 
@@ -1289,7 +1289,7 @@ Do not create duplicate data models.
 
 **# 40. NO FAKE PERMANENT DATA**
 
-Do not replace the real Total Reminder reminder data with mock data.
+Do not replace the real Total Reminders reminder data with mock data.
 
 Temporary mock data may be used during UI development only.
 
@@ -1349,7 +1349,7 @@ lib/
 
       calendar_colors.dart
 
-Adapt this to the existing Total Reminder project structure.
+Adapt this to the existing Total Reminders project structure.
 
 Reuse existing widgets when appropriate.
 
@@ -1612,7 +1612,7 @@ Prefer:
 Theme.of(context).colorScheme
 ```
 
-and the centralized Total Reminder theme/color system.
+and the centralized Total Reminders theme/color system.
 
 The seven approved base theme colors are the only user-selectable theme colors:
 
@@ -1631,7 +1631,7 @@ Hard-coded hexadecimal values are acceptable when they are centralized as one of
 **# 53. BRAND COLORS**
 
 
-Total Reminder's theme is user-selectable.
+Total Reminderss' theme is user-selectable.
 
 Do NOT force the Calendar to use a single brand color.
 
@@ -1710,13 +1710,13 @@ Do NOT use Microsoft's branding.
 
 Do NOT use Microsoft logos or proprietary assets.
 
-Create a distinct Total Reminder visual identity.
+Create a distinct Total Reminders visual identity.
 
 **---**
 
 **# 56. FLOATING ACTION BUTTON**
 
-Keep the existing Total Reminder Add Reminder FAB.
+Keep the existing Total Reminders Add Reminder FAB.
 
 Requirements:
 
@@ -1916,7 +1916,7 @@ Month + Week
 
 **## PHASE 7 — REAL DATA**
 
-Connect every Calendar view to the existing Total Reminder reminder data.
+Connect every Calendar view to the existing Total Reminders reminder data.
 
 Verify recurring reminders.
 
@@ -2088,7 +2088,7 @@ It should look like a professional productivity workspace.
 
 The visual hierarchy should be:
 
-Total Reminder
+Total Reminders
 
 ↓
 
@@ -2110,7 +2110,7 @@ Detailed Schedule
 
 **# 63. FINAL USER EXPERIENCE**
 
-The user should be able to open Total Reminder and immediately understand:
+The user should be able to open Total Reminders and immediately understand:
 
 \- What day is today?
 
@@ -2152,7 +2152,7 @@ For seeing the entire month at a glance.
 
 Do not implement the design only as a visual mockup.
 
-All views must use real Total Reminder data.
+All views must use real Total Reminders data.
 
 Do not break existing functionality to achieve the visual design.
 
@@ -2198,4 +2198,4 @@ After implementation report:
 
 14\. Any recommended next steps
 
-Do not declare the redesign complete until all three Calendar views work with the existing Total Reminder reminder data.
+Do not declare the redesign complete until all three Calendar views work with the existing Total Reminders reminder data.

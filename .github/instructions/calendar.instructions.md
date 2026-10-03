@@ -1,8 +1,8 @@
-# Total Reminder Calendar — Complete UI/UX Redesign Instructions
+# Total Reminders Calendar — Complete UI/UX Redesign Instructions
 
 ## Objective
 
-Completely redesign the existing Total Reminder Calendar screen.
+Completely redesign the existing Total Reminders Calendar screen.
 
 The new Calendar experience should closely follow the interaction flow, spacing, hierarchy, visual simplicity, and transition behavior shown in the provided reference screenshots.
 
@@ -574,7 +574,7 @@ Use a smooth scale/fade animation when opening the creation UI.
 
 # 20. Bottom Navigation
 
-Keep the existing Total Reminder bottom navigation architecture.
+Keep the existing Total Reminders bottom navigation architecture.
 
 Calendar must be highlighted when active.
 
@@ -635,7 +635,7 @@ Light mode should be intentionally designed.
 
 Do NOT hard-code arbitrary colors throughout the Calendar widgets.
 
-Use the existing Total Reminder theme system.
+Use the existing Total Reminders theme system.
 
 Create/use semantic colors such as:
 

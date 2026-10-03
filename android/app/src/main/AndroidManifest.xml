@@ -4,7 +4,7 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <application
-        android:label="Total Reminder"
+        android:label="Total Reminders"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
