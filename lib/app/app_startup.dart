@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../features/reminders/services/reminder_storage.dart';
 import '../services/notification_service.dart';
-import '../theme/app_theme.dart';
 import '../theme/theme_preference_store.dart';
 import 'app.dart';
 
@@ -37,7 +36,7 @@ class _AppStartupState extends State<AppStartup> {
         if (configuration != null) {
           return AppSmarana(
             initialThemeMode: configuration.themeMode,
-            initialColorTheme: configuration.colorTheme,
+            initialAccentColor: configuration.accentColor,
             themePreferenceStore: configuration.themePreferenceStore,
           );
         }
@@ -165,11 +164,11 @@ Future<_AppStartupConfiguration> _initializeApplication() async {
 
     const themePreferenceStore = ThemePreferenceStore();
     final themeMode = await themePreferenceStore.loadThemeMode();
-    final colorTheme = await themePreferenceStore.loadColorTheme();
+    final accentColor = await themePreferenceStore.loadAccentColor();
 
     return _AppStartupConfiguration(
       themeMode: themeMode,
-      colorTheme: colorTheme,
+      accentColor: accentColor,
       themePreferenceStore: themePreferenceStore,
     );
   } on Object catch (error, stackTrace) {
@@ -187,11 +186,11 @@ Future<_AppStartupConfiguration> _initializeApplication() async {
 class _AppStartupConfiguration {
   const _AppStartupConfiguration({
     required this.themeMode,
-    required this.colorTheme,
+    required this.accentColor,
     required this.themePreferenceStore,
   });
 
   final ThemeMode themeMode;
-  final SmaranaColorTheme colorTheme;
+  final Color accentColor;
   final ThemePreferenceStore themePreferenceStore;
 }

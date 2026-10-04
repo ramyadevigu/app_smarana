@@ -14,8 +14,8 @@ class SettingsScreen extends StatefulWidget {
     required this.selectedCalendarViewMode,
     required this.onThemeModeChanged,
     required this.onCalendarViewModeChanged,
-    this.selectedColorTheme = SmaranaColorTheme.blue,
-    this.onColorThemeChanged,
+    this.selectedAccentColor = defaultAccentColor,
+    this.onAccentColorChanged,
     this.preferencesStore,
   });
 
@@ -23,8 +23,8 @@ class SettingsScreen extends StatefulWidget {
   final CalendarViewMode selectedCalendarViewMode;
   final Future<void> Function(ThemeMode) onThemeModeChanged;
   final Future<void> Function(CalendarViewMode) onCalendarViewModeChanged;
-  final SmaranaColorTheme selectedColorTheme;
-  final Future<void> Function(SmaranaColorTheme)? onColorThemeChanged;
+  final Color selectedAccentColor;
+  final Future<void> Function(Color)? onAccentColorChanged;
   final ReminderPreferencesStore? preferencesStore;
 
   @override
@@ -33,7 +33,7 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   late final ReminderPreferencesStore _preferencesStore;
-  late SmaranaColorTheme _selectedColorTheme;
+  late Color _selectedAccentColor;
   ReminderDefaults _defaults = const ReminderDefaults();
   List<ReminderSoundOption> _availableSounds = const [];
   Future<void> _saveQueue = Future<void>.value();
@@ -42,7 +42,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
-    _selectedColorTheme = widget.selectedColorTheme;
+    _selectedAccentColor = widget.selectedAccentColor;
     _preferencesStore =
         widget.preferencesStore ?? const ReminderPreferencesStore();
     _loadDefaults();
@@ -52,8 +52,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void didUpdateWidget(covariant SettingsScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.selectedColorTheme != widget.selectedColorTheme) {
-      _selectedColorTheme = widget.selectedColorTheme;
+    if (oldWidget.selectedAccentColor != widget.selectedAccentColor) {
+      _selectedAccentColor = widget.selectedAccentColor;
     }
   }
 
@@ -198,14 +198,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  Future<void> _changeColorTheme(SmaranaColorTheme colorTheme) async {
-    if (_selectedColorTheme == colorTheme) {
+  Future<void> _selectAccentColor() async {
+    final accentColor = await showDialog<Color>(
+      context: context,
+      builder: (_) =>
+          _AccentColorPickerDialog(initialColor: _selectedAccentColor),
+    );
+    if (accentColor != null && mounted) {
+      await _changeAccentColor(accentColor);
+    }
+  }
+
+  Future<void> _changeAccentColor(Color accentColor) async {
+    if (_selectedAccentColor == accentColor) {
       return;
     }
 
-    setState(() => _selectedColorTheme = colorTheme);
+    setState(() => _selectedAccentColor = accentColor);
     try {
-      await widget.onColorThemeChanged?.call(colorTheme);
+      await widget.onAccentColorChanged?.call(accentColor);
     } on Exception {
       if (mounted) {
         _showSaveError();
@@ -352,31 +363,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
               const Divider(height: 1),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-                child: Text(
-                  'Color theme',
-                  style: Theme.of(context).textTheme.titleSmall,
+              ListTile(
+                key: const ValueKey('settings-accent-color-picker'),
+                leading: Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: _selectedAccentColor,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: colorScheme.outlineVariant),
+                  ),
                 ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
-                child: Text(
-                  _selectedColorTheme.label,
-                  style: Theme.of(context).textTheme.bodySmall
-                      ?.copyWith(color: colorScheme.onSurfaceVariant),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                child: Wrap(
-                  spacing: 4,
-                  runSpacing: 4,
-                  children: [
-                    for (final colorTheme in SmaranaColorTheme.values)
-                      _colorThemeSwatch(context, colorTheme),
-                  ],
-                ),
+                title: const Text('Accent color'),
+                subtitle: const Text('Customize the app color'),
+                trailing: const Icon(Icons.tune),
+                onTap: _selectAccentColor,
               ),
               const Divider(height: 1),
               Padding(
@@ -413,48 +414,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _colorThemeSwatch(BuildContext context, SmaranaColorTheme colorTheme) {
-    final selected = _selectedColorTheme == colorTheme;
-    final foreground = AppColors.highContrastForeground(colorTheme.color);
-    return Semantics(
-      button: true,
-      selected: selected,
-      label: '${colorTheme.label} color theme',
-      child: Tooltip(
-        message: colorTheme.label,
-        child: InkWell(
-          key: ValueKey('settings-color-theme-${colorTheme.name}'),
-          customBorder: const CircleBorder(),
-          onTap: () => _changeColorTheme(colorTheme),
-          child: SizedBox(
-            width: 44,
-            height: 44,
-            child: Center(
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 160),
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: colorTheme.color,
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: selected
-                        ? Theme.of(context).colorScheme.primary
-                        : Theme.of(context).colorScheme.outlineVariant,
-                    width: selected ? 2 : 1,
-                  ),
-                ),
-                child: selected
-                    ? Icon(Icons.check_rounded, size: 18, color: foreground)
-                    : null,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _sectionHeading(BuildContext context, IconData icon, String title) {
     final colorScheme = Theme.of(context).colorScheme;
     return Row(
@@ -478,6 +437,152 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(mainAxisSize: MainAxisSize.min, children: children),
+    );
+  }
+}
+
+class _AccentColorPickerDialog extends StatefulWidget {
+  const _AccentColorPickerDialog({required this.initialColor});
+
+  final Color initialColor;
+
+  @override
+  State<_AccentColorPickerDialog> createState() =>
+      _AccentColorPickerDialogState();
+}
+
+class _AccentColorPickerDialogState extends State<_AccentColorPickerDialog> {
+  late HSLColor _selectedColor;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedColor = HSLColor.fromColor(widget.initialColor);
+  }
+
+  Color get _color => _selectedColor.toColor();
+
+  String get _hexColor {
+    final rgb = (_color.toARGB32() & 0x00FFFFFF)
+        .toRadixString(16)
+        .padLeft(6, '0')
+        .toUpperCase();
+    return '#$rgb';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return AlertDialog(
+      title: const Text('Choose accent color'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Semantics(
+              label: 'Accent color preview $_hexColor',
+              child: Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  color: _color,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: colorScheme.outlineVariant),
+                ),
+                child: Icon(
+                  Icons.check_rounded,
+                  color: AppColors.highContrastForeground(_color),
+                  size: 32,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(_hexColor, style: Theme.of(context).textTheme.labelLarge),
+            const SizedBox(height: 12),
+            _buildSlider(
+              label: 'Hue',
+              value: _selectedColor.hue,
+              min: 0,
+              max: 360,
+              divisions: 360,
+              valueLabel: '${_selectedColor.hue.round()}°',
+              sliderKey: const ValueKey('accent-hue-slider'),
+              onChanged: (value) => setState(
+                () => _selectedColor = _selectedColor.withHue(value),
+              ),
+            ),
+            _buildSlider(
+              label: 'Saturation',
+              value: _selectedColor.saturation,
+              min: 0,
+              max: 1,
+              divisions: 100,
+              valueLabel: '${(_selectedColor.saturation * 100).round()}%',
+              sliderKey: const ValueKey('accent-saturation-slider'),
+              onChanged: (value) => setState(
+                () => _selectedColor = _selectedColor.withSaturation(value),
+              ),
+            ),
+            _buildSlider(
+              label: 'Lightness',
+              value: _selectedColor.lightness,
+              min: 0,
+              max: 1,
+              divisions: 100,
+              valueLabel: '${(_selectedColor.lightness * 100).round()}%',
+              sliderKey: const ValueKey('accent-lightness-slider'),
+              onChanged: (value) => setState(
+                () => _selectedColor = _selectedColor.withLightness(value),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(_color),
+          child: const Text('Use color'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSlider({
+    required String label,
+    required double value,
+    required double min,
+    required double max,
+    required int divisions,
+    required String valueLabel,
+    required Key sliderKey,
+    required ValueChanged<double> onChanged,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(child: Text(label)),
+            Text(valueLabel, style: Theme.of(context).textTheme.labelMedium),
+          ],
+        ),
+        Semantics(
+          label: label,
+          child: Slider(
+            key: sliderKey,
+            value: value,
+            min: min,
+            max: max,
+            divisions: divisions,
+            label: valueLabel,
+            onChanged: onChanged,
+          ),
+        ),
+      ],
     );
   }
 }

@@ -1,5 +1,5 @@
 ---
-name: app-developer
+name: Total Reminders Agent
 target: vscode
 model: GPT-6 Luna (copilot)
 applyTo: "**"

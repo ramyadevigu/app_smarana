@@ -3,38 +3,20 @@ import 'package:flutter/material.dart';
 
 import 'app_colors.dart';
 
-enum SmaranaColorTheme {
-  blue('Blue', 0xFF4773FA),
-  cyan('Cyan', 0xFF93DCED),
-  mint('Mint', 0xFF9CE3D3),
-  lightGreen('Light Green', 0xFFCAE0B9),
-  peach('Peach / Amber', 0xFFFBD6A1),
-  pink('Pink', 0xFFF7BED1),
-  lavender('Lavender', 0xFFD0C6FA);
+const Color defaultAccentColor = Color(0xFF4773FA);
 
-  const SmaranaColorTheme(this.label, this.value);
+ThemeData buildLightTheme([Color accentColor = defaultAccentColor]) =>
+    _buildTheme(accentColor, brightness: Brightness.light);
 
-  final String label;
-  final int value;
+ThemeData buildDarkTheme([Color accentColor = defaultAccentColor]) =>
+    _buildTheme(accentColor, brightness: Brightness.dark);
 
-  Color get color => Color(value);
-}
+final ThemeData lightTheme = buildLightTheme();
+final ThemeData darkTheme = buildDarkTheme();
 
-ThemeData buildLightTheme(SmaranaColorTheme colorTheme) =>
-    _buildTheme(colorTheme, brightness: Brightness.light);
-
-ThemeData buildDarkTheme(SmaranaColorTheme colorTheme) =>
-    _buildTheme(colorTheme, brightness: Brightness.dark);
-
-final ThemeData lightTheme = buildLightTheme(SmaranaColorTheme.blue);
-final ThemeData darkTheme = buildDarkTheme(SmaranaColorTheme.blue);
-
-ThemeData _buildTheme(
-  SmaranaColorTheme colorTheme, {
-  required Brightness brightness,
-}) {
+ThemeData _buildTheme(Color accentColor, {required Brightness brightness}) {
   final isLight = brightness == Brightness.light;
-  final primary = colorTheme.color;
+  final primary = accentColor;
   final onPrimary = AppColors.highContrastForeground(primary);
   final background = isLight
       ? Color.lerp(AppColors.lightBackground, primary, 0.025)!
@@ -149,7 +131,9 @@ ThemeData _buildTheme(
     ),
     snackBarTheme: SnackBarThemeData(
       behavior: SnackBarBehavior.floating,
-      backgroundColor: isLight ? AppColors.deepBlack : AppColors.darkSurfaceHigh,
+      backgroundColor: isLight
+          ? AppColors.deepBlack
+          : AppColors.darkSurfaceHigh,
       contentTextStyle: const TextStyle(color: AppColors.white),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
     ),

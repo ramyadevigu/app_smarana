@@ -22,12 +22,12 @@ class AppSmarana extends StatefulWidget {
   const AppSmarana({
     super.key,
     this.initialThemeMode = ThemeMode.system,
-    this.initialColorTheme = SmaranaColorTheme.blue,
+    this.initialAccentColor = defaultAccentColor,
     this.themePreferenceStore = const ThemePreferenceStore(),
   });
 
   final ThemeMode initialThemeMode;
-  final SmaranaColorTheme initialColorTheme;
+  final Color initialAccentColor;
   final ThemePreferenceStore themePreferenceStore;
 
   @override
@@ -37,7 +37,7 @@ class AppSmarana extends StatefulWidget {
 class _AppSmaranaState extends State<AppSmarana> {
   final _navigatorKey = GlobalKey<NavigatorState>();
   late ThemeMode _themeMode;
-  late SmaranaColorTheme _colorTheme;
+  late Color _accentColor;
   StreamSubscription<String>? _notificationSubscription;
   bool _openingNotificationReminder = false;
 
@@ -45,7 +45,7 @@ class _AppSmaranaState extends State<AppSmarana> {
   void initState() {
     super.initState();
     _themeMode = widget.initialThemeMode;
-    _colorTheme = widget.initialColorTheme;
+    _accentColor = widget.initialAccentColor;
     final notifications = NotificationService.instance;
     _notificationSubscription = notifications.openedReminderIds.listen(
       _openReminderFromNotification,
@@ -113,13 +113,13 @@ class _AppSmaranaState extends State<AppSmarana> {
     await widget.themePreferenceStore.saveThemeMode(themeMode);
   }
 
-  Future<void> _changeColorTheme(SmaranaColorTheme colorTheme) async {
-    if (_colorTheme == colorTheme) {
+  Future<void> _changeAccentColor(Color accentColor) async {
+    if (_accentColor == accentColor) {
       return;
     }
 
-    setState(() => _colorTheme = colorTheme);
-    await widget.themePreferenceStore.saveColorTheme(colorTheme);
+    setState(() => _accentColor = accentColor);
+    await widget.themePreferenceStore.saveAccentColor(accentColor);
   }
 
   @override
@@ -128,14 +128,14 @@ class _AppSmaranaState extends State<AppSmarana> {
       navigatorKey: _navigatorKey,
       title: 'Total Reminders',
       debugShowCheckedModeBanner: false,
-      theme: buildLightTheme(_colorTheme),
-      darkTheme: buildDarkTheme(_colorTheme),
+      theme: buildLightTheme(_accentColor),
+      darkTheme: buildDarkTheme(_accentColor),
       themeMode: _themeMode,
       home: HomeScreen(
         selectedThemeMode: _themeMode,
         onThemeModeChanged: _changeThemeMode,
-        selectedColorTheme: _colorTheme,
-        onColorThemeChanged: _changeColorTheme,
+        selectedAccentColor: _accentColor,
+        onAccentColorChanged: _changeAccentColor,
       ),
     );
   }
@@ -146,14 +146,14 @@ class HomeScreen extends StatefulWidget {
     super.key,
     this.selectedThemeMode = ThemeMode.system,
     this.onThemeModeChanged,
-    this.selectedColorTheme = SmaranaColorTheme.blue,
-    this.onColorThemeChanged,
+    this.selectedAccentColor = defaultAccentColor,
+    this.onAccentColorChanged,
   });
 
   final ThemeMode selectedThemeMode;
   final Future<void> Function(ThemeMode)? onThemeModeChanged;
-  final SmaranaColorTheme selectedColorTheme;
-  final Future<void> Function(SmaranaColorTheme)? onColorThemeChanged;
+  final Color selectedAccentColor;
+  final Future<void> Function(Color)? onAccentColorChanged;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -317,11 +317,11 @@ class _HomeScreenState extends State<HomeScreen> {
           MaterialPageRoute<void>(
             builder: (_) => SettingsScreen(
               selectedThemeMode: widget.selectedThemeMode,
-              selectedColorTheme: widget.selectedColorTheme,
+              selectedAccentColor: widget.selectedAccentColor,
               selectedCalendarViewMode: _calendarViewMode,
               onCalendarViewModeChanged: _changeCalendarViewMode,
               onThemeModeChanged: _changeThemeMode,
-              onColorThemeChanged: widget.onColorThemeChanged,
+              onAccentColorChanged: widget.onAccentColorChanged,
             ),
           ),
         );

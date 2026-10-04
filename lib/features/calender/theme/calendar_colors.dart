@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../../theme/app_theme.dart';
-
 class CalendarEventColor {
   const CalendarEventColor(this.baseColor);
 
@@ -9,7 +7,7 @@ class CalendarEventColor {
 
   Color foreground(bool isDark) {
     return HSLColor.fromColor(baseColor)
-        .withLightness(isDark ? 0.78 : 0.3)
+        .withLightness(isDark ? 0.78 : 0.25)
         .toColor();
   }
 
@@ -18,17 +16,12 @@ class CalendarEventColor {
 }
 
 abstract final class CalendarColors {
-  static final List<CalendarEventColor> events =
-      List<CalendarEventColor>.unmodifiable([
-        for (final theme in SmaranaColorTheme.values)
-          CalendarEventColor(theme.color),
-      ]);
-
   static CalendarEventColor forReminder(String id) {
     var hash = 0;
     for (final codeUnit in id.codeUnits) {
       hash = (hash * 31 + codeUnit) & 0x7fffffff;
     }
-    return events[hash % events.length];
+    final hue = (hash % 360).toDouble();
+    return CalendarEventColor(HSLColor.fromAHSL(1, hue, 0.72, 0.48).toColor());
   }
 }

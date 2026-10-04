@@ -74,57 +74,54 @@ void main() {
     expect(_activeBrightness(tester), Brightness.dark);
   });
 
-  testWidgets('color theme selection updates and persists all seven choices', (
-    tester,
-  ) async {
+  testWidgets('custom accent color updates and persists', (tester) async {
     await tester.pumpWidget(const AppSmarana());
     await _openSettings(tester);
 
-    expect(SmaranaColorTheme.values, hasLength(7));
-    final lavender = find.byKey(
-      const ValueKey('settings-color-theme-lavender'),
-    );
-    await tester.ensureVisible(lavender);
+    final picker = find.byKey(const ValueKey('settings-accent-color-picker'));
+    await tester.ensureVisible(picker);
     await tester.pumpAndSettle();
-    for (final colorTheme in SmaranaColorTheme.values) {
-      expect(
-        find.byKey(ValueKey('settings-color-theme-${colorTheme.name}')),
-        findsOneWidget,
-      );
-    }
-
-    await tester.tap(lavender);
+    await tester.tap(picker);
+    await tester.pumpAndSettle();
+    expect(find.text('Choose accent color'), findsOneWidget);
+    final hueSlider = find.byKey(const ValueKey('accent-hue-slider'));
+    expect(hueSlider, findsOneWidget);
+    await tester.drag(hueSlider, const Offset(500, 0));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Use color'));
     await tester.pumpAndSettle();
 
     final appTheme = tester.widget<MaterialApp>(find.byType(MaterialApp));
-    expect(
-      appTheme.theme!.colorScheme.primary,
-      SmaranaColorTheme.lavender.color,
-    );
-    expect(
-      (await SharedPreferences.getInstance()).getString('colorTheme'),
-      'lavender',
-    );
+    final selectedAccent = appTheme.theme!.colorScheme.primary;
+    expect(selectedAccent, isNot(defaultAccentColor));
+    final preferences = await SharedPreferences.getInstance();
+    expect(preferences.getString('colorTheme'), startsWith('#'));
 
     await tester.pumpWidget(const SizedBox.shrink());
-    final restoredColorTheme = await const ThemePreferenceStore()
-        .loadColorTheme();
-    await tester.pumpWidget(AppSmarana(initialColorTheme: restoredColorTheme));
+    final restoredAccent = await const ThemePreferenceStore().loadAccentColor();
+    expect(restoredAccent, selectedAccent);
+    await tester.pumpWidget(AppSmarana(initialAccentColor: restoredAccent));
     expect(
       tester
           .widget<MaterialApp>(find.byType(MaterialApp))
           .theme!
           .colorScheme
           .primary,
-      SmaranaColorTheme.lavender.color,
+      selectedAccent,
     );
   });
 
-  test('each selectable theme has readable primary foregrounds', () {
-    for (final colorTheme in SmaranaColorTheme.values) {
+  test('custom accent colors have readable primary foregrounds', () {
+    for (var hue = 0; hue <= 360; hue += 15) {
+      final accentColor = HSLColor.fromAHSL(
+        1,
+        hue.toDouble(),
+        0.8,
+        0.5,
+      ).toColor();
       for (final theme in [
-        buildLightTheme(colorTheme),
-        buildDarkTheme(colorTheme),
+        buildLightTheme(accentColor),
+        buildDarkTheme(accentColor),
       ]) {
         final primary = theme.colorScheme.primary;
         final foreground = theme.colorScheme.onPrimary;
@@ -140,10 +137,42 @@ void main() {
         expect(
           (lighter + 0.05) / (darker + 0.05),
           greaterThanOrEqualTo(4.5),
-          reason: '${colorTheme.label} ${theme.brightness} primary contrast',
+          reason: '$accentColor ${theme.brightness} primary contrast',
         );
       }
     }
+  });
+
+  test('previously selected named colors remain supported', () async {
+    SharedPreferences.setMockInitialValues({'colorTheme': 'lavender'});
+
+    expect(
+      await const ThemePreferenceStore().loadAccentColor(),
+      const Color(0xFFD0C6FA),
+    );
+  });
+
+  testWidgets('accent color picker works on a compact screen', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(320, 640);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+
+    await tester.pumpWidget(const AppSmarana());
+    await _openSettings(tester);
+    final picker = find.byKey(const ValueKey('settings-accent-color-picker'));
+    await tester.ensureVisible(picker);
+    await tester.pumpAndSettle();
+    await tester.tap(picker);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Choose accent color'), findsOneWidget);
+    expect(find.byKey(const ValueKey('accent-hue-slider')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('reminders, form, and pickers use light and dark themes', (
