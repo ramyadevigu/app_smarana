@@ -4,7 +4,19 @@ enum NotebookIconType { work, goals, journal, health, ideas, general }
 
 enum NoteAttachmentType { image, file }
 
-enum NoteCardColor { standard, blue, cyan, mint, lightGreen, peach, pink, lavender }
+enum NoteCardColor {
+  standard,
+  yellow,
+  pink,
+  purple,
+  blue,
+  green,
+  cyan,
+  orange,
+  lavender,
+  sky,
+  mint,
+}
 
 enum NoteProjectPriority { low, medium, high }
 
@@ -217,16 +229,19 @@ class NoteSection {
     required this.id,
     required this.name,
     required this.createdAt,
+    this.color = NoteCardColor.standard,
   });
 
   final String id;
   final String name;
   final DateTime createdAt;
+  final NoteCardColor color;
 
   Map<String, Object?> toJson() => {
     'id': id,
     'name': name,
     'createdAt': createdAt.toIso8601String(),
+    'color': color.name,
   };
 
   factory NoteSection.fromJson(Map<String, Object?> json) {
@@ -234,11 +249,17 @@ class NoteSection {
       id: json['id'] is String ? json['id']! as String : '',
       name: json['name'] is String ? json['name']! as String : 'General',
       createdAt: _readDate(json['createdAt']) ?? DateTime.now(),
+      color: _readNoteCardColor(json['color']),
     );
   }
 
-  NoteSection copyWith({String? name}) {
-    return NoteSection(id: id, name: name ?? this.name, createdAt: createdAt);
+  NoteSection copyWith({String? name, NoteCardColor? color}) {
+    return NoteSection(
+      id: id,
+      name: name ?? this.name,
+      createdAt: createdAt,
+      color: color ?? this.color,
+    );
   }
 }
 
@@ -256,7 +277,7 @@ class NoteEntry {
     required this.updatedAt,
     this.reminderId,
     this.isPinned = false,
-    this.color = NoteCardColor.standard,
+    this.color = NoteCardColor.yellow,
   });
 
   final String id;
@@ -424,14 +445,21 @@ NoteProjectStatus _readProjectStatus(Object? value) {
 }
 
 NoteCardColor _readNoteCardColor(Object? value) {
-  if (value is String) {
-    for (final color in NoteCardColor.values) {
-      if (color.name == value) {
-        return color;
-      }
-    }
+  return noteCardColorFromName(value);
+}
+
+NoteCardColor noteCardColorFromName(Object? value) {
+  if (value is! String) {
+    return NoteCardColor.standard;
   }
-  return NoteCardColor.standard;
+  return switch (value) {
+    'lightGreen' => NoteCardColor.green,
+    'peach' => NoteCardColor.orange,
+    _ => NoteCardColor.values.firstWhere(
+      (color) => color.name == value,
+      orElse: () => NoteCardColor.standard,
+    ),
+  };
 }
 
 class RecentNoteView {
@@ -441,6 +469,7 @@ class RecentNoteView {
     required this.notebookIconType,
     required this.notebookName,
     required this.sectionName,
+    this.tagColors = const {},
   });
 
   final NoteEntry note;
@@ -448,6 +477,7 @@ class RecentNoteView {
   final NotebookIconType notebookIconType;
   final String notebookName;
   final String sectionName;
+  final Map<String, NoteCardColor> tagColors;
 }
 
 List<T> _readObjects<T>(Object? value, T Function(Map<String, Object?>) parse) {

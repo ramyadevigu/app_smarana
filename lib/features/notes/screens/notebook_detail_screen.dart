@@ -6,6 +6,8 @@ import '../../reminders/services/reminder_storage.dart';
 import '../models/note_workspace_models.dart';
 import '../models/rich_note_draft.dart';
 import '../services/note_attachment_storage.dart';
+import '../theme/note_card_colors.dart';
+import '../widgets/note_tag_chip.dart';
 import 'rich_note_editor_screen.dart';
 
 enum NotebookViewMode { notes, list, kanban }
@@ -25,6 +27,8 @@ class NotebookDetailScreen extends StatefulWidget {
     this.reminderStorage,
     this.createNoteOnOpen = false,
     this.initialNoteId,
+    this.tagColors = const {},
+    this.onTagColorsChanged,
   });
 
   final Notebook notebook;
@@ -32,6 +36,9 @@ class NotebookDetailScreen extends StatefulWidget {
   final ReminderStorage? reminderStorage;
   final bool createNoteOnOpen;
   final String? initialNoteId;
+  final Map<String, NoteCardColor> tagColors;
+  final Future<void> Function(Map<String, NoteCardColor> tagColors)?
+  onTagColorsChanged;
 
   @override
   State<NotebookDetailScreen> createState() => _NotebookDetailScreenState();
@@ -42,6 +49,7 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
   late String _selectedSectionId;
   late final ReminderStorage _reminderStorage;
   late final NoteAttachmentStorage _attachmentStorage;
+  late Map<String, NoteCardColor> _tagColors;
   NotebookViewMode _viewMode = NotebookViewMode.notes;
 
   @override
@@ -51,6 +59,7 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
     _selectedSectionId = _notebook.sections.first.id;
     _reminderStorage = widget.reminderStorage ?? ReminderStorage();
     _attachmentStorage = NoteAttachmentStorage();
+    _tagColors = Map<String, NoteCardColor>.of(widget.tagColors);
     if (widget.createNoteOnOpen) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
@@ -195,6 +204,7 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
       content: '',
       createdAt: now,
       updatedAt: now,
+      color: nextBalancedNoteColor(_notebook.notes),
     );
 
     var wasInserted = false;
@@ -205,6 +215,9 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
           notebookName: _notebook.name,
           sections: _notebook.sections,
           initialSectionId: _selectedSectionId,
+          tagColors: _tagColors,
+          onTagColorsChanged: _updateTagColors,
+          onSectionColorChanged: _changeSectionColor,
           reminderStorage: _reminderStorage,
           onDuplicate: _duplicateDraft,
           onDelete: (draft) async {
@@ -280,6 +293,9 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
           notebookName: _notebook.name,
           sections: _notebook.sections,
           initialSectionId: note.sectionId,
+          tagColors: _tagColors,
+          onTagColorsChanged: _updateTagColors,
+          onSectionColorChanged: _changeSectionColor,
           reminderStorage: _reminderStorage,
           onDuplicate: _duplicateDraft,
           onDelete: (draft) async {
@@ -358,6 +374,47 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
       _notebook = updated;
     });
     await widget.onNotebookChanged?.call(updated);
+  }
+
+  Future<void> _updateTagColors(Map<String, NoteCardColor> tagColors) async {
+    setState(() {
+      _tagColors = Map<String, NoteCardColor>.of(tagColors);
+    });
+    await widget.onTagColorsChanged?.call(_tagColors);
+  }
+
+  Future<void> _changeTagColor(String tag, NoteCardColor color) async {
+    final updated = Map<String, NoteCardColor>.of(_tagColors)
+      ..[tag.trim().toLowerCase()] = color;
+    await _updateTagColors(updated);
+  }
+
+  Future<void> _changeSectionColor(
+    String sectionId,
+    NoteCardColor color,
+  ) async {
+    final now = DateTime.now();
+    final sections = _notebook.sections
+        .map(
+          (section) => section.id == sectionId
+              ? section.copyWith(color: color)
+              : section,
+        )
+        .toList();
+    await _publishNotebook(
+      _notebook.copyWith(sections: sections, updatedAt: now),
+    );
+  }
+
+  Future<void> _pickTagColor(String tag) async {
+    final currentColor = _tagColor(tag, 0);
+    final selectedColor = await showNoteTagColorPicker(
+      context,
+      current: currentColor,
+    );
+    if (selectedColor != null && mounted) {
+      await _changeTagColor(tag, selectedColor);
+    }
   }
 
   NoteEntry _noteFromDraft({
@@ -682,6 +739,17 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
         final note = notes[index];
         final metadata = note.projectMetadata;
         return Card(
+          color: noteCardSurfaceColor(theme, note.color),
+          surfaceTintColor: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: BorderSide(
+              color: noteCardAccentColor(
+                theme,
+                note.color,
+              ).withValues(alpha: 0.2),
+            ),
+          ),
           child: ListTile(
             onTap: () => _editNote(note),
             leading: note.reminderId != null
@@ -705,6 +773,13 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
                     spacing: 6,
                     runSpacing: 6,
                     children: [
+                      for (var index = 0; index < metadata.tags.length; index++)
+                        NoteTagChip(
+                          label: metadata.tags[index],
+                          color: _tagColor(metadata.tags[index], index),
+                          onColorChange: () =>
+                              _pickTagColor(metadata.tags[index]),
+                        ),
                       _statusChip(metadata.status),
                       if (metadata.priority != null)
                         Chip(
@@ -754,16 +829,36 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
         final metadata = note.projectMetadata;
         final status = metadata?.status ?? NoteProjectStatus.toDo;
         return Card(
+          color: noteCardSurfaceColor(theme, note.color),
+          surfaceTintColor: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: BorderSide(
+              color: noteCardAccentColor(
+                theme,
+                note.color,
+              ).withValues(alpha: 0.2),
+            ),
+          ),
           child: ListTile(
             key: ValueKey('list-note-${note.id}'),
             onTap: () => _editNote(note),
             title: Text(note.title.isEmpty ? 'Untitled note' : note.title),
-            subtitle: Text(
-              metadata?.owner == null
-                  ? _statusLabel(status)
-                  : 'Owner: ${metadata!.owner} · ${_statusLabel(status)}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  metadata?.owner == null
+                      ? _statusLabel(status)
+                      : 'Owner: ${metadata!.owner} · ${_statusLabel(status)}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (metadata?.tags.isNotEmpty ?? false) ...[
+                  const SizedBox(height: 4),
+                  _buildNoteTags(metadata!.tags),
+                ],
+              ],
             ),
             leading: _statusChip(status),
             trailing: PopupMenuButton<NoteProjectStatus>(
@@ -944,6 +1039,14 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
   }) {
     final metadata = note.projectMetadata;
     return Card(
+      color: noteCardSurfaceColor(theme, note.color),
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(
+          color: noteCardAccentColor(theme, note.color).withValues(alpha: 0.2),
+        ),
+      ),
       child: ListTile(
         dense: true,
         onTap: () => _editNote(note),
@@ -952,16 +1055,47 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
-        subtitle: Text(
-          metadata?.owner == null ? note.preview : 'Owner: ${metadata!.owner}',
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: colorScheme.onSurfaceVariant,
-          ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              metadata?.owner == null
+                  ? note.preview
+                  : 'Owner: ${metadata!.owner}',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+            if (metadata?.tags.isNotEmpty ?? false) ...[
+              const SizedBox(height: 4),
+              _buildNoteTags(metadata!.tags),
+            ],
+          ],
         ),
       ),
     );
+  }
+
+  Widget _buildNoteTags(List<String> tags) {
+    return Wrap(
+      spacing: 5,
+      runSpacing: 3,
+      children: [
+        for (var index = 0; index < tags.length; index++)
+          NoteTagChip(
+            label: tags[index],
+            color: _tagColor(tags[index], index),
+            onColorChange: () => _pickTagColor(tags[index]),
+          ),
+      ],
+    );
+  }
+
+  NoteCardColor _tagColor(String tag, int index) {
+    return _tagColors[tag.trim().toLowerCase()] ??
+        selectableNoteCardColors[index % selectableNoteCardColors.length];
   }
 
   Widget _statusChip(NoteProjectStatus status) {

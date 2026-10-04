@@ -17,6 +17,7 @@ void main() {
   ) async {
     await tester.pumpWidget(
       MaterialApp(
+        theme: buildLightTheme(),
         home: RichNoteEditorScreen(
           notebookName: 'Quick Ideas',
           sections: [
@@ -36,6 +37,15 @@ void main() {
       find.byKey(const ValueKey('rich-note-title-field')),
     );
     expect(titleField.controller?.text, 'Untitled');
+    expect(titleField.style?.fontSize, 24);
+    expect(titleField.style?.fontWeight, FontWeight.w700);
+    expect(titleField.decoration?.filled, isFalse);
+    expect(titleField.decoration?.border, InputBorder.none);
+    expect(titleField.decoration?.enabledBorder, InputBorder.none);
+    expect(titleField.decoration?.focusedBorder, InputBorder.none);
+    expect(titleField.decoration?.disabledBorder, InputBorder.none);
+    expect(titleField.decoration?.errorBorder, InputBorder.none);
+    expect(titleField.decoration?.focusedErrorBorder, InputBorder.none);
     expect(find.text('Edit note'), findsNothing);
     expect(find.text('Campaigns'), findsOneWidget);
     expect(find.text('Quick Ideas'), findsOneWidget);
@@ -136,7 +146,7 @@ void main() {
     await tester.tap(find.text('Note color'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Note colors'), findsOneWidget);
+    expect(find.text('Note Colors'), findsOneWidget);
     await tester.tap(find.byTooltip('Pink'));
     await tester.pumpAndSettle();
 
@@ -149,7 +159,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('all seven note colors can be selected', (tester) async {
+  testWidgets('all ten note colors can be selected', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: RichNoteEditorScreen(
@@ -167,13 +177,16 @@ void main() {
     await tester.pumpAndSettle();
 
     for (final color in [
+      'Yellow',
+      'Pink',
+      'Purple',
       'Blue',
+      'Green',
       'Cyan',
       'Mint',
-      'Light Green',
-      'Peach',
-      'Pink',
+      'Orange',
       'Lavender',
+      'Sky',
     ]) {
       await tester.tap(find.byKey(const ValueKey('note-editor-more-menu')));
       await tester.pumpAndSettle();
@@ -193,6 +206,97 @@ void main() {
       await tester.tapAt(const Offset(10, 10));
       await tester.pumpAndSettle();
     }
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('tag colors can be changed and persisted by tag key', (
+    tester,
+  ) async {
+    Map<String, NoteCardColor>? savedTagColors;
+    final now = DateTime(2026, 10, 1);
+    final note = NoteEntry(
+      id: 'tagged-note',
+      notebookId: 'notebook',
+      sectionId: 'section-tags',
+      title: 'Campaign',
+      content: '',
+      projectMetadata: const NoteProjectMetadata(tags: ['Campaigns']),
+      createdAt: now,
+      updatedAt: now,
+      color: NoteCardColor.yellow,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RichNoteEditorScreen(
+          note: note,
+          sections: [
+            NoteSection(id: 'section-tags', name: 'General', createdAt: now),
+          ],
+          initialSectionId: 'section-tags',
+          onTagColorsChanged: (colors) async {
+            savedTagColors = colors;
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Change Campaigns tag color'));
+    await tester.pumpAndSettle();
+    expect(find.text('Tag Color'), findsOneWidget);
+    await tester.tap(find.byTooltip('Lavender'));
+    await tester.pumpAndSettle();
+
+    expect(savedTagColors, containsPair('campaigns', NoteCardColor.lavender));
+    expect(find.byTooltip('Change Campaigns tag color'), findsOneWidget);
+    await tester.tap(find.byTooltip('Change Campaigns tag color'));
+    await tester.pumpAndSettle();
+    expect(
+      find.bySemanticsLabel('Lavender tag color, selected'),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('category chip has no icon and opens its seven colors', (
+    tester,
+  ) async {
+    NoteCardColor? savedColor;
+    String? savedSectionId;
+    final now = DateTime(2026, 10, 1);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RichNoteEditorScreen(
+          sections: [
+            NoteSection(id: 'section-general', name: 'General', createdAt: now),
+          ],
+          initialSectionId: 'section-general',
+          onSectionColorChanged: (sectionId, color) async {
+            savedSectionId = sectionId;
+            savedColor = color;
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byIcon(Icons.folder_outlined), findsNothing);
+    await tester.tap(
+      find.byKey(const ValueKey('rich-note-section-dropdown')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Category Color'), findsOneWidget);
+    expect(find.byType(Tooltip), findsNWidgets(7));
+    await tester.tap(find.byKey(const ValueKey('section-color-pink')));
+    await tester.pumpAndSettle();
+
+    expect(savedSectionId, 'section-general');
+    expect(savedColor, NoteCardColor.pink);
+    expect(
+      find.bySemanticsLabel('Pink category color, selected'),
+      findsNothing,
+    );
     expect(tester.takeException(), isNull);
   });
 
@@ -233,7 +337,7 @@ void main() {
 
     await tester.tap(find.byTooltip('Text and section colors'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Text highlight 1'));
+    await tester.tap(find.byTooltip('Text highlight Yellow'));
     await tester.pumpAndSettle();
     await tester.pump(const Duration(milliseconds: 800));
     await tester.pump();
@@ -255,6 +359,15 @@ void main() {
     tester,
   ) async {
     const words = ['One', 'two', 'three', 'four', 'five', 'six', 'seven'];
+    const colorNames = [
+      'Yellow',
+      'Pink',
+      'Purple',
+      'Blue',
+      'Green',
+      'Cyan',
+      'Orange',
+    ];
     final content = '${words.join(' ')}\n';
 
     for (final brightness in [Brightness.light, Brightness.dark]) {
@@ -311,7 +424,7 @@ void main() {
         await tester.pump();
         await tester.tap(find.byTooltip('Text and section colors'));
         await tester.pumpAndSettle();
-        await tester.tap(find.byTooltip('Text highlight ${index + 1}'));
+        await tester.tap(find.byTooltip('Text highlight ${colorNames[index]}'));
         await tester.pumpAndSettle();
       }
 
@@ -327,7 +440,7 @@ void main() {
         await tester.pump();
         await tester.tap(find.byTooltip('Text and section colors'));
         await tester.pumpAndSettle();
-        await tester.tap(find.byTooltip('Text color ${index + 1}'));
+        await tester.tap(find.byTooltip('Text color ${colorNames[index]}'));
         await tester.pumpAndSettle();
       }
       await tester.pump(const Duration(milliseconds: 800));

@@ -33,6 +33,7 @@ class _NotesScreenState extends State<NotesScreen> {
   final FocusNode _searchFocusNode = FocusNode();
   late final NoteWorkspaceStorage _workspaceStorage;
   late List<Notebook> _notebooks;
+  Map<String, NoteCardColor> _tagColors = const {};
   bool _isLoading = true;
   String? _storageError;
   NotebookIconType? _selectedCategory;
@@ -68,11 +69,13 @@ class _NotesScreenState extends State<NotesScreen> {
   Future<void> _loadWorkspace() async {
     try {
       final saved = await _workspaceStorage.loadWorkspace();
+      final tagColors = await _workspaceStorage.loadTagColors();
       if (!mounted) {
         return;
       }
       setState(() {
         _notebooks = saved;
+        _tagColors = tagColors;
         _isLoading = false;
       });
     } on Exception catch (error) {
@@ -90,7 +93,7 @@ class _NotesScreenState extends State<NotesScreen> {
 
   Future<void> _persistWorkspace() async {
     try {
-      await _workspaceStorage.saveWorkspace(_notebooks);
+      await _workspaceStorage.saveWorkspace(_notebooks, tagColors: _tagColors);
       if (mounted && _storageError != null) {
         setState(() {
           _storageError = null;
@@ -108,6 +111,21 @@ class _NotesScreenState extends State<NotesScreen> {
         const SnackBar(content: Text('Notes could not be saved.')),
       );
     }
+  }
+
+  Future<void> _updateTagColors(Map<String, NoteCardColor> tagColors) async {
+    setState(() {
+      _tagColors = Map<String, NoteCardColor>.unmodifiable(tagColors);
+    });
+    if (widget.initialNotebooks == null) {
+      await _persistWorkspace();
+    }
+  }
+
+  Future<void> _changeTagColor(String tag, NoteCardColor color) {
+    final updated = Map<String, NoteCardColor>.of(_tagColors)
+      ..[tag.trim().toLowerCase()] = color;
+    return _updateTagColors(updated);
   }
 
   Future<void> _updateNotebook(Notebook updated) async {
@@ -198,6 +216,7 @@ class _NotesScreenState extends State<NotesScreen> {
             notebookIconType: notebook.iconType,
             notebookName: notebook.name,
             sectionName: sectionName,
+            tagColors: _tagColors,
           ),
         );
       }
@@ -311,6 +330,8 @@ class _NotesScreenState extends State<NotesScreen> {
         builder: (_) => NotebookDetailScreen(
           notebook: notebook,
           onNotebookChanged: _updateNotebook,
+          tagColors: _tagColors,
+          onTagColorsChanged: _updateTagColors,
           createNoteOnOpen: createNoteOnOpen,
           initialNoteId: initialNoteId,
         ),
@@ -673,8 +694,8 @@ class _NotesScreenState extends State<NotesScreen> {
       NotebookIconType.work => NoteCardColor.pink,
       NotebookIconType.goals => NoteCardColor.mint,
       NotebookIconType.journal => NoteCardColor.lavender,
-      NotebookIconType.health => NoteCardColor.lightGreen,
-      NotebookIconType.ideas => NoteCardColor.peach,
+      NotebookIconType.health => NoteCardColor.green,
+      NotebookIconType.ideas => NoteCardColor.orange,
       NotebookIconType.general => NoteCardColor.cyan,
     };
   }
@@ -772,6 +793,7 @@ class _NotesScreenState extends State<NotesScreen> {
                     note: note,
                     onTap: () => _openRecentNote(note),
                     onTogglePinned: () => _togglePinnedNote(note),
+                    onTagColorChanged: _changeTagColor,
                   ),
                 ),
               ),
@@ -898,6 +920,7 @@ class _NotesScreenState extends State<NotesScreen> {
                   compact: true,
                   onTap: () => _openRecentNote(note),
                   onTogglePinned: () => _togglePinnedNote(note),
+                  onTagColorChanged: _changeTagColor,
                 ),
               );
             },

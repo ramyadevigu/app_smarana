@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/note_workspace_models.dart';
 import '../theme/note_card_colors.dart';
+import 'note_tag_chip.dart';
 
 class RecentNoteCard extends StatelessWidget {
   const RecentNoteCard({
@@ -9,12 +10,15 @@ class RecentNoteCard extends StatelessWidget {
     required this.note,
     required this.onTap,
     this.onTogglePinned,
+    this.onTagColorChanged,
     this.compact = false,
   });
 
   final RecentNoteView note;
   final VoidCallback onTap;
   final VoidCallback? onTogglePinned;
+  final Future<void> Function(String tag, NoteCardColor color)?
+  onTagColorChanged;
   final bool compact;
 
   @override
@@ -105,6 +109,48 @@ class RecentNoteCard extends StatelessWidget {
                 ),
               ),
             ),
+            if (note.note.projectMetadata?.tags.isNotEmpty ?? false) ...[
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 5,
+                runSpacing: 3,
+                children: [
+                  for (
+                    var index = 0;
+                    index <
+                        (note.note.projectMetadata!.tags.length > 2
+                            ? 2
+                            : note.note.projectMetadata!.tags.length);
+                    index++
+                  )
+                    NoteTagChip(
+                      label: note.note.projectMetadata!.tags[index],
+                      color:
+                          note.tagColors[note.note.projectMetadata!.tags[index]
+                              .trim()
+                              .toLowerCase()] ??
+                          selectableNoteCardColors[index %
+                              selectableNoteCardColors.length],
+                      onColorChange: onTagColorChanged == null
+                          ? null
+                          : () async {
+                              final tag =
+                                  note.note.projectMetadata!.tags[index];
+                              final selected = await showNoteTagColorPicker(
+                                context,
+                                current:
+                                    note.tagColors[tag.trim().toLowerCase()] ??
+                                    selectableNoteCardColors[index %
+                                        selectableNoteCardColors.length],
+                              );
+                              if (selected != null) {
+                                await onTagColorChanged!(tag, selected);
+                              }
+                            },
+                    ),
+                ],
+              ),
+            ],
             const SizedBox(height: 8),
             Row(
               children: [

@@ -10,7 +10,7 @@ class RichNoteDraft {
     this.projectMetadata,
     required this.updatedAt,
     this.reminderId,
-    this.color = NoteCardColor.standard,
+    this.color = NoteCardColor.yellow,
   });
 
   final String title;

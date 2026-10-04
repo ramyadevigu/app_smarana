@@ -17,6 +17,7 @@ import '../models/rich_note_draft.dart';
 import '../services/note_attachment_storage.dart';
 import '../services/note_editor_autosave_service.dart';
 import '../theme/note_card_colors.dart';
+import '../widgets/note_tag_chip.dart';
 import '../widgets/note_table_embed_builder.dart';
 
 enum _NoteEditorAction {
@@ -52,6 +53,9 @@ class RichNoteEditorScreen extends StatefulWidget {
     this.onAutosave,
     this.onDuplicate,
     this.onDelete,
+    this.tagColors = const {},
+    this.onTagColorsChanged,
+    this.onSectionColorChanged,
     this.reminderStorage,
   });
 
@@ -62,6 +66,11 @@ class RichNoteEditorScreen extends StatefulWidget {
   final Future<void> Function(RichNoteDraft draft)? onAutosave;
   final Future<void> Function(RichNoteDraft draft)? onDuplicate;
   final Future<void> Function(RichNoteDraft draft)? onDelete;
+  final Map<String, NoteCardColor> tagColors;
+  final Future<void> Function(Map<String, NoteCardColor> tagColors)?
+  onTagColorsChanged;
+  final Future<void> Function(String sectionId, NoteCardColor color)?
+  onSectionColorChanged;
   final ReminderStorage? reminderStorage;
 
   @override
@@ -82,8 +91,10 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
   late final quill.QuillController _quillController;
   late final ReminderStorage _reminderStorage;
   late String _selectedSectionId;
+  late NoteCardColor _selectedSectionColor;
   late NoteCardColor _selectedNoteColor;
   late List<NoteAttachment> _attachments;
+  late Map<String, NoteCardColor> _tagColors;
   bool _toolbarExpanded = true;
   bool _isExiting = false;
   bool _projectMetadataVisible = false;
@@ -106,16 +117,6 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
   String _reminderSoundName = 'Default';
   List<ReminderSoundOption> _availableAlarmSounds = const [];
 
-  static const List<Color> _formattingColors = [
-    Color(0xFFFFF0BE),
-    Color(0xFFFFDCE7),
-    Color(0xFFE8DDFB),
-    Color(0xFFDDE9FF),
-    Color(0xFFDDF3DC),
-    Color(0xFFD7F3F4),
-    Color(0xFFFFE4C2),
-  ];
-
   @override
   void initState() {
     super.initState();
@@ -125,8 +126,18 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
       _titleController.text = 'Untitled';
     }
     _selectedSectionId = note?.sectionId ?? widget.initialSectionId;
-    _selectedNoteColor = note?.color ?? NoteCardColor.standard;
+    _selectedSectionColor = _sectionColorForId(_selectedSectionId);
+    _selectedNoteColor = note?.color ?? NoteCardColor.yellow;
     _attachments = List<NoteAttachment>.of(note?.attachments ?? const []);
+    _tagColors = Map<String, NoteCardColor>.of(widget.tagColors);
+    final existingTags = note?.projectMetadata?.tags ?? const <String>[];
+    if (_ensureTagColors(existingTags, persist: false)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          unawaited(_persistTagColors());
+        }
+      });
+    }
     _reminderStorage = widget.reminderStorage ?? ReminderStorage();
     final metadata = note?.projectMetadata;
     _projectMetadataVisible = metadata != null;
@@ -1159,8 +1170,35 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
     }
     setState(() {
       _selectedSectionId = sectionId;
+      _selectedSectionColor = _sectionColorForId(sectionId);
     });
     _queueAutosave();
+  }
+
+  NoteCardColor _sectionColorForId(String sectionId) {
+    for (final section in widget.sections) {
+      if (section.id == sectionId) {
+        return section.color;
+      }
+    }
+    return NoteCardColor.standard;
+  }
+
+  Future<void> _showSectionColorPicker() async {
+    final color = await showNoteSectionColorPicker(
+      context,
+      current: _selectedSectionColor,
+    );
+    if (color == null || !mounted || color == _selectedSectionColor) {
+      return;
+    }
+    await widget.onSectionColorChanged?.call(_selectedSectionId, color);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _selectedSectionColor = color;
+    });
   }
 
   Future<void> _showTagsDialog() async {
@@ -1197,7 +1235,108 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
       _projectTagsController.text = tags;
       _projectMetadataVisible = true;
     });
+    _ensureTagColors(_readTags(tags));
     _queueAutosave();
+  }
+
+  List<String> _readTags(String value) {
+    final seen = <String>{};
+    return [
+      for (final raw in value.split(','))
+        if (raw.trim().isNotEmpty && seen.add(raw.trim().toLowerCase()))
+          raw.trim(),
+    ];
+  }
+
+  String _tagKey(String tag) => tag.trim().toLowerCase();
+
+  bool _ensureTagColors(Iterable<String> tags, {bool persist = true}) {
+    final updated = Map<String, NoteCardColor>.of(_tagColors);
+    var changed = false;
+    for (final tag in tags) {
+      final key = _tagKey(tag);
+      if (key.isNotEmpty && !updated.containsKey(key)) {
+        updated[key] = nextBalancedTagColor(updated.values);
+        changed = true;
+      }
+    }
+    if (!changed) {
+      return false;
+    }
+    setState(() {
+      _tagColors = updated;
+    });
+    if (persist) {
+      unawaited(_persistTagColors());
+    }
+    return true;
+  }
+
+  Future<void> _persistTagColors() async {
+    await widget.onTagColorsChanged?.call(
+      Map<String, NoteCardColor>.unmodifiable(_tagColors),
+    );
+  }
+
+  Future<void> _showTagColorPicker(String tag) async {
+    final key = _tagKey(tag);
+    final selectedColor = await showNoteTagColorPicker(
+      context,
+      current: _tagColors[key] ?? selectableNoteCardColors.first,
+    );
+    if (selectedColor == null || !mounted) {
+      return;
+    }
+    setState(() {
+      _tagColors[key] = selectedColor;
+    });
+    await _persistTagColors();
+  }
+
+  Widget _buildColorSwatch(
+    BuildContext context, {
+    required NoteCardColor color,
+    required bool selected,
+    required String tooltip,
+    String? semanticLabel,
+    required VoidCallback onTap,
+  }) {
+    final theme = Theme.of(context);
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: '${semanticLabel ?? tooltip}${selected ? ', selected' : ''}',
+      child: Tooltip(
+        message: tooltip,
+        child: InkWell(
+          key: ValueKey('note-color-${color.name}'),
+          customBorder: const CircleBorder(),
+          onTap: onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: noteCardSwatchColor(theme, color),
+              border: Border.all(
+                color: selected
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.outlineVariant,
+                width: selected ? 2.5 : 1,
+              ),
+            ),
+            child: selected
+                ? Icon(
+                    Icons.check_rounded,
+                    size: 19,
+                    color: noteCardAccentColor(theme, color),
+                  )
+                : null,
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _showAttachmentOptions() async {
@@ -1518,7 +1657,6 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
       showDragHandle: true,
       builder: (context) {
         final theme = Theme.of(context);
-        final colorScheme = theme.colorScheme;
         return Padding(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
           child: Column(
@@ -1526,7 +1664,7 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Note colors',
+                'Note Colors',
                 style: theme.textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
@@ -1536,43 +1674,15 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
                 spacing: 14,
                 runSpacing: 14,
                 children: [
-                  for (final noteColor in NoteCardColor.values)
-                    Semantics(
-                      button: true,
+                  for (final noteColor in selectableNoteCardColors)
+                    _buildColorSwatch(
+                      context,
+                      color: noteColor,
                       selected: _selectedNoteColor == noteColor,
-                      label:
-                          '${noteCardColorLabel(noteColor)} note color'
-                          '${_selectedNoteColor == noteColor ? ', selected' : ''}',
-                      child: Tooltip(
-                        message: noteCardColorLabel(noteColor),
-                        child: InkWell(
-                          customBorder: const CircleBorder(),
-                          onTap: () => Navigator.of(context).pop(noteColor),
-                          child: Container(
-                            width: 42,
-                            height: 42,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: noteCardSwatchColor(theme, noteColor),
-                              border: Border.all(
-                                color: _selectedNoteColor == noteColor
-                                    ? colorScheme.primary
-                                    : colorScheme.outlineVariant,
-                                width: _selectedNoteColor == noteColor
-                                    ? 2.5
-                                    : 1,
-                              ),
-                            ),
-                            child: _selectedNoteColor == noteColor
-                                ? Icon(
-                                    Icons.check_rounded,
-                                    size: 19,
-                                    color: colorScheme.onSurface,
-                                  )
-                                : null,
-                          ),
-                        ),
-                      ),
+                      tooltip: noteCardColorLabel(noteColor),
+                      semanticLabel:
+                          '${noteCardColorLabel(noteColor)} note color',
+                      onTap: () => Navigator.of(context).pop(noteColor),
                     ),
                 ],
               ),
@@ -1742,7 +1852,17 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
     if (choice == null || !mounted) {
       return;
     }
-    _quillController.updateSelection(selection, quill.ChangeSource.local);
+    final maximumOffset = _quillController.document.length - 1;
+    final start = selection.start.clamp(0, maximumOffset);
+    final end = selection.end.clamp(start, maximumOffset);
+    if (start == end) {
+      _showAttachmentError('Select text before applying a color.');
+      return;
+    }
+    _quillController.updateSelection(
+      TextSelection(baseOffset: start, extentOffset: end),
+      quill.ChangeSource.local,
+    );
     final hex = choice.color
         .toARGB32()
         .toRadixString(16)
@@ -1762,8 +1882,12 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
   }) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final colors = _formattingColors
-        .map((color) {
+    final noteColors = target == _FormattingColorTarget.highlight
+        ? noteTextHighlightColors
+        : selectableNoteCardColors;
+    final colors = noteColors
+        .map((noteColor) {
+          final color = noteCardSwatchColor(theme, noteColor);
           if (target == _FormattingColorTarget.text) {
             final hsl = HSLColor.fromColor(color);
             return hsl
@@ -1793,18 +1917,19 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
           children: [
             for (var index = 0; index < colors.length; index++)
               Tooltip(
-                message: '$title ${index + 1}',
+                message: '$title ${noteCardColorLabel(noteColors[index])}',
                 child: Semantics(
                   button: true,
-                  label: '$title color ${index + 1}',
+                  label: '$title ${noteCardColorLabel(noteColors[index])}',
                   child: InkWell(
                     customBorder: const CircleBorder(),
                     onTap: () =>
                         Navigator.of(context)
                             .pop(_FormattingColorChoice(colors[index], target)),
-                    child: Container(
-                      width: 36,
-                      height: 36,
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      width: 38,
+                      height: 38,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: colors[index],
@@ -1993,18 +2118,13 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
   }
 
   Widget _buildNotebookHeader() {
+    final theme = Theme.of(context);
     final colorScheme = Theme.of(context).colorScheme;
     final tags = _projectTagsController.text
         .split(',')
         .map((tag) => tag.trim())
         .where((tag) => tag.isNotEmpty)
         .toList();
-    final tagColors = [
-      colorScheme.primaryContainer,
-      colorScheme.secondaryContainer,
-      colorScheme.tertiaryContainer,
-    ];
-
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 2, 16, 4),
       child: Column(
@@ -2014,23 +2134,22 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
             children: [
               ActionChip(
                 key: const ValueKey('rich-note-section-dropdown'),
-                avatar: Icon(
-                  Icons.folder_outlined,
-                  size: 14,
-                  color: colorScheme.primary,
-                ),
                 label: Text(_selectedSectionName),
-                labelStyle: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: colorScheme.onPrimaryContainer,
+                labelStyle: theme.textTheme.labelSmall?.copyWith(
+                  color: noteSectionAccentColor(
+                    theme,
+                    _selectedSectionColor,
+                  ),
                   fontWeight: FontWeight.w600,
                 ),
-                backgroundColor: colorScheme.primaryContainer.withValues(
-                  alpha: 0.72,
+                backgroundColor: noteSectionSurfaceColor(
+                  theme,
+                  _selectedSectionColor,
                 ),
                 side: BorderSide.none,
                 visualDensity: VisualDensity.compact,
                 materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                onPressed: _openSectionPicker,
+                onPressed: _showSectionColorPicker,
               ),
               if (widget.notebookName != null) ...[
                 const SizedBox(width: 8),
@@ -2066,14 +2185,13 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
               runSpacing: 2,
               children: [
                 for (var index = 0; index < tags.length; index++)
-                  Chip(
-                    label: Text(tags[index]),
-                    labelStyle: Theme.of(context).textTheme.labelSmall,
-                    backgroundColor: tagColors[index % tagColors.length],
-                    side: BorderSide.none,
-                    visualDensity: VisualDensity.compact,
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    padding: EdgeInsets.zero,
+                  NoteTagChip(
+                    label: tags[index],
+                    color:
+                        _tagColors[_tagKey(tags[index])] ??
+                        selectableNoteCardColors[index %
+                            selectableNoteCardColors.length],
+                    onColorChange: () => _showTagColorPicker(tags[index]),
                   ),
               ],
             ),
@@ -2119,11 +2237,17 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
             maxLines: 1,
             decoration: const InputDecoration(
               hintText: 'Untitled',
+              filled: false,
               border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              disabledBorder: InputBorder.none,
+              errorBorder: InputBorder.none,
+              focusedErrorBorder: InputBorder.none,
               isDense: true,
               contentPadding: EdgeInsets.zero,
             ),
-            style: Theme.of(context).textTheme.titleMedium
+            style: Theme.of(context).textTheme.headlineSmall
                 ?.copyWith(fontWeight: FontWeight.w700),
           ),
           actions: [
@@ -2267,6 +2391,7 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
             prefixIcon: Icon(Icons.sell_outlined),
           ),
           onChanged: (_) {
+            _ensureTagColors(_readTags(_projectTagsController.text));
             _queueAutosave();
             onRefresh();
           },
