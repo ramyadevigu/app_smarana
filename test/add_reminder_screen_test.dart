@@ -121,13 +121,21 @@ void main() {
   ) async {
     SharedPreferences.setMockInitialValues({});
     const soundChannel = MethodChannel('smarana/reminder_sounds');
+    final previewedSoundUris = <String?>[];
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(
-          soundChannel,
-          (call) async => [
-            {'name': 'Morning Bell', 'uri': 'content://alarms/morning-bell'},
-          ],
-        );
+        .setMockMethodCallHandler(soundChannel, (call) async {
+          if (call.method == 'listAlarmSounds') {
+            return [
+              {'name': 'Morning Bell', 'uri': 'content://alarms/morning-bell'},
+            ];
+          }
+          if (call.method == 'previewAlarmSound') {
+            previewedSoundUris.add(
+              (call.arguments as Map<Object?, Object?>)['uri'] as String?,
+            );
+          }
+          return null;
+        });
     final storage = ReminderStorage(
       notificationScheduler: FakeReminderNotificationScheduler(),
     );
@@ -165,6 +173,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Morning Bell').last);
     await tester.pumpAndSettle();
+    expect(previewedSoundUris, ['content://alarms/morning-bell']);
 
     FocusManager.instance.primaryFocus?.unfocus();
     await tester.pumpAndSettle();

@@ -232,6 +232,12 @@ class NotificationService implements ReminderNotificationScheduler {
     }
   }
 
+  Future<void> previewAlarmSound(String? soundUri) async {
+    await _soundCatalogChannel.invokeMethod<void>('previewAlarmSound', {
+      'uri': soundUri,
+    });
+  }
+
   /// Keeps one notification and one one-shot Android callback per recurring
   /// reminder. The callback runs after delivery, asks the recurrence engine for
   /// the next valid occurrence, and replaces both schedules. Startup

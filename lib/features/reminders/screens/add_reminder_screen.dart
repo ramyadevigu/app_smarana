@@ -466,7 +466,23 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
         _soundUri = selection.uri;
         _soundName = selection.name;
       });
+      try {
+        await NotificationService.instance.previewAlarmSound(selection.uri);
+      } on MissingPluginException {
+        _showSoundPreviewError();
+      } on PlatformException {
+        _showSoundPreviewError();
+      }
     }
+  }
+
+  void _showSoundPreviewError() {
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Unable to preview this sound.')),
+    );
   }
 
   Future<void> _selectNotificationMode() async {
