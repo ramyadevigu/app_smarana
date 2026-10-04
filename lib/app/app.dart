@@ -350,7 +350,7 @@ class _HomeScreenState extends State<HomeScreen> {
       return const SizedBox.shrink();
     }
 
-    return switch (index) {
+    final tab = switch (index) {
       0 => CalendarScreen(
         viewMode: _calendarViewMode,
         onViewModeChanged: _changeCalendarViewMode,
@@ -365,6 +365,7 @@ class _HomeScreenState extends State<HomeScreen> {
       4 => TimerScreen(appMenu: _buildAppMenu()),
       _ => const SizedBox.shrink(),
     };
+    return TickerMode(enabled: index == _currentIndex, child: tab);
   }
 
   Widget _buildAppMenu() {

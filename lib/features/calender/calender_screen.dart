@@ -107,6 +107,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
     setState(() {
       _activeViewMode = mode;
       _refreshVisibleOccurrences();
+      if (mode == CalendarViewMode.list) {
+        _refreshUpcomingOccurrences();
+      }
     });
     widget.onViewModeChanged?.call(mode);
   }
@@ -129,6 +132,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
         _hasLoadError = false;
         _isLoading = false;
         _refreshVisibleOccurrences();
+        _refreshUpcomingOccurrences();
       });
     } on Exception {
       if (!mounted) {
@@ -179,7 +183,11 @@ class _CalendarScreenState extends State<CalendarScreen> {
       start: start,
       endExclusive: endExclusive,
     );
-    final countdownStart = _dateOnly(widget.clock());
+  }
+
+  void _refreshUpcomingOccurrences() {
+    final now = widget.clock();
+    final countdownStart = _dateOnly(now);
     final countdownOccurrences = _calendarService.occurrencesBetween(
       _reminders,
       start: countdownStart,
@@ -188,7 +196,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     _upcomingOccurrences =
         countdownOccurrences.values
             .expand((occurrences) => occurrences)
-            .where((occurrence) => occurrence.dateTime.isAfter(widget.clock()))
+            .where((occurrence) => occurrence.dateTime.isAfter(now))
             .toList()
           ..sort((first, second) => first.dateTime.compareTo(second.dateTime));
   }
@@ -291,6 +299,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
       _selectedDate = today;
       _displayedMonth = DateTime(today.year, today.month);
       _refreshVisibleOccurrences();
+      _refreshUpcomingOccurrences();
     });
   }
 
@@ -1488,6 +1497,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   void _showCountdownSheet() {
+    _refreshUpcomingOccurrences();
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,

@@ -45,6 +45,11 @@ class _NotesScreenState extends State<NotesScreen> {
   NotebookIconType? _selectedCategory;
   String? _selectedNotebookId;
   bool _isSearchExpanded = false;
+  List<RecentNoteView>? _recentNotesCache;
+  List<Notebook>? _recentNotesNotebookSource;
+  Map<String, NoteCardColor>? _recentNotesTagColorSource;
+  Map<String, Reminder>? _recentNotesReminderSource;
+  DateTime? _recentNotesCacheExpiresAt;
 
   static const Duration _recentUpdateWindow = Duration(days: 7);
 
@@ -170,13 +175,30 @@ class _NotesScreenState extends State<NotesScreen> {
   }
 
   List<RecentNoteView> _recentNotes() {
+    final now = DateTime.now();
+    final cachedNotes = _recentNotesCache;
+    final cacheExpiresAt = _recentNotesCacheExpiresAt;
+    if (cachedNotes != null &&
+        identical(_recentNotesNotebookSource, _notebooks) &&
+        identical(_recentNotesTagColorSource, _tagColors) &&
+        identical(_recentNotesReminderSource, _remindersById) &&
+        (cacheExpiresAt == null || now.isBefore(cacheExpiresAt))) {
+      return cachedNotes;
+    }
+
     final views = <RecentNoteView>[];
+    DateTime? nextPriorityChange;
     for (final notebook in _notebooks) {
+      final sectionNames = {
+        for (final section in notebook.sections) section.id: section.name,
+      };
       for (final note in notebook.notes) {
-        final section = notebook.sections.where(
-          (item) => item.id == note.sectionId,
-        );
-        final sectionName = section.isEmpty ? 'General' : section.first.name;
+        final priorityChange = note.updatedAt.add(_recentUpdateWindow);
+        if (priorityChange.isAfter(now) &&
+            (nextPriorityChange == null ||
+                priorityChange.isBefore(nextPriorityChange))) {
+          nextPriorityChange = priorityChange;
+        }
         views.add(
           RecentNoteView(
             note: note,
@@ -185,14 +207,18 @@ class _NotesScreenState extends State<NotesScreen> {
             notebookName: notebook.name,
             notebookIcon: notebook.icon,
             notebookColorValue: notebook.colorValue,
-            sectionName: sectionName,
+            sectionName: sectionNames[note.sectionId] ?? 'General',
             tagColors: _tagColors,
           ),
         );
       }
     }
-    final now = DateTime.now();
     views.sort((first, second) => _compareNotes(first, second, now));
+    _recentNotesCache = views;
+    _recentNotesNotebookSource = _notebooks;
+    _recentNotesTagColorSource = _tagColors;
+    _recentNotesReminderSource = _remindersById;
+    _recentNotesCacheExpiresAt = nextPriorityChange;
     return views;
   }
 

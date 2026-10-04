@@ -34,6 +34,9 @@ void main() {
     await tester.tap(find.byTooltip('Start 30s timer'));
     await tester.pump();
     expect(find.byTooltip('Pause 30s timer'), findsOneWidget);
+    await tester.tap(find.byTooltip('Pause 30s timer'));
+    await tester.pump();
+    expect(find.byTooltip('Start 30s timer'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpWidget(_timerApp());

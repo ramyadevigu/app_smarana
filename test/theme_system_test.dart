@@ -10,6 +10,13 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
+  test('Android uses Material page transitions', () {
+    expect(
+      buildLightTheme().pageTransitionsTheme.builders[TargetPlatform.android],
+      isA<ZoomPageTransitionsBuilder>(),
+    );
+  });
+
   testWidgets('theme selection switches immediately and persists', (
     tester,
   ) async {

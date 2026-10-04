@@ -106,13 +106,21 @@ class _StartupErrorScreen extends StatelessWidget {
 Future<_AppStartupConfiguration> _initializeApplication() async {
   try {
     final reminderStorage = ReminderStorage();
-    await reminderStorage.initialize();
-    await NotificationService.instance.initialize();
-    await reminderStorage.rescheduleAllReminders();
-
     const themePreferenceStore = ThemePreferenceStore();
-    final themeMode = await themePreferenceStore.loadThemeMode();
-    final accentColor = await themePreferenceStore.loadAccentColor();
+    late final ThemeMode themeMode;
+    late final Color accentColor;
+
+    await Future.wait<void>([
+      reminderStorage.initialize(),
+      NotificationService.instance.initialize(),
+      themePreferenceStore.loadThemeMode().then<void>((value) {
+        themeMode = value;
+      }),
+      themePreferenceStore.loadAccentColor().then<void>((value) {
+        accentColor = value;
+      }),
+    ]);
+    await reminderStorage.rescheduleAllReminders();
 
     return _AppStartupConfiguration(
       themeMode: themeMode,

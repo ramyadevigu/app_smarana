@@ -14,30 +14,46 @@ class StopwatchScreen extends StatefulWidget {
 class _StopwatchScreenState extends State<StopwatchScreen> {
   final Stopwatch _stopwatch = Stopwatch();
   final List<Duration> _laps = [];
+  final ValueNotifier<Duration> _elapsed = ValueNotifier(Duration.zero);
   Timer? _ticker;
+  bool _tickerModeEnabled = true;
 
   bool get _isRunning => _stopwatch.isRunning;
   bool get _hasElapsed => _stopwatch.elapsed > Duration.zero;
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final tickerModeEnabled = TickerMode.valuesOf(context).enabled;
+    if (_tickerModeEnabled == tickerModeEnabled) {
+      return;
+    }
+    _tickerModeEnabled = tickerModeEnabled;
+    if (_tickerModeEnabled) {
+      _elapsed.value = _stopwatch.elapsed;
+    }
+    _syncTicker();
+  }
+
+  @override
   void dispose() {
     _ticker?.cancel();
     _stopwatch.stop();
+    _elapsed.dispose();
     super.dispose();
   }
 
   void _start() {
     _stopwatch.start();
-    _ticker ??= Timer.periodic(const Duration(milliseconds: 30), (_) {
-      if (mounted) {
-        setState(() {});
-      }
-    });
+    _elapsed.value = _stopwatch.elapsed;
+    _syncTicker();
     setState(() {});
   }
 
   void _pause() {
     _stopwatch.stop();
+    _elapsed.value = _stopwatch.elapsed;
+    _syncTicker();
     setState(() {});
   }
 
@@ -54,7 +70,20 @@ class _StopwatchScreenState extends State<StopwatchScreen> {
       ..stop()
       ..reset();
     _laps.clear();
+    _elapsed.value = Duration.zero;
+    _syncTicker();
     setState(() {});
+  }
+
+  void _syncTicker() {
+    if (_isRunning && _tickerModeEnabled) {
+      _ticker ??= Timer.periodic(const Duration(milliseconds: 30), (_) {
+        _elapsed.value = _stopwatch.elapsed;
+      });
+      return;
+    }
+    _ticker?.cancel();
+    _ticker = null;
   }
 
   String _formatDuration(Duration duration) {
@@ -84,21 +113,23 @@ class _StopwatchScreenState extends State<StopwatchScreen> {
                   children: [
                     Expanded(
                       child: Center(
-                        child: Semantics(
-                          label:
-                              'Elapsed time ${_formatDuration(_stopwatch.elapsed)}',
-                          liveRegion: true,
-                          child: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Text(
-                              _formatDuration(_stopwatch.elapsed),
-                              key: const ValueKey('stopwatch-display'),
-                              style: theme.textTheme.displayMedium?.copyWith(
-                                fontFeatures: const [
-                                  FontFeature.tabularFigures(),
-                                ],
-                                fontWeight: FontWeight.w300,
-                                color: colorScheme.onSurface,
+                        child: ValueListenableBuilder<Duration>(
+                          valueListenable: _elapsed,
+                          builder: (context, elapsed, _) => Semantics(
+                            label: 'Elapsed time ${_formatDuration(elapsed)}',
+                            liveRegion: true,
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                _formatDuration(elapsed),
+                                key: const ValueKey('stopwatch-display'),
+                                style: theme.textTheme.displayMedium?.copyWith(
+                                  fontFeatures: const [
+                                    FontFeature.tabularFigures(),
+                                  ],
+                                  fontWeight: FontWeight.w300,
+                                  color: colorScheme.onSurface,
+                                ),
                               ),
                             ),
                           ),
