@@ -158,34 +158,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  Future<void> _selectSnoozeDuration() async {
-    const durations = [5, 10, 15, 20, 30];
-    final selection = await showModalBottomSheet<int>(
-      context: context,
-      useSafeArea: true,
-      showDragHandle: true,
-      builder: (context) => ListView(
-        shrinkWrap: true,
-        padding: const EdgeInsets.only(bottom: 12),
-        children: [
-          for (final minutes in durations)
-            ListTile(
-              title: Text('$minutes minutes'),
-              trailing: _defaults.snoozeDurationMinutes == minutes
-                  ? const Icon(Icons.check)
-                  : null,
-              onTap: () => Navigator.of(context).pop(minutes),
-            ),
-        ],
-      ),
-    );
-    if (selection != null && mounted) {
-      await _updateDefaults(
-        _defaults.copyWith(snoozeDurationMinutes: selection),
-      );
-    }
-  }
-
   Future<void> _changeThemeMode(ThemeMode themeMode) async {
     try {
       await widget.onThemeModeChanged(themeMode);
@@ -305,10 +277,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ListTile(
                 key: const ValueKey('settings-default-snooze'),
                 leading: const Icon(Icons.snooze_outlined),
-                title: const Text('Default snooze duration'),
-                subtitle: Text('${_defaults.snoozeDurationMinutes} minutes'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: _selectSnoozeDuration,
+                title: const Text('Alarm snooze duration'),
+                subtitle: const Text('15 minutes'),
               ),
               const Divider(height: 1),
               SwitchListTile(

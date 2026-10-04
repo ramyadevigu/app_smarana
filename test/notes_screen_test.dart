@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:app_smarana/features/notes/models/note_workspace_models.dart';
 import 'package:app_smarana/features/notes/notes_screen.dart';
+import 'package:app_smarana/features/notes/theme/notebook_colors.dart';
+import 'package:app_smarana/features/notes/widgets/notebook_list_tile.dart';
 import 'package:app_smarana/features/notes/widgets/recent_note_card.dart';
 import 'package:app_smarana/features/reminders/models/reminder.dart';
 import 'package:app_smarana/theme/app_theme.dart';
@@ -14,7 +16,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  testWidgets('keeps the folder selector without a notebook list', (
+  testWidgets('shows individual notebooks alongside category filters', (
     tester,
   ) async {
     final now = DateTime.now();
@@ -37,9 +39,176 @@ void main() {
 
     expect(find.text('All'), findsOneWidget);
     expect(find.text('General'), findsOneWidget);
-    expect(find.text('Notebooks'), findsNothing);
-    expect(find.text('app'), findsNothing);
+    expect(find.text('Notebooks'), findsOneWidget);
+    expect(find.text('app'), findsOneWidget);
     expect(find.byKey(const ValueKey('notes-add-note-fab')), findsOneWidget);
+  });
+
+  testWidgets('tapping a notebook opens it and keeps it selected', (
+    tester,
+  ) async {
+    final now = DateTime(2026, 10, 1);
+    final notebook = Notebook(
+      id: 'open-notebook',
+      name: 'Open this notebook',
+      iconType: NotebookIconType.general,
+      sections: [
+        NoteSection(id: 'open-section', name: 'General', createdAt: now),
+      ],
+      notes: const [],
+      createdAt: now,
+      updatedAt: now,
+    );
+    final notebookFinder = find.byKey(
+      const ValueKey('notebook-card-open-notebook'),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: NotesScreen(initialNotebooks: [notebook])),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(notebookFinder);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('notebook-add-section')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('notebook-save-and-close')));
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<NotebookListTile>(notebookFinder).selected, isTrue);
+  });
+
+  testWidgets('long-press notebook options edit its settings', (tester) async {
+    final now = DateTime(2026, 10, 1);
+    final notebook = Notebook(
+      id: 'customize-notebook',
+      name: 'Reading',
+      iconType: NotebookIconType.journal,
+      sections: [
+        NoteSection(id: 'reading-section', name: 'Books', createdAt: now),
+      ],
+      notes: const [],
+      createdAt: now,
+      updatedAt: now,
+    );
+    final notebookFinder = find.byKey(
+      const ValueKey('notebook-card-customize-notebook'),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildLightTheme(),
+        darkTheme: buildDarkTheme(),
+        home: NotesScreen(initialNotebooks: [notebook]),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.longPress(notebookFinder);
+    await tester.pumpAndSettle();
+    expect(find.text('Rename'), findsOneWidget);
+    expect(find.text('Change Icon'), findsOneWidget);
+    expect(find.text('Change Color'), findsOneWidget);
+    expect(find.text('Edit Description'), findsOneWidget);
+    expect(find.text('Delete Notebook'), findsOneWidget);
+
+    await tester.tap(find.text('Rename'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, 'Reading list');
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+    expect(find.text('Reading list'), findsOneWidget);
+
+    await tester.longPress(notebookFinder);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Edit Description'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, 'Books to explore');
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+    expect(find.text('Books to explore'), findsOneWidget);
+
+    await tester.longPress(notebookFinder);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Change Color'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Purple'));
+    await tester.pumpAndSettle();
+
+    final notebookTile = tester.widget<NotebookListTile>(notebookFinder);
+    expect(notebookTile.notebook.colorValue, NotebookBaseColor.purple.value);
+    expect(notebookTile.notebook.description, 'Books to explore');
+
+    await tester.longPress(notebookFinder);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Change Icon'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('School'));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<NotebookListTile>(notebookFinder).notebook.icon,
+      NotebookIcon.school,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('notebook colors remain solid in light and dark themes', (
+    tester,
+  ) async {
+    final now = DateTime(2026, 10, 1);
+    const colorValue = 0xFF78C4BB;
+    final notebook = Notebook(
+      id: 'theme-notebook',
+      name: 'Theme colors',
+      iconType: NotebookIconType.general,
+      colorValue: colorValue,
+      sections: [
+        NoteSection(id: 'theme-section', name: 'General', createdAt: now),
+      ],
+      notes: const [],
+      createdAt: now,
+      updatedAt: now,
+    );
+    final tileFinder = find.byKey(
+      const ValueKey('notebook-card-theme-notebook'),
+    );
+
+    for (final mode in [ThemeMode.light, ThemeMode.dark]) {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildLightTheme(),
+          darkTheme: buildDarkTheme(),
+          themeMode: mode,
+          home: NotesScreen(initialNotebooks: [notebook]),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final theme = Theme.of(tester.element(tileFinder));
+      final tile = tester.widget<NotebookListTile>(tileFinder);
+      final materialFinder = find
+          .descendant(of: tileFinder, matching: find.byType(Material))
+          .first;
+      expect(
+        tester.widget<Material>(materialFinder).color,
+        notebookSurfaceColor(theme, colorValue),
+      );
+      expect(notebookSurfaceColor(theme, colorValue).a, 1);
+      expect(notebookAccentColor(theme, colorValue).a, 1);
+      expect(tile.notebook.colorValue, colorValue);
+      for (final paletteColor in NotebookBaseColor.values) {
+        expect(
+          _contrastRatio(
+            notebookSurfaceColor(theme, paletteColor.value),
+            notebookAccentColor(theme, paletteColor.value),
+          ),
+          greaterThanOrEqualTo(4.5),
+          reason:
+              '${paletteColor.label} notebook text should be readable in '
+              '${theme.brightness.name} mode.',
+        );
+      }
+      expect(tester.takeException(), isNull);
+    }
   });
 
   testWidgets('starts with a real empty workspace instead of demo notes', (
@@ -53,7 +222,8 @@ void main() {
       find.text('No recent notes yet. Open a notebook and start writing.'),
       findsOneWidget,
     );
-    expect(find.text('Notebooks'), findsNothing);
+    expect(find.text('Notebooks'), findsOneWidget);
+    expect(find.byType(NotebookListTile), findsNothing);
     expect(find.text('Plans & Goals'), findsNothing);
     expect(find.text('Weekly Review'), findsNothing);
     expect(
@@ -243,10 +413,10 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('notebook-save-and-close')));
     await tester.pumpAndSettle();
-    expect(find.text('Engineering'), findsOneWidget);
+    expect(find.text('Engineering'), findsNWidgets(2));
   });
 
-  testWidgets('search filters recent notes without a notebook list', (
+  testWidgets('search filters recent notes while retaining notebook cards', (
     tester,
   ) async {
     final notebooks = [
@@ -295,8 +465,8 @@ void main() {
       MaterialApp(home: NotesScreen(initialNotebooks: notebooks)),
     );
 
-    expect(find.text('Notebooks'), findsNothing);
-    expect(find.text('Plans & Goals'), findsNothing);
+    expect(find.text('Notebooks'), findsOneWidget);
+    expect(find.text('Plans & Goals'), findsOneWidget);
     expect(find.text('Workout Split'), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('notes-search-button')));
@@ -307,9 +477,9 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('Health & Fitness'), findsOneWidget);
+    expect(find.text('Health & Fitness'), findsNWidgets(2));
     expect(find.text('Workout Split'), findsOneWidget);
-    expect(find.text('Plans & Goals'), findsNothing);
+    expect(find.text('Plans & Goals'), findsOneWidget);
   });
 
   testWidgets('pins and unpins a note from the recent notes menu', (
@@ -693,4 +863,10 @@ void main() {
     );
     expect(find.text('Task A'), findsOneWidget);
   });
+}
+
+double _contrastRatio(Color first, Color second) {
+  final luminance = [first.computeLuminance(), second.computeLuminance()]
+    ..sort((a, b) => b.compareTo(a));
+  return (luminance.first + 0.05) / (luminance.last + 0.05);
 }

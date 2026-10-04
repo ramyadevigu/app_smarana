@@ -89,10 +89,13 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Morning Bell').last);
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('settings-default-snooze')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('20 minutes'));
-    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('settings-default-snooze')),
+        matching: find.text('15 minutes'),
+      ),
+      findsOneWidget,
+    );
     final vibrationSwitch = find.descendant(
       of: find.byKey(const ValueKey('settings-default-vibration')),
       matching: find.byType(Switch),
@@ -123,7 +126,7 @@ void main() {
     );
     expect(defaults.soundUri, 'content://alarms/morning-bell');
     expect(defaults.soundName, 'Morning Bell');
-    expect(defaults.snoozeDurationMinutes, 20);
+    expect(defaults.snoozeDurationMinutes, 15);
     expect(defaults.vibrate, isFalse);
     expect(defaults.calendarViewMode, CalendarViewMode.month);
     expect(selectedThemeMode, ThemeMode.dark);
@@ -147,7 +150,7 @@ void main() {
       ReminderNotificationMode.notificationOnly,
     );
     expect(savedReminder.soundUri, 'content://alarms/morning-bell');
-    expect(savedReminder.snoozeDurationMinutes, 20);
+    expect(savedReminder.snoozeDurationMinutes, 15);
     expect(savedReminder.vibrate, isFalse);
   });
 }

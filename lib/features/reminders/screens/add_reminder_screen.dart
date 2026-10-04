@@ -59,7 +59,6 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
   ReminderNotificationMode _notificationMode =
       ReminderNotificationMode.alarmAndNotification;
   bool _vibrate = true;
-  int _snoozeDurationMinutes = 10;
   List<ReminderSoundOption> _availableAlarmSounds = const [];
   bool _isSaving = false;
   bool _defaultsReady = false;
@@ -91,7 +90,6 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
         reminder?.notificationMode ??
         ReminderNotificationMode.alarmAndNotification;
     _vibrate = reminder?.vibrate ?? true;
-    _snoozeDurationMinutes = reminder?.snoozeDurationMinutes ?? 10;
     _loadAvailableAlarmSounds();
     if (reminder != null) {
       _defaultsReady = true;
@@ -131,7 +129,6 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
         _notificationMode = defaults.notificationMode;
         _soundUri = defaults.soundUri;
         _soundName = defaults.soundName;
-        _snoozeDurationMinutes = defaults.snoozeDurationMinutes;
         _vibrate = defaults.vibrate;
         _defaultsReady = true;
       });
@@ -258,7 +255,7 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
       soundName: _soundName,
       notificationMode: _notificationMode,
       vibrate: _vibrate,
-      snoozeDurationMinutes: _snoozeDurationMinutes,
+      snoozeDurationMinutes: 15,
       createdAt: existing?.createdAt ?? DateTime.now(),
     );
 
@@ -367,13 +364,12 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
     _recurrenceRule = RecurrenceRule(
       type: type,
       interval: _repeatInterval,
-      weekdays: type == RecurrenceType.weekly
-          ? weekdays
-          : const [],
+      weekdays: type == RecurrenceType.weekly ? weekdays : const [],
       dayOfWeek: type == RecurrenceType.weekly && weekdays.length == 1
           ? weekdays.single
           : null,
-      dayOfMonth: type == RecurrenceType.monthly || type == RecurrenceType.yearly
+      dayOfMonth:
+          type == RecurrenceType.monthly || type == RecurrenceType.yearly
           ? date.day
           : null,
       monthOfYear: type == RecurrenceType.yearly ? date.month : null,
@@ -514,104 +510,6 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
     if (selection != null && mounted) {
       setState(() => _notificationMode = selection);
     }
-  }
-
-  Future<void> _selectSnoozeDuration() async {
-    const durations = [5, 10, 15, 30, 60];
-    final selection = await _showOptionOverlay(
-      () => showModalBottomSheet<Object>(
-        context: context,
-        useSafeArea: true,
-        showDragHandle: true,
-        builder: (context) => ListView(
-          shrinkWrap: true,
-          padding: const EdgeInsets.only(bottom: 12),
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
-              child: Text(
-                'Snooze',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-            ),
-            for (final minutes in durations)
-              ListTile(
-                title: Text('$minutes minutes'),
-                trailing: _snoozeDurationMinutes == minutes
-                    ? const Icon(Icons.check)
-                    : null,
-                onTap: () => Navigator.of(context).pop(minutes),
-              ),
-            ListTile(
-              title: const Text('Custom'),
-              trailing: !durations.contains(_snoozeDurationMinutes)
-                  ? const Icon(Icons.check)
-                  : null,
-              onTap: () => Navigator.of(context).pop('custom'),
-            ),
-            const SizedBox(height: 12),
-          ],
-        ),
-      ),
-    );
-    if (selection == 'custom' && mounted) {
-      final minutes = await _showCustomSnoozeDialog();
-      if (minutes != null && mounted) {
-        setState(() => _snoozeDurationMinutes = minutes);
-      }
-    } else if (selection is int && mounted) {
-      setState(() => _snoozeDurationMinutes = selection);
-    }
-  }
-
-  Future<int?> _showCustomSnoozeDialog() async {
-    final controller = TextEditingController(
-      text: _snoozeDurationMinutes > 60
-          ? _snoozeDurationMinutes.toString()
-          : '',
-    );
-    final formKey = GlobalKey<FormState>();
-    final minutes = await showDialog<int>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Custom snooze'),
-        content: Form(
-          key: formKey,
-          child: TextFormField(
-            controller: controller,
-            autofocus: true,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: 'Minutes',
-              helperText: 'Enter a value from 1 to 1440 minutes.',
-            ),
-            validator: (value) {
-              final minutes = int.tryParse(value?.trim() ?? '');
-              return minutes == null || minutes < 1 || minutes > 1440
-                  ? 'Enter a value from 1 to 1440.'
-                  : null;
-            },
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (!(formKey.currentState?.validate() ?? false)) {
-                return;
-              }
-              Navigator.of(context).pop(int.parse(controller.text.trim()));
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
-    return minutes;
   }
 
   Widget _fieldError(String? message) {
@@ -817,8 +715,7 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
                         key: const ValueKey('snooze-option'),
                         icon: Icons.snooze_outlined,
                         title: 'Snooze',
-                        value: _snoozeLabel(_snoozeDurationMinutes),
-                        onTap: _selectSnoozeDuration,
+                        value: '15 minutes',
                       ),
                     ],
                   ),
@@ -1289,10 +1186,6 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
     );
   }
 
-  String _snoozeLabel(int minutes) {
-    return minutes == 60 ? '1 hour' : '$minutes minutes';
-  }
-
   String _repeatSummary() {
     if (_repeatPreset != 'custom') {
       return _recurrenceLabel(_recurrenceRule, _selectedDate);
@@ -1305,7 +1198,8 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
       'years' => 'year',
       _ => 'week',
     };
-    var summary = 'Every $_repeatInterval $unit'
+    var summary =
+        'Every $_repeatInterval $unit'
         '${_repeatInterval == 1 ? '' : 's'}';
     if (_repeatUnit == 'weeks') {
       final weekdays = _repeatWeekdays.toList()..sort();

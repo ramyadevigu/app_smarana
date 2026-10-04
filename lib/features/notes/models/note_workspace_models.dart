@@ -2,6 +2,47 @@ import 'dart:convert';
 
 enum NotebookIconType { work, goals, journal, health, ideas, general }
 
+const int defaultNotebookColorValue = 0xFF8FB2ED;
+
+enum NotebookIcon {
+  folder,
+  book,
+  notebook,
+  autoStories,
+  work,
+  flag,
+  heart,
+  lightbulb,
+  school,
+  science,
+  palette,
+  travel,
+  home,
+  savings,
+  fitness,
+  music,
+  nature,
+  coffee,
+  target,
+  shopping,
+}
+
+enum NotebookBaseColor {
+  blue(defaultNotebookColorValue, 'Blue'),
+  pink(0xFFE9ABB7, 'Pink'),
+  green(0xFF9ACD9D, 'Green'),
+  yellow(0xFFE5CB76, 'Yellow'),
+  purple(0xFFB5A0DE, 'Purple'),
+  orange(0xFFE6AD78, 'Orange'),
+  teal(0xFF78C4BB, 'Teal'),
+  red(0xFFE3918D, 'Red');
+
+  const NotebookBaseColor(this.value, this.label);
+
+  final int value;
+  final String label;
+}
+
 enum NoteAttachmentType { image, file }
 
 enum NoteCardColor {
@@ -167,11 +208,17 @@ class Notebook {
     required this.notes,
     required this.createdAt,
     required this.updatedAt,
+    this.description = '',
+    this.icon,
+    this.colorValue = defaultNotebookColorValue,
   });
 
   final String id;
   final String name;
+  final String description;
   final NotebookIconType iconType;
+  final NotebookIcon? icon;
+  final int colorValue;
   final List<NoteSection> sections;
   final List<NoteEntry> notes;
   final DateTime createdAt;
@@ -182,7 +229,10 @@ class Notebook {
   Map<String, Object?> toJson() => {
     'id': id,
     'name': name,
+    'description': description,
     'iconType': iconType.name,
+    'icon': icon?.name,
+    'colorValue': colorValue,
     'sections': sections.map((section) => section.toJson()).toList(),
     'notes': notes.map((note) => note.toJson()).toList(),
     'createdAt': createdAt.toIso8601String(),
@@ -194,10 +244,15 @@ class Notebook {
     return Notebook(
       id: json['id'] is String ? json['id']! as String : '',
       name: json['name'] is String ? json['name']! as String : 'Notebook',
+      description: json['description'] is String
+          ? json['description']! as String
+          : '',
       iconType: NotebookIconType.values.firstWhere(
         (value) => value.name == json['iconType'],
         orElse: () => NotebookIconType.general,
       ),
+      icon: _readNotebookIcon(json['icon']),
+      colorValue: _readNotebookColorValue(json['colorValue']),
       sections: _readObjects(json['sections'], NoteSection.fromJson),
       notes: _readObjects(json['notes'], NoteEntry.fromJson),
       createdAt: createdAt,
@@ -207,7 +262,10 @@ class Notebook {
 
   Notebook copyWith({
     String? name,
+    String? description,
     NotebookIconType? iconType,
+    NotebookIcon? icon,
+    int? colorValue,
     List<NoteSection>? sections,
     List<NoteEntry>? notes,
     DateTime? updatedAt,
@@ -215,7 +273,10 @@ class Notebook {
     return Notebook(
       id: id,
       name: name ?? this.name,
+      description: description ?? this.description,
       iconType: iconType ?? this.iconType,
+      icon: icon ?? this.icon,
+      colorValue: colorValue ?? this.colorValue,
       sections: sections ?? this.sections,
       notes: notes ?? this.notes,
       createdAt: createdAt,
@@ -469,6 +530,8 @@ class RecentNoteView {
     required this.notebookIconType,
     required this.notebookName,
     required this.sectionName,
+    this.notebookIcon,
+    this.notebookColorValue = defaultNotebookColorValue,
     this.tagColors = const {},
   });
 
@@ -476,8 +539,29 @@ class RecentNoteView {
   final String notebookId;
   final NotebookIconType notebookIconType;
   final String notebookName;
+  final NotebookIcon? notebookIcon;
+  final int notebookColorValue;
   final String sectionName;
   final Map<String, NoteCardColor> tagColors;
+}
+
+NotebookIcon? _readNotebookIcon(Object? value) {
+  if (value is! String) {
+    return null;
+  }
+  for (final icon in NotebookIcon.values) {
+    if (icon.name == value) {
+      return icon;
+    }
+  }
+  return null;
+}
+
+int _readNotebookColorValue(Object? value) {
+  if (value is! int || value < 0 || value > 0xFFFFFFFF) {
+    return defaultNotebookColorValue;
+  }
+  return value | 0xFF000000;
 }
 
 List<T> _readObjects<T>(Object? value, T Function(Map<String, Object?>) parse) {

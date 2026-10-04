@@ -5,20 +5,27 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/note_workspace_models.dart';
 import '../theme/note_card_colors.dart';
+import '../theme/notebook_colors.dart';
 
 class NoteWorkspaceStorage {
   NoteWorkspaceStorage({SharedPreferences? preferences})
     : _providedPreferences = preferences;
 
   static const String _key = 'smarana_note_workspace_v1';
-  static const int _schemaVersion = 2;
+  static const int _schemaVersion = 3;
   Future<void> _operationQueue = Future<void>.value();
+  bool _migrationRequired = false;
 
   final SharedPreferences? _providedPreferences;
 
   Future<List<Notebook>> loadWorkspace() {
     return _runSerialized(() async {
-      final notebooks = await _readWorkspace();
+      final savedNotebooks = await _readWorkspace();
+      final notebooks = ensureDistinctNotebookColors(savedNotebooks);
+      final assignedNotebookColor = notebooks.asMap().entries.any(
+        (entry) =>
+            entry.value.colorValue != savedNotebooks[entry.key].colorValue,
+      );
       final hasUncoloredNotes = notebooks.any(
         (notebook) =>
             notebook.notes.any((note) => note.color == NoteCardColor.standard),
@@ -57,7 +64,10 @@ class NoteWorkspaceStorage {
           }
         }
       }
-      if (hasUncoloredNotes || assignedTagColor) {
+      if (hasUncoloredNotes ||
+          assignedTagColor ||
+          assignedNotebookColor ||
+          _migrationRequired) {
         await _writeWorkspace(migrated, tagColors);
       }
       return migrated;
@@ -78,6 +88,7 @@ class NoteWorkspaceStorage {
   }
 
   Future<List<Notebook>> _readWorkspace() async {
+    _migrationRequired = false;
     final preferences =
         _providedPreferences ?? await SharedPreferences.getInstance();
     final raw = preferences.get(_key);
@@ -92,10 +103,13 @@ class NoteWorkspaceStorage {
       return [];
     }
     if (decoded is! Map ||
-        (decoded['version'] != 1 && decoded['version'] != _schemaVersion) ||
+        (decoded['version'] != 1 &&
+            decoded['version'] != 2 &&
+            decoded['version'] != _schemaVersion) ||
         decoded['notebooks'] is! List) {
       return [];
     }
+    _migrationRequired = decoded['version'] != _schemaVersion;
 
     final notebooks = <Notebook>[];
     final notebookIds = <String>{};
@@ -103,7 +117,17 @@ class NoteWorkspaceStorage {
       if (value is! Map) {
         continue;
       }
-      final notebook = Notebook.fromJson(_stringKeyedMap(value));
+      final json = _stringKeyedMap(value);
+      final colorValue = json['colorValue'];
+      if (json['description'] is! String ||
+          !json.containsKey('icon') ||
+          colorValue is! int ||
+          colorValue < 0 ||
+          colorValue > 0xFFFFFFFF ||
+          (colorValue & 0xFF000000) != 0xFF000000) {
+        _migrationRequired = true;
+      }
+      final notebook = Notebook.fromJson(json);
       if (notebook.id.isNotEmpty && notebookIds.add(notebook.id)) {
         final noteIds = <String>{};
         final notes = notebook.notes
@@ -135,7 +159,9 @@ class NoteWorkspaceStorage {
     try {
       final decoded = jsonDecode(raw);
       if (decoded is! Map ||
-          (decoded['version'] != 1 && decoded['version'] != _schemaVersion) ||
+          (decoded['version'] != 1 &&
+              decoded['version'] != 2 &&
+              decoded['version'] != _schemaVersion) ||
           decoded['tagColors'] is! Map) {
         return {};
       }

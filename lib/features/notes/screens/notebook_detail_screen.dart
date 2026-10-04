@@ -7,6 +7,7 @@ import '../models/note_workspace_models.dart';
 import '../models/rich_note_draft.dart';
 import '../services/note_attachment_storage.dart';
 import '../theme/note_card_colors.dart';
+import '../theme/notebook_colors.dart';
 import '../widgets/note_tag_chip.dart';
 import 'rich_note_editor_screen.dart';
 
@@ -556,10 +557,30 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final notebookAccent = notebookAccentColor(theme, _notebook.colorValue);
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_notebook.name),
+        title: Row(
+          children: [
+            Icon(
+              notebookIconData(_notebook.icon, _notebook.iconType),
+              color: notebookAccent,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                _notebook.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleLarge?.copyWith(
+                  color: notebookAccent,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
         actions: [
           IconButton(
             key: const ValueKey('notebook-add-section'),
@@ -626,6 +647,20 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
                       key: ValueKey('section-tab-${section.id}'),
                       label: Text(section.name),
                       selected: _selectedSectionId == section.id,
+                      selectedColor: notebookSurfaceColor(
+                        theme,
+                        _notebook.colorValue,
+                      ),
+                      side: BorderSide(
+                        color: _selectedSectionId == section.id
+                            ? notebookAccent
+                            : colorScheme.outlineVariant,
+                      ),
+                      labelStyle: TextStyle(
+                        color: _selectedSectionId == section.id
+                            ? notebookAccent
+                            : colorScheme.onSurface,
+                      ),
                       onSelected: (_) {
                         setState(() {
                           _selectedSectionId = section.id;
@@ -744,10 +779,7 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
             side: BorderSide(
-              color: noteCardAccentColor(
-                theme,
-                note.color,
-              ).withValues(alpha: 0.2),
+              color: notebookAccentColor(theme, _notebook.colorValue),
             ),
           ),
           child: ListTile(
@@ -834,10 +866,7 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
             side: BorderSide(
-              color: noteCardAccentColor(
-                theme,
-                note.color,
-              ).withValues(alpha: 0.2),
+              color: notebookAccentColor(theme, _notebook.colorValue),
             ),
           ),
           child: ListTile(
@@ -1044,7 +1073,7 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
         side: BorderSide(
-          color: noteCardAccentColor(theme, note.color).withValues(alpha: 0.2),
+          color: notebookAccentColor(theme, _notebook.colorValue),
         ),
       ),
       child: ListTile(

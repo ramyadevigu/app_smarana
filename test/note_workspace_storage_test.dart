@@ -26,7 +26,10 @@ void main() {
       final notebook = Notebook(
         id: 'notebook-1',
         name: 'Work',
+        description: 'Project planning and team notes.',
         iconType: NotebookIconType.work,
+        icon: NotebookIcon.science,
+        colorValue: 0xFFE06E91,
         sections: [
           NoteSection(id: 'section-1', name: 'Meetings', createdAt: createdAt),
         ],
@@ -70,6 +73,9 @@ void main() {
       final restored = (await storage.loadWorkspace()).single;
 
       expect(restored.name, notebook.name);
+      expect(restored.description, notebook.description);
+      expect(restored.icon, notebook.icon);
+      expect(restored.colorValue, notebook.colorValue);
       expect(restored.createdAt, createdAt);
       expect(restored.updatedAt, updatedAt);
       expect(restored.sections.single.name, 'Meetings');
@@ -146,12 +152,24 @@ void main() {
                 },
               ],
             },
+            {
+              'id': 'notebook-legacy-2',
+              'name': 'Existing',
+              'sections': [],
+              'notes': [],
+            },
           ],
         }),
       );
 
       final firstLoad = await storage.loadWorkspace();
-      final migratedColors = firstLoad.single.notes
+      expect(
+        firstLoad.map((notebook) => notebook.colorValue).toSet().length,
+        2,
+      );
+      expect(firstLoad.first.description, isEmpty);
+      expect(firstLoad.first.icon, isNull);
+      final migratedColors = firstLoad.first.notes
           .map((note) => note.color)
           .toList();
       expect(migratedColors, [NoteCardColor.yellow, NoteCardColor.pink]);
@@ -159,15 +177,17 @@ void main() {
       final persisted = jsonDecode(
         preferences.getString('smarana_note_workspace_v1')!,
       ) as Map;
-      expect(persisted['version'], 2);
+      expect(persisted['version'], 3);
+      final persistedNotebooks = persisted['notebooks'] as List;
+      expect(persistedNotebooks.first['description'], isEmpty);
+      expect(persistedNotebooks.first['icon'], isNull);
+      expect(persistedNotebooks.first['colorValue'], isA<int>());
       expect(
-        (persisted['notebooks'] as List).single['notes']
-            .map((note) => note['color'])
-            .toList(),
+        persistedNotebooks.first['notes'].map((note) => note['color']).toList(),
         ['yellow', 'pink'],
       );
       expect(
-        (await storage.loadWorkspace()).single.notes
+        (await storage.loadWorkspace()).first.notes
             .map((note) => note.color)
             .toList(),
         migratedColors,

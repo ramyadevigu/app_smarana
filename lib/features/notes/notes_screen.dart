@@ -7,8 +7,11 @@ import '../reminders/services/reminder_storage.dart';
 import 'models/note_workspace_models.dart';
 import 'screens/all_notes_screen.dart';
 import 'screens/notebook_detail_screen.dart';
+import '../../../theme/app_colors.dart';
 import 'theme/note_card_colors.dart';
+import 'theme/notebook_colors.dart';
 import 'services/note_workspace_storage.dart';
+import 'widgets/notebook_list_tile.dart';
 import 'widgets/recent_note_card.dart';
 
 class NotesScreen extends StatefulWidget {
@@ -40,6 +43,7 @@ class _NotesScreenState extends State<NotesScreen> {
   bool _isLoading = true;
   String? _storageError;
   NotebookIconType? _selectedCategory;
+  String? _selectedNotebookId;
   bool _isSearchExpanded = false;
 
   static const Duration _recentUpdateWindow = Duration(days: 7);
@@ -51,7 +55,7 @@ class _NotesScreenState extends State<NotesScreen> {
     super.initState();
     _workspaceStorage = widget.workspaceStorage ?? NoteWorkspaceStorage();
     _reminderStorage = ReminderStorage();
-    _notebooks = List<Notebook>.of(
+    _notebooks = ensureDistinctNotebookColors(
       widget.initialNotebooks ?? _emptyNotebookList,
     );
     unawaited(_loadReminderIndex());
@@ -147,6 +151,10 @@ class _NotesScreenState extends State<NotesScreen> {
   List<RecentNoteView> get _filteredRecentNotes {
     final query = _query;
     return _recentNotes().where((note) {
+      if (_selectedNotebookId != null &&
+          note.notebookId != _selectedNotebookId) {
+        return false;
+      }
       if (_selectedCategory != null &&
           note.notebookIconType != _selectedCategory) {
         return false;
@@ -175,6 +183,8 @@ class _NotesScreenState extends State<NotesScreen> {
             notebookId: notebook.id,
             notebookIconType: notebook.iconType,
             notebookName: notebook.name,
+            notebookIcon: notebook.icon,
+            notebookColorValue: notebook.colorValue,
             sectionName: sectionName,
             tagColors: _tagColors,
           ),
@@ -271,6 +281,9 @@ class _NotesScreenState extends State<NotesScreen> {
       name: 'General',
       createdAt: now,
     );
+    final colorValue = nextNotebookColorValue(
+      _notebooks.map((notebook) => notebook.colorValue),
+    );
     final notebook = Notebook(
       id: _id('notebook'),
       name: name,
@@ -279,6 +292,7 @@ class _NotesScreenState extends State<NotesScreen> {
       notes: const [],
       createdAt: now,
       updatedAt: now,
+      colorValue: colorValue,
     );
     setState(() {
       _notebooks = [..._notebooks, notebook];
@@ -291,6 +305,12 @@ class _NotesScreenState extends State<NotesScreen> {
     bool createNoteOnOpen = false,
     String? initialNoteId,
   }) async {
+    if (_selectedNotebookId != notebook.id || _selectedCategory != null) {
+      setState(() {
+        _selectedNotebookId = notebook.id;
+        _selectedCategory = null;
+      });
+    }
     final result = await Navigator.of(context).push<NotebookDetailResult>(
       MaterialPageRoute<NotebookDetailResult>(
         builder: (_) => NotebookDetailScreen(
@@ -315,10 +335,9 @@ class _NotesScreenState extends State<NotesScreen> {
             _notebooks.any((item) => item.iconType == _selectedCategory)
             ? _selectedCategory
             : null;
-        _selectedCategory =
-            _notebooks.any((item) => item.iconType == _selectedCategory)
-            ? _selectedCategory
-            : null;
+        if (_selectedNotebookId == notebook.id) {
+          _selectedNotebookId = null;
+        }
       });
       await _persistWorkspace();
       return;
@@ -328,6 +347,482 @@ class _NotesScreenState extends State<NotesScreen> {
       return;
     }
     await _updateNotebook(updated);
+  }
+
+  Future<void> _selectAndOpenNotebook(Notebook notebook) async {
+    setState(() {
+      _selectedNotebookId = notebook.id;
+      _selectedCategory = null;
+    });
+    await _openNotebook(notebook);
+  }
+
+  Future<void> _showNotebookOptions(Notebook notebook) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        final theme = Theme.of(context);
+        final accentColor = notebookAccentColor(theme, notebook.colorValue);
+        final surfaceColor = notebookSurfaceColor(theme, notebook.colorValue);
+        return SafeArea(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(context).height * 0.8,
+            ),
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: surfaceColor,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            notebookIconData(notebook.icon, notebook.iconType),
+                            color: accentColor,
+                            size: 28,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  notebook.name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    color: accentColor,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                Text(
+                                  notebook.description.trim().isEmpty
+                                      ? '${notebook.noteCount} notes'
+                                      : notebook.description,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.bodySmall,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    _notebookOptionTile(
+                      context,
+                      icon: Icons.edit_outlined,
+                      label: 'Rename',
+                      value: 'rename',
+                    ),
+                    _notebookOptionTile(
+                      context,
+                      icon: Icons.grid_view_rounded,
+                      label: 'Change Icon',
+                      value: 'icon',
+                    ),
+                    _notebookOptionTile(
+                      context,
+                      icon: Icons.palette_outlined,
+                      label: 'Change Color',
+                      value: 'color',
+                    ),
+                    _notebookOptionTile(
+                      context,
+                      icon: Icons.notes_rounded,
+                      label: 'Edit Description',
+                      value: 'description',
+                    ),
+                    const Divider(height: 12),
+                    _notebookOptionTile(
+                      context,
+                      icon: Icons.delete_outline_rounded,
+                      label: 'Delete Notebook',
+                      value: 'delete',
+                      destructive: true,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    if (!mounted || action == null) {
+      return;
+    }
+
+    switch (action) {
+      case 'rename':
+        await _renameNotebook(notebook);
+        break;
+      case 'icon':
+        await _changeNotebookIcon(notebook);
+        break;
+      case 'color':
+        await _changeNotebookColor(notebook);
+        break;
+      case 'description':
+        await _editNotebookDescription(notebook);
+        break;
+      case 'delete':
+        await _deleteNotebook(notebook);
+        break;
+    }
+  }
+
+  Widget _notebookOptionTile(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required String value,
+    bool destructive = false,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final foregroundColor = destructive ? colorScheme.error : null;
+    return ListTile(
+      dense: true,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+      leading: Icon(icon, color: foregroundColor),
+      title: Text(label, style: TextStyle(color: foregroundColor)),
+      onTap: () => Navigator.of(context).pop(value),
+    );
+  }
+
+  Future<void> _renameNotebook(Notebook notebook) async {
+    final name = await _showNotebookNameDialog(
+      title: 'Rename notebook',
+      actionLabel: 'Save',
+      initialValue: notebook.name,
+    );
+    if (name == null || !mounted) {
+      return;
+    }
+    await _updateNotebook(
+      notebook.copyWith(name: name, updatedAt: DateTime.now()),
+    );
+  }
+
+  Future<void> _editNotebookDescription(Notebook notebook) async {
+    final description = await _showNotebookDescriptionDialog(
+      initialValue: notebook.description,
+    );
+    if (description == null || !mounted) {
+      return;
+    }
+    await _updateNotebook(
+      notebook.copyWith(description: description, updatedAt: DateTime.now()),
+    );
+  }
+
+  Future<void> _changeNotebookIcon(Notebook notebook) async {
+    final selected = await showDialog<NotebookIcon>(
+      context: context,
+      builder: (context) {
+        final theme = Theme.of(context);
+        final currentIcon =
+            notebook.icon ?? defaultNotebookIcon(notebook.iconType);
+        return AlertDialog(
+          title: const Text('Change icon'),
+          content: SizedBox(
+            width: 320,
+            height: 300,
+            child: GridView.builder(
+              itemCount: NotebookIcon.values.length,
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 4,
+                mainAxisSpacing: 8,
+                crossAxisSpacing: 8,
+              ),
+              itemBuilder: (context, index) {
+                final icon = NotebookIcon.values[index];
+                final isSelected = icon == currentIcon;
+                return Tooltip(
+                  message: _iconLabel(icon),
+                  child: Material(
+                    color: isSelected
+                        ? notebookSurfaceColor(theme, notebook.colorValue)
+                        : theme.colorScheme.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(12),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: () => Navigator.of(context).pop(icon),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            notebookIconData(icon, notebook.iconType),
+                            color: isSelected
+                                ? notebookAccentColor(
+                                    theme,
+                                    notebook.colorValue,
+                                  )
+                                : theme.colorScheme.onSurfaceVariant,
+                          ),
+                          if (isSelected)
+                            Icon(
+                              Icons.check_rounded,
+                              size: 16,
+                              color: notebookAccentColor(
+                                theme,
+                                notebook.colorValue,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+          ],
+        );
+      },
+    );
+    if (selected == null || !mounted) {
+      return;
+    }
+    await _updateNotebook(
+      notebook.copyWith(icon: selected, updatedAt: DateTime.now()),
+    );
+  }
+
+  Future<void> _changeNotebookColor(Notebook notebook) async {
+    final selectedColor = await showDialog<int>(
+      context: context,
+      builder: (context) {
+        final theme = Theme.of(context);
+        final usedColors = _notebooks
+            .where((item) => item.id != notebook.id)
+            .map((item) => item.colorValue | 0xFF000000)
+            .toSet();
+        return AlertDialog(
+          title: const Text('Change color'),
+          content: SizedBox(
+            width: 320,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                GridView.count(
+                  crossAxisCount: 4,
+                  shrinkWrap: true,
+                  mainAxisSpacing: 10,
+                  crossAxisSpacing: 10,
+                  children: [
+                    for (final color in NotebookBaseColor.values)
+                      _notebookColorChoice(
+                        context,
+                        value: color.value,
+                        label: color.label,
+                        currentValue: notebook.colorValue,
+                        enabled:
+                            !usedColors.contains(color.value) ||
+                            color.value == notebook.colorValue,
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final value = await _pickCustomNotebookColor(
+                      context,
+                      notebook.colorValue,
+                    );
+                    if (value != null && context.mounted) {
+                      Navigator.of(context).pop(value);
+                    }
+                  },
+                  icon: Icon(
+                    Icons.colorize_rounded,
+                    color: notebookAccentColor(theme, notebook.colorValue),
+                  ),
+                  label: const Text('Choose a custom color'),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+          ],
+        );
+      },
+    );
+    if (selectedColor == null || !mounted) {
+      return;
+    }
+
+    final isInUse = _notebooks.any(
+      (item) =>
+          item.id != notebook.id &&
+          (item.colorValue | 0xFF000000) == (selectedColor | 0xFF000000),
+    );
+    if (isInUse) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('That color is already used.')),
+      );
+      return;
+    }
+    await _updateNotebook(
+      notebook.copyWith(
+        colorValue: selectedColor | 0xFF000000,
+        updatedAt: DateTime.now(),
+      ),
+    );
+  }
+
+  Widget _notebookColorChoice(
+    BuildContext context, {
+    required int value,
+    required String label,
+    required int currentValue,
+    required bool enabled,
+  }) {
+    final selected = (value | 0xFF000000) == (currentValue | 0xFF000000);
+    return Tooltip(
+      message: enabled ? label : '$label is already in use',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: enabled ? () => Navigator.of(context).pop(value) : null,
+        child: Container(
+          decoration: BoxDecoration(
+            color: Color(value | 0xFF000000),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: selected
+                  ? Theme.of(context).colorScheme.onSurface
+                  : Theme.of(context).colorScheme.outlineVariant,
+              width: selected ? 2 : 1,
+            ),
+          ),
+          child: Center(
+            child: selected
+                ? Icon(
+                    Icons.check_rounded,
+                    color: AppColors.highContrastForeground(
+                      Color(value | 0xFF000000),
+                    ),
+                  )
+                : enabled
+                ? null
+                : Icon(
+                    Icons.lock_outline_rounded,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    size: 18,
+                  ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<int?> _pickCustomNotebookColor(
+    BuildContext context,
+    int currentValue,
+  ) {
+    final current = HSLColor.fromColor(Color(currentValue | 0xFF000000));
+    var hue = current.hue;
+    var selected = HSLColor.fromAHSL(1, hue, 0.48, 0.74).toColor();
+    return showDialog<int>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          selected = HSLColor.fromAHSL(1, hue, 0.48, 0.74).toColor();
+          return AlertDialog(
+            title: const Text('Custom notebook color'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircleAvatar(
+                  radius: 30,
+                  backgroundColor: selected,
+                  child: Icon(
+                    Icons.check_rounded,
+                    color: AppColors.highContrastForeground(selected),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Slider(
+                  min: 0,
+                  max: 360,
+                  divisions: 360,
+                  value: hue,
+                  onChanged: (value) => setDialogState(() => hue = value),
+                ),
+                const Text('Choose a soft hue for this notebook.'),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(selected.toARGB32()),
+                child: const Text('Apply'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _deleteNotebook(Notebook notebook) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: const Icon(Icons.delete_outline_rounded),
+        title: const Text('Delete notebook?'),
+        content: Text(
+          'Delete "${notebook.name}" and its notes? This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) {
+      return;
+    }
+    setState(() {
+      _notebooks = _notebooks.where((item) => item.id != notebook.id).toList();
+      if (_selectedNotebookId == notebook.id) {
+        _selectedNotebookId = null;
+      }
+      if (!_notebooks.any((item) => item.iconType == _selectedCategory)) {
+        _selectedCategory = null;
+      }
+    });
+    if (widget.initialNotebooks == null) {
+      await _persistWorkspace();
+    }
   }
 
   Future<void> _openRecentNote(RecentNoteView recentNote) async {
@@ -428,6 +923,13 @@ class _NotesScreenState extends State<NotesScreen> {
         return;
       }
     }
+    final selectedNotebook = _selectedNotebookId == null
+        ? null
+        : _notebooks.where((book) => book.id == _selectedNotebookId);
+    if (selectedNotebook != null && selectedNotebook.isNotEmpty) {
+      await _openNotebook(selectedNotebook.first, createNoteOnOpen: true);
+      return;
+    }
     final matching = _selectedCategory == null
         ? _notebooks
         : _notebooks.where((book) => book.iconType == _selectedCategory);
@@ -440,34 +942,41 @@ class _NotesScreenState extends State<NotesScreen> {
     required String actionLabel,
     String initialValue = '',
   }) async {
-    final controller = TextEditingController(text: initialValue);
     return showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(hintText: 'Notebook name'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final value = controller.text.trim();
-              if (value.isEmpty) {
-                return;
-              }
-              Navigator.of(context).pop(value);
-            },
-            child: Text(actionLabel),
-          ),
-        ],
+      builder: (context) => _NotebookTextDialog(
+        title: title,
+        hint: 'Notebook name',
+        actionLabel: actionLabel,
+        initialValue: initialValue,
       ),
     );
+  }
+
+  Future<String?> _showNotebookDescriptionDialog({
+    required String initialValue,
+  }) {
+    return showDialog<String>(
+      context: context,
+      builder: (context) => _NotebookTextDialog(
+        title: 'Notebook description',
+        hint: 'Add a short description',
+        actionLabel: 'Save',
+        initialValue: initialValue,
+        allowEmpty: true,
+        minLines: 2,
+        maxLines: 4,
+        maxLength: 120,
+      ),
+    );
+  }
+
+  String _iconLabel(NotebookIcon icon) {
+    final words = icon.name.replaceAllMapped(
+      RegExp(r'([A-Z])'),
+      (match) => ' ${match.group(1)}',
+    );
+    return words[0].toUpperCase() + words.substring(1);
   }
 
   String _id(String prefix) {
@@ -497,12 +1006,6 @@ class _NotesScreenState extends State<NotesScreen> {
             icon: Icon(
               _isSearchExpanded ? Icons.close_rounded : Icons.search_rounded,
             ),
-          ),
-          IconButton(
-            key: const ValueKey('notes-new-notebook-button'),
-            tooltip: 'New notebook',
-            onPressed: _createNotebook,
-            icon: const Icon(Icons.create_new_folder_outlined),
           ),
           if (widget.appMenu != null) widget.appMenu!,
         ],
@@ -602,7 +1105,8 @@ class _NotesScreenState extends State<NotesScreen> {
   }
 
   Widget _buildNotebookPanel(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
 
     return Container(
       key: const ValueKey('notes-notebook-panel'),
@@ -614,7 +1118,80 @@ class _NotesScreenState extends State<NotesScreen> {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [_buildCategoryStrip(context)],
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Notebooks',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              Text(
+                '${_notebooks.length}',
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(width: 4),
+              IconButton(
+                key: const ValueKey('notes-new-notebook-button'),
+                tooltip: 'New notebook',
+                visualDensity: VisualDensity.compact,
+                onPressed: _createNotebook,
+                icon: const Icon(Icons.create_new_folder_outlined),
+              ),
+            ],
+          ),
+          if (_notebooks.isEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Create a notebook to organize your notes.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            )
+          else
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final columns = (constraints.maxWidth / 185)
+                    .floor()
+                    .clamp(1, 4)
+                    .toInt();
+                final tileWidth =
+                    (constraints.maxWidth - (columns - 1) * 8) / columns;
+                return Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final notebook in _notebooks)
+                      SizedBox(
+                        width: tileWidth,
+                        height: 76,
+                        child: NotebookListTile(
+                          key: ValueKey('notebook-card-${notebook.id}'),
+                          notebook: notebook,
+                          selected: _selectedNotebookId == notebook.id,
+                          onOpen: () => _selectAndOpenNotebook(notebook),
+                          onOptions: () => _showNotebookOptions(notebook),
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
+          const SizedBox(height: 6),
+          Divider(height: 1, color: colorScheme.outlineVariant),
+          const SizedBox(height: 8),
+          _buildCategoryStrip(context),
+        ],
       ),
     );
   }
@@ -638,7 +1215,10 @@ class _NotesScreenState extends State<NotesScreen> {
               (total, notebook) => total + notebook.noteCount,
             ),
             selected: _selectedCategory == null,
-            onTap: () => setState(() => _selectedCategory = null),
+            onTap: () => setState(() {
+              _selectedCategory = null;
+              _selectedNotebookId = null;
+            }),
           ),
           for (final type in categories)
             _buildCategoryTile(
@@ -653,7 +1233,10 @@ class _NotesScreenState extends State<NotesScreen> {
                     (total, notebook) => total + notebook.noteCount,
                   ),
               selected: _selectedCategory == type,
-              onTap: () => setState(() => _selectedCategory = type),
+              onTap: () => setState(() {
+                _selectedCategory = type;
+                _selectedNotebookId = null;
+              }),
             ),
         ],
       ),
@@ -919,6 +1502,89 @@ class _SectionEmptyState extends StatelessWidget {
         style: Theme.of(context).textTheme.bodyMedium
             ?.copyWith(color: colorScheme.onSurfaceVariant),
       ),
+    );
+  }
+}
+
+class _NotebookTextDialog extends StatefulWidget {
+  const _NotebookTextDialog({
+    required this.title,
+    required this.hint,
+    required this.actionLabel,
+    required this.initialValue,
+    this.allowEmpty = false,
+    this.minLines = 1,
+    this.maxLines = 1,
+    this.maxLength,
+  });
+
+  final String title;
+  final String hint;
+  final String actionLabel;
+  final String initialValue;
+  final bool allowEmpty;
+  final int minLines;
+  final int maxLines;
+  final int? maxLength;
+
+  @override
+  State<_NotebookTextDialog> createState() => _NotebookTextDialogState();
+}
+
+class _NotebookTextDialogState extends State<_NotebookTextDialog> {
+  late final TextEditingController _controller;
+  bool _hasError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialValue);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.title),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        minLines: widget.minLines,
+        maxLines: widget.maxLines,
+        maxLength: widget.maxLength,
+        textCapitalization: TextCapitalization.sentences,
+        decoration: InputDecoration(
+          hintText: widget.hint,
+          errorText: _hasError ? 'A notebook name is required.' : null,
+        ),
+        onChanged: (value) {
+          if (_hasError && value.trim().isNotEmpty) {
+            setState(() => _hasError = false);
+          }
+        },
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () {
+            final value = _controller.text.trim();
+            if (!widget.allowEmpty && value.isEmpty) {
+              setState(() => _hasError = true);
+              return;
+            }
+            Navigator.of(context).pop(value);
+          },
+          child: Text(widget.actionLabel),
+        ),
+      ],
     );
   }
 }

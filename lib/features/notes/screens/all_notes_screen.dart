@@ -72,6 +72,8 @@ class _AllNotesScreenState extends State<AllNotesScreen> {
               notebookId: note.notebookId,
               notebookIconType: note.notebookIconType,
               notebookName: note.notebookName,
+              notebookIcon: note.notebookIcon,
+              notebookColorValue: note.notebookColorValue,
               sectionName: note.sectionName,
               tagColors: _tagColors,
             ),
@@ -90,6 +92,8 @@ class _AllNotesScreenState extends State<AllNotesScreen> {
                     notebookId: note.notebookId,
                     notebookIconType: note.notebookIconType,
                     notebookName: note.notebookName,
+                    notebookIcon: note.notebookIcon,
+                    notebookColorValue: note.notebookColorValue,
                     sectionName: note.sectionName,
                     tagColors: _tagColors,
                   )

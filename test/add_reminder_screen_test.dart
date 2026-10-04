@@ -207,10 +207,7 @@ void main() {
 
     final snoozeOption = find.byKey(const ValueKey('snooze-option'));
     await tester.ensureVisible(snoozeOption);
-    await tester.tap(snoozeOption);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('15 minutes'));
-    await tester.pumpAndSettle();
+    expect(find.text('15 minutes'), findsOneWidget);
 
     final vibrateSwitch = find.descendant(
       of: find.byKey(const ValueKey('vibrate-option')),
@@ -350,9 +347,7 @@ void main() {
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pump();
     expect(
-      find.textContaining(
-        'Every 2 weeks on Monday, Wednesday and Friday',
-      ),
+      find.textContaining('Every 2 weeks on Monday, Wednesday and Friday'),
       findsAtLeastNWidgets(1),
     );
     expect(find.textContaining('until'), findsAtLeastNWidgets(1));

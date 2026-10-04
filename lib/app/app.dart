@@ -6,6 +6,8 @@ import '../features/calender/models/calendar_view_mode.dart';
 import '../features/calender/calender_screen.dart';
 import '../features/notes/notes_screen.dart';
 import '../features/reminders/screens/add_reminder_screen.dart';
+import '../features/reminders/screens/alarm_ringing_screen.dart';
+import '../features/reminders/models/reminder.dart';
 import '../features/reminders/services/reminder_storage.dart';
 import '../features/reminders/reminders_screen.dart';
 import '../features/settings/services/reminder_preferences_store.dart';
@@ -39,7 +41,11 @@ class _AppSmaranaState extends State<AppSmarana> {
   late ThemeMode _themeMode;
   late Color _accentColor;
   StreamSubscription<String>? _notificationSubscription;
+  StreamSubscription<String>? _alarmSubscription;
+  StreamSubscription<String>? _alarmStoppedSubscription;
   bool _openingNotificationReminder = false;
+  bool _openingRingingAlarm = false;
+  String? _ringingAlarmId;
 
   @override
   void initState() {
@@ -50,6 +56,15 @@ class _AppSmaranaState extends State<AppSmarana> {
     _notificationSubscription = notifications.openedReminderIds.listen(
       _openReminderFromNotification,
     );
+    _alarmSubscription = notifications.ringingReminderIds.listen(
+      _openRingingAlarm,
+    );
+    _alarmStoppedSubscription = notifications.stoppedReminderIds.listen(
+      _closeRingingAlarm,
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _restoreRingingAlarm();
+    });
     final launchReminderId = notifications.takeInitialReminderId();
     if (launchReminderId != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -64,7 +79,84 @@ class _AppSmaranaState extends State<AppSmarana> {
     if (subscription != null) {
       unawaited(subscription.cancel());
     }
+    final alarmSubscription = _alarmSubscription;
+    if (alarmSubscription != null) {
+      unawaited(alarmSubscription.cancel());
+    }
+    final alarmStoppedSubscription = _alarmStoppedSubscription;
+    if (alarmStoppedSubscription != null) {
+      unawaited(alarmStoppedSubscription.cancel());
+    }
     super.dispose();
+  }
+
+  Future<void> _restoreRingingAlarm() async {
+    final reminderId = await NotificationService.instance
+        .activeAlarmReminderId();
+    if (reminderId != null) {
+      await _openRingingAlarm(reminderId);
+    }
+  }
+
+  Future<void> _openRingingAlarm(String reminderId) async {
+    if (_openingRingingAlarm || !mounted) {
+      return;
+    }
+
+    final navigator = _navigatorKey.currentState;
+    if (navigator == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _openRingingAlarm(reminderId);
+      });
+      return;
+    }
+
+    _openingRingingAlarm = true;
+    try {
+      final activeReminderId = await NotificationService.instance
+          .activeAlarmReminderId();
+      if (activeReminderId != reminderId || !mounted) {
+        return;
+      }
+      final reminders = await ReminderStorage().getReminders();
+      Reminder? ringingReminder;
+      for (final reminder in reminders) {
+        if (reminder.id == reminderId) {
+          ringingReminder = reminder;
+          break;
+        }
+      }
+      if (ringingReminder != null && mounted) {
+        _ringingAlarmId = reminderId;
+        await navigator.push<void>(
+          MaterialPageRoute<void>(
+            builder: (_) => AlarmRingingScreen(reminder: ringingReminder!),
+            fullscreenDialog: true,
+          ),
+        );
+      }
+    } on Exception catch (error, stackTrace) {
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'alarm ringing screen',
+        ),
+      );
+    } finally {
+      _ringingAlarmId = null;
+      _openingRingingAlarm = false;
+    }
+  }
+
+  void _closeRingingAlarm(String reminderId) {
+    if (!mounted || _ringingAlarmId != reminderId) {
+      return;
+    }
+    final navigator = _navigatorKey.currentState;
+    if (navigator?.canPop() == true) {
+      navigator!.pop();
+    }
   }
 
   Future<void> _openReminderFromNotification(String reminderId) async {
