@@ -72,48 +72,6 @@ Future<NoteCardColor?> _showNoteColorPicker(
   );
 }
 
-Future<NoteCardColor?> showNoteSectionColorPicker(
-  BuildContext context, {
-  required NoteCardColor current,
-}) {
-  return showModalBottomSheet<NoteCardColor>(
-    context: context,
-    useSafeArea: true,
-    showDragHandle: true,
-    builder: (context) {
-      final theme = Theme.of(context);
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Category Color',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                for (final color in selectableNoteSectionColors)
-                  _SectionColorSwatch(
-                    color: color,
-                    selected: color == current,
-                    onTap: () => Navigator.of(context).pop(color),
-                  ),
-              ],
-            ),
-          ],
-        ),
-      );
-    },
-  );
-}
-
 class NoteTagChip extends StatelessWidget {
   const NoteTagChip({
     super.key,
@@ -158,65 +116,6 @@ class NoteTagChip extends StatelessWidget {
       visualDensity: VisualDensity.compact,
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       padding: EdgeInsets.zero,
-    );
-  }
-}
-
-class _SectionColorSwatch extends StatelessWidget {
-  const _SectionColorSwatch({
-    required this.color,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final NoteCardColor color;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final label = noteSectionColorLabel(color);
-    return Semantics(
-      button: true,
-      selected: selected,
-      label: '$label category color${selected ? ', selected' : ''}',
-      child: Tooltip(
-        message: label,
-        child: InkWell(
-          key: ValueKey('section-color-${color.name}'),
-          customBorder: const CircleBorder(),
-          onTap: onTap,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 160),
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: noteSectionSwatchColor(color),
-              border: Border.all(
-                color: selected
-                    ? theme.colorScheme.primary
-                    : theme.colorScheme.outlineVariant,
-                width: selected ? 2.5 : 1,
-              ),
-            ),
-            child: selected
-                ? Icon(
-                    Icons.check_rounded,
-                    size: 19,
-                    color:
-                        ThemeData.estimateBrightnessForColor(
-                              noteSectionSwatchColor(color),
-                            ) ==
-                            Brightness.dark
-                        ? Colors.white
-                        : Colors.black,
-                  )
-                : null,
-          ),
-        ),
-      ),
     );
   }
 }

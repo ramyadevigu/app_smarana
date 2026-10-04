@@ -18,105 +18,101 @@ void main() {
     storage = NoteWorkspaceStorage();
   });
 
-  test(
-    'persists notebook, section, note, rich content, and timestamps',
-    () async {
-      final createdAt = DateTime(2026, 9, 1, 10);
-      final updatedAt = DateTime(2026, 9, 30, 14, 25);
-      final notebook = Notebook(
-        id: 'notebook-1',
-        name: 'Work',
-        description: 'Project planning and team notes.',
-        iconType: NotebookIconType.work,
-        icon: NotebookIcon.science,
-        colorValue: 0xFFE06E91,
-        sections: [
-          NoteSection(id: 'section-1', name: 'Meetings', createdAt: createdAt),
-        ],
-        notes: [
-          NoteEntry(
-            id: 'note-1',
-            notebookId: 'notebook-1',
-            sectionId: 'section-1',
-            title: 'Review',
-            content: 'Review agenda',
-            richContentDelta: '[{"insert":"Review agenda\\n"}]',
-            attachments: [
-              NoteAttachment(
-                id: 'attachment-1',
-                name: 'agenda.pdf',
-                path: '/local/agenda.pdf',
-                type: NoteAttachmentType.file,
-                addedAt: updatedAt,
-              ),
-            ],
-            projectMetadata: NoteProjectMetadata(
-              owner: 'Ramya',
-              tags: ['Launch', 'Q4'],
-              startDate: DateTime(2026, 9, 1),
-              endDate: DateTime(2026, 10, 1),
-              priority: NoteProjectPriority.high,
-              status: NoteProjectStatus.inProgress,
-              relatedCalendarEventId: 'event-42',
+  test('persists notebook, note, rich content, and timestamps', () async {
+    final createdAt = DateTime(2026, 9, 1, 10);
+    final updatedAt = DateTime(2026, 9, 30, 14, 25);
+    final notebook = Notebook(
+      id: 'notebook-1',
+      name: 'Work',
+      description: 'Project planning and team notes.',
+      iconType: NotebookIconType.work,
+      icon: NotebookIcon.science,
+      colorValue: 0xFFE06E91,
+      notes: [
+        NoteEntry(
+          id: 'note-1',
+          notebookId: 'notebook-1',
+          title: 'Review',
+          content: 'Review agenda',
+          richContentDelta: '[{"insert":"Review agenda\\n"}]',
+          attachments: [
+            NoteAttachment(
+              id: 'attachment-1',
+              name: 'agenda.pdf',
+              path: '/local/agenda.pdf',
+              type: NoteAttachmentType.file,
+              addedAt: updatedAt,
             ),
-            isPinned: true,
-            color: NoteCardColor.pink,
-            createdAt: createdAt,
-            updatedAt: updatedAt,
+          ],
+          projectMetadata: NoteProjectMetadata(
+            owner: 'Ramya',
+            tags: ['Launch', 'Q4'],
+            startDate: DateTime(2026, 9, 1),
+            endDate: DateTime(2026, 10, 1),
+            priority: NoteProjectPriority.high,
+            status: NoteProjectStatus.inProgress,
+            relatedCalendarEventId: 'event-42',
           ),
-        ],
-        createdAt: createdAt,
-        updatedAt: updatedAt,
-      );
+          isPinned: true,
+          color: NoteCardColor.pink,
+          createdAt: createdAt,
+          updatedAt: updatedAt,
+        ),
+      ],
+      createdAt: createdAt,
+      updatedAt: updatedAt,
+    );
 
-      await storage.saveWorkspace([notebook]);
-      final restored = (await storage.loadWorkspace()).single;
+    await storage.saveWorkspace([notebook]);
+    final loaded = await storage.loadWorkspace();
+    expect(loaded.any((item) => item.id == defaultNotebookId), isTrue);
+    final restored = loaded.singleWhere((item) => item.id == notebook.id);
 
-      expect(restored.name, notebook.name);
-      expect(restored.description, notebook.description);
-      expect(restored.icon, notebook.icon);
-      expect(restored.colorValue, notebook.colorValue);
-      expect(restored.createdAt, createdAt);
-      expect(restored.updatedAt, updatedAt);
-      expect(restored.sections.single.name, 'Meetings');
-      expect(restored.notes.single.title, 'Review');
-      expect(restored.notes.single.content, 'Review agenda');
-      expect(
-        restored.notes.single.richContentDelta,
-        notebook.notes.single.richContentDelta,
-      );
-      expect(restored.notes.single.attachments.single.name, 'agenda.pdf');
-      expect(
-        restored.notes.single.attachments.single.type,
-        NoteAttachmentType.file,
-      );
-      expect(restored.notes.single.projectMetadata?.owner, 'Ramya');
-      expect(restored.notes.single.projectMetadata?.tags, ['Launch', 'Q4']);
-      expect(
-        restored.notes.single.projectMetadata?.priority,
-        NoteProjectPriority.high,
-      );
-      expect(
-        restored.notes.single.projectMetadata?.status,
-        NoteProjectStatus.inProgress,
-      );
-      expect(
-        restored.notes.single.projectMetadata?.relatedCalendarEventId,
-        'event-42',
-      );
-      expect(restored.notes.single.isPinned, isTrue);
-      expect(restored.notes.single.color, NoteCardColor.pink);
-      expect(restored.notes.single.content, 'Review agenda');
-      expect(restored.notes.single.createdAt, createdAt);
-      expect(restored.notes.single.updatedAt, updatedAt);
-    },
-  );
+    expect(restored.name, notebook.name);
+    expect(restored.description, notebook.description);
+    expect(restored.icon, notebook.icon);
+    expect(restored.colorValue, notebook.colorValue);
+    expect(restored.createdAt, createdAt);
+    expect(restored.updatedAt, updatedAt);
+    expect(restored.notes.single.title, 'Review');
+    expect(restored.notes.single.content, 'Review agenda');
+    expect(
+      restored.notes.single.richContentDelta,
+      notebook.notes.single.richContentDelta,
+    );
+    expect(restored.notes.single.attachments.single.name, 'agenda.pdf');
+    expect(
+      restored.notes.single.attachments.single.type,
+      NoteAttachmentType.file,
+    );
+    expect(restored.notes.single.projectMetadata?.owner, 'Ramya');
+    expect(restored.notes.single.projectMetadata?.tags, ['Launch', 'Q4']);
+    expect(
+      restored.notes.single.projectMetadata?.priority,
+      NoteProjectPriority.high,
+    );
+    expect(
+      restored.notes.single.projectMetadata?.status,
+      NoteProjectStatus.inProgress,
+    );
+    expect(
+      restored.notes.single.projectMetadata?.relatedCalendarEventId,
+      'event-42',
+    );
+    expect(restored.notes.single.isPinned, isTrue);
+    expect(restored.notes.single.color, NoteCardColor.pink);
+    expect(restored.notes.single.content, 'Review agenda');
+    expect(restored.notes.single.createdAt, createdAt);
+    expect(restored.notes.single.updatedAt, updatedAt);
+  });
 
-  test('returns an empty workspace for corrupted data', () async {
+  test('keeps the default notebook available for corrupted data', () async {
     final preferences = await SharedPreferences.getInstance();
     await preferences.setString('smarana_note_workspace_v1', '{invalid');
 
-    expect(await storage.loadWorkspace(), isEmpty);
+    final notebooks = await storage.loadWorkspace();
+    expect(notebooks, hasLength(1));
+    expect(notebooks.single.name, defaultNotebookName);
   });
 
   test(
@@ -140,6 +136,7 @@ void main() {
                   'notebookId': 'notebook-legacy',
                   'sectionId': 'section-legacy',
                   'title': 'First',
+                  'content': 'Legacy note content',
                   'projectMetadata': {
                     'tags': ['Campaigns'],
                   },
@@ -165,11 +162,20 @@ void main() {
       final firstLoad = await storage.loadWorkspace();
       expect(
         firstLoad.map((notebook) => notebook.colorValue).toSet().length,
-        2,
+        3,
       );
-      expect(firstLoad.first.description, isEmpty);
-      expect(firstLoad.first.icon, isNull);
-      final migratedColors = firstLoad.first.notes
+      final legacyNotebook = firstLoad.singleWhere(
+        (notebook) => notebook.id == 'notebook-legacy',
+      );
+      expect(legacyNotebook.description, isEmpty);
+      expect(legacyNotebook.icon, isNull);
+      expect(legacyNotebook.notes.map((note) => note.id), [
+        'note-legacy-1',
+        'note-legacy-2',
+      ]);
+      expect(legacyNotebook.notes.first.notebookId, 'notebook-legacy');
+      expect(legacyNotebook.notes.first.content, 'Legacy note content');
+      final migratedColors = legacyNotebook.notes
           .map((note) => note.color)
           .toList();
       expect(migratedColors, [NoteCardColor.yellow, NoteCardColor.pink]);
@@ -177,17 +183,31 @@ void main() {
       final persisted = jsonDecode(
         preferences.getString('smarana_note_workspace_v1')!,
       ) as Map;
-      expect(persisted['version'], 3);
+      expect(persisted['version'], 4);
       final persistedNotebooks = persisted['notebooks'] as List;
-      expect(persistedNotebooks.first['description'], isEmpty);
-      expect(persistedNotebooks.first['icon'], isNull);
-      expect(persistedNotebooks.first['colorValue'], isA<int>());
+      final persistedLegacy = persistedNotebooks.singleWhere(
+        (notebook) => notebook['id'] == 'notebook-legacy',
+      ) as Map;
+      expect(persistedLegacy['description'], isEmpty);
+      expect(persistedLegacy['icon'], isNull);
+      expect(persistedLegacy['colorValue'], isA<int>());
+      expect(persistedLegacy.containsKey('sections'), isFalse);
       expect(
-        persistedNotebooks.first['notes'].map((note) => note['color']).toList(),
+        (persistedLegacy['notes'] as List)
+            .map((note) => note['color'])
+            .toList(),
         ['yellow', 'pink'],
       );
       expect(
-        (await storage.loadWorkspace()).first.notes
+        (persistedLegacy['notes'] as List).every(
+          (note) => !(note as Map).containsKey('sectionId'),
+        ),
+        isTrue,
+      );
+      expect(
+        (await storage.loadWorkspace())
+            .singleWhere((notebook) => notebook.id == 'notebook-legacy')
+            .notes
             .map((note) => note.color)
             .toList(),
         migratedColors,
@@ -204,14 +224,6 @@ void main() {
       id: 'tag-notebook',
       name: 'Work',
       iconType: NotebookIconType.work,
-      sections: [
-        NoteSection(
-          id: 'tag-section',
-          name: 'General',
-          createdAt: now,
-          color: NoteCardColor.lavender,
-        ),
-      ],
       notes: const [],
       createdAt: now,
       updatedAt: now,
@@ -226,10 +238,45 @@ void main() {
       'campaigns': NoteCardColor.lavender,
     });
     expect(
-      (await storage.loadWorkspace()).single.sections.single.color,
-      NoteCardColor.lavender,
+      (await storage.loadWorkspace())
+          .singleWhere((item) => item.id == defaultNotebookId)
+          .name,
+      defaultNotebookName,
     );
   });
+
+  test(
+    'normalizes an existing Quick Notes notebook without losing its notes',
+    () async {
+      final now = DateTime(2026, 10, 1);
+      final legacyQuickNotes = Notebook(
+        id: 'old-quick-notes',
+        name: 'quick notes',
+        iconType: NotebookIconType.general,
+        notes: [
+          NoteEntry(
+            id: 'quick-note',
+            notebookId: 'old-quick-notes',
+            title: 'Keep this note',
+            content: 'Existing content',
+            createdAt: now,
+            updatedAt: now,
+          ),
+        ],
+        createdAt: now,
+        updatedAt: now,
+      );
+
+      await storage.saveWorkspace([legacyQuickNotes]);
+      final notebooks = await storage.loadWorkspace();
+      final quickNotes = notebooks.singleWhere(isDefaultNotebook);
+
+      expect(quickNotes.name, defaultNotebookName);
+      expect(quickNotes.notes.single.title, 'Keep this note');
+      expect(quickNotes.notes.single.content, 'Existing content');
+      expect(quickNotes.notes.single.notebookId, defaultNotebookId);
+    },
+  );
 
   test('assigns new note colors with a balanced palette', () {
     final notes = <NoteEntry>[];
@@ -242,7 +289,6 @@ void main() {
         NoteEntry(
           id: 'note-$index',
           notebookId: 'notebook',
-          sectionId: 'section',
           title: 'Note $index',
           content: '',
           createdAt: now,

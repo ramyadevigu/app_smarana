@@ -6,9 +6,13 @@ import '../reminders/models/reminder.dart';
 import '../reminders/services/reminder_storage.dart';
 import '../../../theme/app_design_tokens.dart';
 import 'models/note_workspace_models.dart';
+import 'models/rich_note_draft.dart';
 import 'screens/notebook_detail_screen.dart';
+import 'screens/rich_note_editor_screen.dart';
 import '../../../theme/app_colors.dart';
 import 'theme/notebook_colors.dart';
+import 'services/note_attachment_storage.dart';
+import 'theme/note_card_colors.dart';
 import 'services/note_workspace_storage.dart';
 import 'widgets/notebook_selector.dart';
 import 'widgets/recent_note_card.dart';
@@ -36,6 +40,7 @@ class _NotesScreenState extends State<NotesScreen> {
   final FocusNode _searchFocusNode = FocusNode();
   late final NoteWorkspaceStorage _workspaceStorage;
   late final ReminderStorage _reminderStorage;
+  late final NoteAttachmentStorage _attachmentStorage;
   late List<Notebook> _notebooks;
   Map<String, Reminder> _remindersById = const {};
   Map<String, NoteCardColor> _tagColors = const {};
@@ -62,8 +67,9 @@ class _NotesScreenState extends State<NotesScreen> {
     super.initState();
     _workspaceStorage = widget.workspaceStorage ?? NoteWorkspaceStorage();
     _reminderStorage = ReminderStorage();
+    _attachmentStorage = NoteAttachmentStorage();
     _notebooks = ensureDistinctNotebookColors(
-      widget.initialNotebooks ?? _emptyNotebookList,
+      ensureQuickNotesNotebook(widget.initialNotebooks ?? _emptyNotebookList),
     );
     unawaited(_loadReminderIndex());
     if (widget.initialNotebooks != null) {
@@ -176,7 +182,6 @@ class _NotesScreenState extends State<NotesScreen> {
       }
       return note.note.title.toLowerCase().contains(query) ||
           note.notebookName.toLowerCase().contains(query) ||
-          note.sectionName.toLowerCase().contains(query) ||
           note.note.preview.toLowerCase().contains(query);
     }).toList();
     _filteredRecentNotesCache = filteredNotes;
@@ -201,9 +206,6 @@ class _NotesScreenState extends State<NotesScreen> {
     final views = <RecentNoteView>[];
     DateTime? nextPriorityChange;
     for (final notebook in _notebooks) {
-      final sectionNames = {
-        for (final section in notebook.sections) section.id: section.name,
-      };
       for (final note in notebook.notes) {
         final priorityChange = note.updatedAt.add(_recentUpdateWindow);
         if (priorityChange.isAfter(now) &&
@@ -219,7 +221,6 @@ class _NotesScreenState extends State<NotesScreen> {
             notebookName: notebook.name,
             notebookIcon: notebook.icon,
             notebookColorValue: notebook.colorValue,
-            sectionName: sectionNames[note.sectionId] ?? 'General',
             tagColors: _tagColors,
           ),
         );
@@ -314,11 +315,6 @@ class _NotesScreenState extends State<NotesScreen> {
       return;
     }
     final now = DateTime.now();
-    final defaultSection = NoteSection(
-      id: _id('section'),
-      name: 'General',
-      createdAt: now,
-    );
     final colorValue = nextNotebookColorValue(
       _notebooks.map((notebook) => notebook.colorValue),
     );
@@ -326,7 +322,6 @@ class _NotesScreenState extends State<NotesScreen> {
       id: _id('notebook'),
       name: name,
       iconType: NotebookIconType.general,
-      sections: [defaultSection],
       notes: const [],
       createdAt: now,
       updatedAt: now,
@@ -338,11 +333,7 @@ class _NotesScreenState extends State<NotesScreen> {
     await _persistWorkspace();
   }
 
-  Future<void> _openNotebook(
-    Notebook notebook, {
-    bool createNoteOnOpen = false,
-    String? initialNoteId,
-  }) async {
+  Future<void> _openNotebook(Notebook notebook, {String? initialNoteId}) async {
     if (_selectedNotebookId != notebook.id) {
       setState(() => _selectedNotebookId = notebook.id);
     }
@@ -350,10 +341,12 @@ class _NotesScreenState extends State<NotesScreen> {
       MaterialPageRoute<NotebookDetailResult>(
         builder: (_) => NotebookDetailScreen(
           notebook: notebook,
+          notebooks: _notebooks,
           onNotebookChanged: _updateNotebook,
+          onNoteChanged: _saveNote,
+          onNoteDeleted: _deleteNote,
           tagColors: _tagColors,
           onTagColorsChanged: _updateTagColors,
-          createNoteOnOpen: createNoteOnOpen,
           initialNoteId: initialNoteId,
         ),
       ),
@@ -362,6 +355,9 @@ class _NotesScreenState extends State<NotesScreen> {
       return;
     }
     if (result.isDeleted) {
+      if (isDefaultNotebook(notebook)) {
+        return;
+      }
       setState(() {
         _notebooks = _notebooks
             .where((item) => item.id != notebook.id)
@@ -448,12 +444,13 @@ class _NotesScreenState extends State<NotesScreen> {
                       label: 'Open Notebook',
                       value: 'open',
                     ),
-                    _notebookOptionTile(
-                      context,
-                      icon: Icons.edit_outlined,
-                      label: 'Rename',
-                      value: 'rename',
-                    ),
+                    if (!isDefaultNotebook(notebook))
+                      _notebookOptionTile(
+                        context,
+                        icon: Icons.edit_outlined,
+                        label: 'Rename',
+                        value: 'rename',
+                      ),
                     _notebookOptionTile(
                       context,
                       icon: Icons.grid_view_rounded,
@@ -472,14 +469,16 @@ class _NotesScreenState extends State<NotesScreen> {
                       label: 'Edit Description',
                       value: 'description',
                     ),
-                    const Divider(height: 12),
-                    _notebookOptionTile(
-                      context,
-                      icon: Icons.delete_outline_rounded,
-                      label: 'Delete Notebook',
-                      value: 'delete',
-                      destructive: true,
-                    ),
+                    if (!isDefaultNotebook(notebook)) ...[
+                      const Divider(height: 12),
+                      _notebookOptionTile(
+                        context,
+                        icon: Icons.delete_outline_rounded,
+                        label: 'Delete Notebook',
+                        value: 'delete',
+                        destructive: true,
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -533,6 +532,9 @@ class _NotesScreenState extends State<NotesScreen> {
   }
 
   Future<void> _renameNotebook(Notebook notebook) async {
+    if (isDefaultNotebook(notebook)) {
+      return;
+    }
     final name = await _showNotebookNameDialog(
       title: 'Rename notebook',
       actionLabel: 'Save',
@@ -820,6 +822,9 @@ class _NotesScreenState extends State<NotesScreen> {
   }
 
   Future<void> _deleteNotebook(Notebook notebook) async {
+    if (isDefaultNotebook(notebook)) {
+      return;
+    }
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -913,6 +918,75 @@ class _NotesScreenState extends State<NotesScreen> {
     await _updateNotebook(updated);
   }
 
+  Future<void> _saveNote(NoteEntry note) async {
+    final destinationExists = _notebooks.any(
+      (notebook) => notebook.id == note.notebookId,
+    );
+    if (!destinationExists) {
+      throw StateError('The selected notebook is no longer available.');
+    }
+
+    final now = note.updatedAt;
+    final updatedNotebooks = _notebooks.map((notebook) {
+      final alreadyContains = notebook.notes.any(
+        (existing) => existing.id == note.id,
+      );
+      if (!alreadyContains && notebook.id != note.notebookId) {
+        return notebook;
+      }
+      final notes = notebook.notes
+          .where((existing) => existing.id != note.id)
+          .toList();
+      if (notebook.id == note.notebookId) {
+        notes.add(note);
+      }
+      return notebook.copyWith(notes: notes, updatedAt: now);
+    }).toList();
+    setState(() {
+      _notebooks = updatedNotebooks;
+    });
+    if (widget.initialNotebooks == null) {
+      await _persistWorkspace();
+    }
+  }
+
+  Future<void> _deleteNote(String noteId) async {
+    final updatedNotebooks = _notebooks.map((notebook) {
+      if (!notebook.notes.any((note) => note.id == noteId)) {
+        return notebook;
+      }
+      return notebook.copyWith(
+        notes: notebook.notes.where((note) => note.id != noteId).toList(),
+        updatedAt: DateTime.now(),
+      );
+    }).toList();
+    setState(() {
+      _notebooks = updatedNotebooks;
+    });
+    if (widget.initialNotebooks == null) {
+      await _persistWorkspace();
+    }
+  }
+
+  NoteEntry _noteFromDraft({
+    required NoteEntry base,
+    required RichNoteDraft draft,
+  }) {
+    return base.copyWith(
+      notebookId: draft.notebookId,
+      title: draft.title,
+      content: draft.plainContent,
+      richContentDelta: draft.richContentDelta,
+      attachments: draft.attachments,
+      projectMetadata: draft.projectMetadata,
+      clearProjectMetadata: draft.projectMetadata == null,
+      updatedAt: draft.updatedAt,
+      reminderId: draft.reminderId,
+      clearReminderId: draft.reminderId == null,
+      color: draft.color,
+    );
+  }
+
   void _expandSearch() {
     setState(() => _isSearchExpanded = true);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -929,20 +1003,80 @@ class _NotesScreenState extends State<NotesScreen> {
   }
 
   Future<void> _createNote() async {
-    if (_notebooks.isEmpty) {
-      await _createNotebook();
-      if (!mounted || _notebooks.isEmpty) {
-        return;
-      }
+    final notebook = _notebooks.firstWhere(isDefaultNotebook);
+    if (_selectedNotebookId != notebook.id) {
+      setState(() => _selectedNotebookId = notebook.id);
     }
-    final selectedNotebook = _selectedNotebookId == null
-        ? null
-        : _notebooks.where((book) => book.id == _selectedNotebookId);
-    if (selectedNotebook != null && selectedNotebook.isNotEmpty) {
-      await _openNotebook(selectedNotebook.first, createNoteOnOpen: true);
+    final now = DateTime.now();
+    final note = NoteEntry(
+      id: _id('note'),
+      notebookId: notebook.id,
+      title: '',
+      content: '',
+      createdAt: now,
+      updatedAt: now,
+      color: nextBalancedNoteColor(notebook.notes),
+    );
+    final draft = await Navigator.of(context).push<RichNoteDraft>(
+      MaterialPageRoute<RichNoteDraft>(
+        builder: (_) => RichNoteEditorScreen(
+          note: note,
+          notebooks: _notebooks,
+          focusOnOpen: true,
+          tagColors: _tagColors,
+          onTagColorsChanged: _updateTagColors,
+          reminderStorage: _reminderStorage,
+          onAutosave: (snapshot) async {
+            if (snapshot.title.trim().isEmpty &&
+                snapshot.plainContent.trim().isEmpty) {
+              return;
+            }
+            await _saveNote(_noteFromDraft(base: note, draft: snapshot));
+          },
+          onDuplicate: (snapshot) async {
+            final id = _id('note');
+            final attachments = await _attachmentStorage.duplicateAttachments(
+              attachments: snapshot.attachments,
+              noteId: id,
+            );
+            final title = snapshot.title.trim().isEmpty
+                ? 'Untitled'
+                : snapshot.title.trim();
+            await _saveNote(
+              NoteEntry(
+                id: id,
+                notebookId: snapshot.notebookId,
+                title: '$title copy',
+                content: snapshot.plainContent,
+                richContentDelta: snapshot.richContentDelta,
+                attachments: attachments,
+                projectMetadata: snapshot.projectMetadata,
+                createdAt: DateTime.now(),
+                updatedAt: DateTime.now(),
+                color: snapshot.color,
+              ),
+            );
+          },
+          onDelete: (snapshot) async {
+            final reminderId = snapshot.reminderId;
+            if (reminderId != null) {
+              await _reminderStorage.deleteReminder(reminderId);
+            }
+            await _deleteNote(note.id);
+          },
+        ),
+      ),
+    );
+    if (!mounted) {
       return;
     }
-    await _openNotebook(_notebooks.first, createNoteOnOpen: true);
+    if (draft != null &&
+        (draft.title.trim().isNotEmpty ||
+            draft.plainContent.trim().isNotEmpty)) {
+      await _saveNote(_noteFromDraft(base: note, draft: draft));
+    } else if (draft?.reminderId != null) {
+      await _reminderStorage.deleteReminder(draft!.reminderId!);
+    }
   }
 
   Future<String?> _showNotebookNameDialog({
@@ -1010,10 +1144,7 @@ class _NotesScreenState extends State<NotesScreen> {
               ),
             ),
             const SizedBox(width: 4),
-            Flexible(
-              fit: FlexFit.tight,
-              child: _buildNotebookPanel(context),
-            ),
+            Flexible(fit: FlexFit.tight, child: _buildNotebookPanel(context)),
           ],
         ),
         actions: [

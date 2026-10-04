@@ -12,24 +12,11 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  testWidgets('shows the inline title and compact notebook section chip', (
+  testWidgets('shows the inline title and compact notebook selector', (
     tester,
   ) async {
     await tester.pumpWidget(
-      MaterialApp(
-        theme: buildLightTheme(),
-        home: RichNoteEditorScreen(
-          notebookName: 'Quick Ideas',
-          sections: [
-            NoteSection(
-              id: 'section-campaigns',
-              name: 'Campaigns',
-              createdAt: DateTime(2026, 10, 1),
-            ),
-          ],
-          initialSectionId: 'section-campaigns',
-        ),
-      ),
+      MaterialApp(theme: buildLightTheme(), home: RichNoteEditorScreen()),
     );
     await tester.pumpAndSettle();
 
@@ -47,8 +34,8 @@ void main() {
     expect(titleField.decoration?.errorBorder, InputBorder.none);
     expect(titleField.decoration?.focusedErrorBorder, InputBorder.none);
     expect(find.text('Edit note'), findsNothing);
-    expect(find.text('Campaigns'), findsOneWidget);
-    expect(find.text('Quick Ideas'), findsOneWidget);
+    expect(find.textContaining('Quick Notes'), findsOneWidget);
+    expect(find.text('General'), findsNothing);
     expect(
       find.byKey(const ValueKey('rich-note-formatting-toolbar')),
       findsOneWidget,
@@ -57,20 +44,7 @@ void main() {
   });
 
   testWidgets('opens compact reminder settings from the bell', (tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: RichNoteEditorScreen(
-          sections: [
-            NoteSection(
-              id: 'section-1',
-              name: 'General',
-              createdAt: DateTime(2026, 10, 1),
-            ),
-          ],
-          initialSectionId: 'section-1',
-        ),
-      ),
-    );
+    await tester.pumpWidget(MaterialApp(home: RichNoteEditorScreen()));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const ValueKey('note-editor-reminder-button')));
@@ -88,20 +62,7 @@ void main() {
   testWidgets('formatting rail collapses and More exposes note actions', (
     tester,
   ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: RichNoteEditorScreen(
-          sections: [
-            NoteSection(
-              id: 'section-1',
-              name: 'General',
-              createdAt: DateTime(2026, 10, 1),
-            ),
-          ],
-          initialSectionId: 'section-1',
-        ),
-      ),
-    );
+    await tester.pumpWidget(MaterialApp(home: RichNoteEditorScreen()));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byTooltip('Collapse formatting toolbar'));
@@ -114,7 +75,7 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('note-editor-more-menu')));
     await tester.pumpAndSettle();
-    expect(find.text('Add to Notebook / Move'), findsOneWidget);
+    expect(find.text('Choose Notebook'), findsOneWidget);
     expect(find.text('Add Tags'), findsOneWidget);
     expect(find.text('Add Attachment'), findsOneWidget);
     expect(find.text('Duplicate'), findsOneWidget);
@@ -125,20 +86,7 @@ void main() {
   testWidgets('note color picker uses the approved theme palette', (
     tester,
   ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: RichNoteEditorScreen(
-          sections: [
-            NoteSection(
-              id: 'section-color',
-              name: 'General',
-              createdAt: DateTime(2026, 10, 1),
-            ),
-          ],
-          initialSectionId: 'section-color',
-        ),
-      ),
-    );
+    await tester.pumpWidget(MaterialApp(home: RichNoteEditorScreen()));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const ValueKey('note-editor-more-menu')));
@@ -160,20 +108,7 @@ void main() {
   });
 
   testWidgets('all ten note colors can be selected', (tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: RichNoteEditorScreen(
-          sections: [
-            NoteSection(
-              id: 'section-palette',
-              name: 'General',
-              createdAt: DateTime(2026, 10, 1),
-            ),
-          ],
-          initialSectionId: 'section-palette',
-        ),
-      ),
-    );
+    await tester.pumpWidget(MaterialApp(home: RichNoteEditorScreen()));
     await tester.pumpAndSettle();
 
     for (final color in [
@@ -217,7 +152,6 @@ void main() {
     final note = NoteEntry(
       id: 'tagged-note',
       notebookId: 'notebook',
-      sectionId: 'section-tags',
       title: 'Campaign',
       content: '',
       projectMetadata: const NoteProjectMetadata(tags: ['Campaigns']),
@@ -229,10 +163,6 @@ void main() {
       MaterialApp(
         home: RichNoteEditorScreen(
           note: note,
-          sections: [
-            NoteSection(id: 'section-tags', name: 'General', createdAt: now),
-          ],
-          initialSectionId: 'section-tags',
           onTagColorsChanged: (colors) async {
             savedTagColors = colors;
           },
@@ -258,58 +188,63 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('category chip has no icon and opens its seven colors', (
+  testWidgets('notebook selector moves the note and autosaves its assignment', (
     tester,
   ) async {
-    NoteCardColor? savedColor;
-    String? savedSectionId;
+    RichNoteDraft? savedDraft;
     final now = DateTime(2026, 10, 1);
+    final quickNotes = Notebook(
+      id: defaultNotebookId,
+      name: defaultNotebookName,
+      iconType: NotebookIconType.general,
+      notes: const [],
+      createdAt: now,
+      updatedAt: now,
+    );
+    final work = Notebook(
+      id: 'work',
+      name: 'Work',
+      iconType: NotebookIconType.work,
+      notes: const [],
+      createdAt: now,
+      updatedAt: now,
+    );
+    final note = NoteEntry(
+      id: 'note-1',
+      notebookId: quickNotes.id,
+      title: 'A note',
+      content: 'Note content',
+      createdAt: now,
+      updatedAt: now,
+    );
     await tester.pumpWidget(
       MaterialApp(
         home: RichNoteEditorScreen(
-          sections: [
-            NoteSection(id: 'section-general', name: 'General', createdAt: now),
-          ],
-          initialSectionId: 'section-general',
-          onSectionColorChanged: (sectionId, color) async {
-            savedSectionId = sectionId;
-            savedColor = color;
+          note: note,
+          notebooks: [quickNotes, work],
+          onAutosave: (draft) async {
+            savedDraft = draft;
           },
         ),
       ),
     );
     await tester.pumpAndSettle();
 
-    expect(find.byIcon(Icons.folder_outlined), findsNothing);
-    await tester.tap(find.byKey(const ValueKey('rich-note-section-dropdown')));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Category Color'), findsOneWidget);
-    for (final color in [
-      NoteCardColor.blue,
-      NoteCardColor.cyan,
-      NoteCardColor.mint,
-      NoteCardColor.green,
-      NoteCardColor.orange,
-      NoteCardColor.pink,
-      NoteCardColor.lavender,
-    ]) {
-      expect(
-        find.byKey(ValueKey('section-color-${color.name}')),
-        findsOneWidget,
-      );
-    }
-    await tester.tap(find.byKey(const ValueKey('section-color-pink')));
-    await tester.pumpAndSettle();
-
-    expect(savedSectionId, 'section-general');
-    expect(savedColor, NoteCardColor.pink);
-    await tester.tap(find.byKey(const ValueKey('rich-note-section-dropdown')));
-    await tester.pumpAndSettle();
     expect(
-      find.bySemanticsLabel('Pink category color, selected'),
+      find.byKey(const ValueKey('rich-note-notebook-dropdown')),
       findsOneWidget,
     );
+    expect(find.textContaining('Notebook: Quick Notes'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('rich-note-notebook-dropdown')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Choose notebook'), findsOneWidget);
+    await tester.tap(find.text('Work'));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 800));
+
+    expect(savedDraft?.notebookId, 'work');
+    expect(find.textContaining('Notebook: Work'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -320,14 +255,6 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: RichNoteEditorScreen(
-          sections: [
-            NoteSection(
-              id: 'section-highlight',
-              name: 'General',
-              createdAt: DateTime(2026, 10, 1),
-            ),
-          ],
-          initialSectionId: 'section-highlight',
           onAutosave: (draft) async {
             savedDraft = draft;
           },
@@ -348,7 +275,7 @@ void main() {
     );
     await tester.pump();
 
-    await tester.tap(find.byTooltip('Text and section colors'));
+    await tester.tap(find.byTooltip('Text colors'));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Text highlight Yellow'));
     await tester.pumpAndSettle();
@@ -395,14 +322,6 @@ void main() {
           themeMode: mode,
           home: RichNoteEditorScreen(
             key: ValueKey('editor-${brightness.name}'),
-            sections: [
-              NoteSection(
-                id: 'section-colors',
-                name: 'General',
-                createdAt: DateTime(2026, 10, 1),
-              ),
-            ],
-            initialSectionId: 'section-colors',
             onAutosave: (draft) async {
               savedDraft = draft;
             },
@@ -435,7 +354,7 @@ void main() {
           quill.ChangeSource.local,
         );
         await tester.pump();
-        await tester.tap(find.byTooltip('Text and section colors'));
+        await tester.tap(find.byTooltip('Text colors'));
         await tester.pumpAndSettle();
         await tester.tap(find.byTooltip('Text highlight ${colorNames[index]}'));
         await tester.pumpAndSettle();
@@ -451,7 +370,7 @@ void main() {
           quill.ChangeSource.local,
         );
         await tester.pump();
-        await tester.tap(find.byTooltip('Text and section colors'));
+        await tester.tap(find.byTooltip('Text colors'));
         await tester.pumpAndSettle();
         await tester.tap(find.byTooltip('Text color ${colorNames[index]}'));
         await tester.pumpAndSettle();
@@ -531,16 +450,7 @@ void main() {
           theme: buildLightTheme(),
           darkTheme: buildDarkTheme(),
           themeMode: mode,
-          home: RichNoteEditorScreen(
-            sections: [
-              NoteSection(
-                id: 'section-theme',
-                name: 'General',
-                createdAt: DateTime(2026, 10, 1),
-              ),
-            ],
-            initialSectionId: 'section-theme',
-          ),
+          home: RichNoteEditorScreen(),
         ),
       );
       await tester.pumpAndSettle();

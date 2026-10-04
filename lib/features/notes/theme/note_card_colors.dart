@@ -15,16 +15,6 @@ const List<NoteCardColor> selectableNoteCardColors = [
   NoteCardColor.mint,
 ];
 
-const List<NoteCardColor> selectableNoteSectionColors = [
-  NoteCardColor.blue,
-  NoteCardColor.cyan,
-  NoteCardColor.mint,
-  NoteCardColor.green,
-  NoteCardColor.orange,
-  NoteCardColor.pink,
-  NoteCardColor.lavender,
-];
-
 const Map<NoteCardColor, Color> noteCardPalette = {
   NoteCardColor.yellow: Color(0xFFFFF4CC),
   NoteCardColor.pink: Color(0xFFFFE4EC),
@@ -36,16 +26,6 @@ const Map<NoteCardColor, Color> noteCardPalette = {
   NoteCardColor.lavender: Color(0xFFF0E8FF),
   NoteCardColor.sky: Color(0xFFE3F2FF),
   NoteCardColor.mint: Color(0xFFE3F7EF),
-};
-
-const Map<NoteCardColor, Color> noteSectionPalette = {
-  NoteCardColor.blue: Color(0xFF4773FA),
-  NoteCardColor.cyan: Color(0xFF93DCED),
-  NoteCardColor.mint: Color(0xFF9CE3D3),
-  NoteCardColor.green: Color(0xFFCAE0B9),
-  NoteCardColor.orange: Color(0xFFFBD6A1),
-  NoteCardColor.pink: Color(0xFFF7BED1),
-  NoteCardColor.lavender: Color(0xFFD0C6FA),
 };
 
 const List<NoteCardColor> noteTextHighlightColors = [
@@ -104,48 +84,6 @@ String noteCardColorLabel(NoteCardColor noteColor) {
     NoteCardColor.mint => 'Mint',
     NoteCardColor.lavender => 'Lavender',
   };
-}
-
-String noteSectionColorLabel(NoteCardColor color) {
-  return switch (color) {
-    NoteCardColor.blue => 'Blue',
-    NoteCardColor.cyan => 'Cyan',
-    NoteCardColor.mint => 'Mint',
-    NoteCardColor.green => 'Light Green',
-    NoteCardColor.orange => 'Peach / Amber',
-    NoteCardColor.pink => 'Pink',
-    NoteCardColor.lavender => 'Lavender',
-    _ => 'Default',
-  };
-}
-
-Color noteSectionSurfaceColor(ThemeData theme, NoteCardColor color) {
-  final paletteColor = noteSectionPalette[color];
-  if (paletteColor == null) {
-    return theme.colorScheme.secondaryContainer;
-  }
-  final blend = theme.brightness == Brightness.light ? 0.16 : 0.28;
-  return Color.lerp(
-    theme.colorScheme.surfaceContainerLow,
-    paletteColor,
-    blend,
-  )!;
-}
-
-Color noteSectionAccentColor(ThemeData theme, NoteCardColor color) {
-  final paletteColor = noteSectionPalette[color];
-  if (paletteColor == null) {
-    return theme.colorScheme.onSecondaryContainer;
-  }
-  final hsl = HSLColor.fromColor(paletteColor);
-  return hsl
-      .withSaturation(hsl.saturation < 0.55 ? 0.55 : hsl.saturation)
-      .withLightness(theme.brightness == Brightness.light ? 0.34 : 0.78)
-      .toColor();
-}
-
-Color noteSectionSwatchColor(NoteCardColor color) {
-  return noteSectionPalette[color] ?? const Color(0xFF777777);
 }
 
 Color noteCardSwatchColor(ThemeData theme, NoteCardColor noteColor) {

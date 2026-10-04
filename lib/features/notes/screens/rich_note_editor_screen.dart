@@ -23,7 +23,7 @@ import '../widgets/note_table_embed_builder.dart';
 
 enum _NoteEditorAction {
   noteColor,
-  addToNotebook,
+  selectNotebook,
   addTags,
   addAttachment,
   insertDate,
@@ -33,7 +33,7 @@ enum _NoteEditorAction {
   delete,
 }
 
-enum _FormattingColorTarget { section, highlight, text }
+enum _FormattingColorTarget { highlight, text }
 
 enum _NoteTemplate { meeting, project, daily }
 
@@ -48,30 +48,25 @@ class RichNoteEditorScreen extends StatefulWidget {
   const RichNoteEditorScreen({
     super.key,
     this.note,
-    this.notebookName,
-    required this.sections,
-    required this.initialSectionId,
+    this.notebooks = const [],
+    this.focusOnOpen = false,
     this.onAutosave,
     this.onDuplicate,
     this.onDelete,
     this.tagColors = const {},
     this.onTagColorsChanged,
-    this.onSectionColorChanged,
     this.reminderStorage,
   });
 
   final NoteEntry? note;
-  final String? notebookName;
-  final List<NoteSection> sections;
-  final String initialSectionId;
+  final List<Notebook> notebooks;
+  final bool focusOnOpen;
   final Future<void> Function(RichNoteDraft draft)? onAutosave;
   final Future<void> Function(RichNoteDraft draft)? onDuplicate;
   final Future<void> Function(RichNoteDraft draft)? onDelete;
   final Map<String, NoteCardColor> tagColors;
   final Future<void> Function(Map<String, NoteCardColor> tagColors)?
   onTagColorsChanged;
-  final Future<void> Function(String sectionId, NoteCardColor color)?
-  onSectionColorChanged;
   final ReminderStorage? reminderStorage;
 
   @override
@@ -91,8 +86,7 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
 
   late final quill.QuillController _quillController;
   late final ReminderStorage _reminderStorage;
-  late String _selectedSectionId;
-  late NoteCardColor _selectedSectionColor;
+  late String _selectedNotebookId;
   late NoteCardColor _selectedNoteColor;
   late List<NoteAttachment> _attachments;
   late Map<String, NoteCardColor> _tagColors;
@@ -126,8 +120,11 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
     if (_titleController.text.trim().isEmpty) {
       _titleController.text = 'Untitled';
     }
-    _selectedSectionId = note?.sectionId ?? widget.initialSectionId;
-    _selectedSectionColor = _sectionColorForId(_selectedSectionId);
+    _selectedNotebookId =
+        note?.notebookId ??
+        (widget.notebooks.isEmpty
+            ? defaultNotebookId
+            : widget.notebooks.first.id);
     _selectedNoteColor = note?.color ?? NoteCardColor.yellow;
     _attachments = List<NoteAttachment>.of(note?.attachments ?? const []);
     _tagColors = Map<String, NoteCardColor>.of(widget.tagColors);
@@ -495,7 +492,7 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
         _quillController.document.toDelta().toJson(),
       ),
       plainContent: _quillController.document.toPlainText().trim(),
-      sectionId: _selectedSectionId,
+      notebookId: _selectedNotebookId,
       attachments: List<NoteAttachment>.unmodifiable(_attachments),
       projectMetadata: projectMetadata,
       updatedAt: now,
@@ -1123,20 +1120,20 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
     _queueAutosave();
   }
 
-  String get _selectedSectionName {
-    for (final section in widget.sections) {
-      if (section.id == _selectedSectionId) {
-        return section.name;
+  String get _selectedNotebookName {
+    for (final notebook in widget.notebooks) {
+      if (notebook.id == _selectedNotebookId) {
+        return notebook.name;
       }
     }
-    return 'Choose section';
+    return defaultNotebookName;
   }
 
-  Future<void> _openSectionPicker() async {
-    if (widget.sections.isEmpty) {
+  Future<void> _openNotebookPicker() async {
+    if (widget.notebooks.isEmpty) {
       return;
     }
-    final sectionId = await showModalBottomSheet<String>(
+    final notebookId = await showModalBottomSheet<String>(
       context: context,
       useSafeArea: true,
       showDragHandle: true,
@@ -1147,59 +1144,30 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
             child: Text(
-              widget.notebookName == null
-                  ? 'Move to section'
-                  : 'Move within ${widget.notebookName}',
+              'Choose notebook',
               style: Theme.of(context).textTheme.titleLarge,
             ),
           ),
-          for (final section in widget.sections)
+          for (final notebook in widget.notebooks)
             ListTile(
               leading: Icon(
-                section.id == _selectedSectionId
+                notebook.id == _selectedNotebookId
                     ? Icons.radio_button_checked_rounded
                     : Icons.radio_button_unchecked_rounded,
               ),
-              title: Text(section.name),
-              onTap: () => Navigator.of(context).pop(section.id),
+              title: Text(notebook.name),
+              onTap: () => Navigator.of(context).pop(notebook.id),
             ),
         ],
       ),
     );
-    if (sectionId == null || !mounted || sectionId == _selectedSectionId) {
+    if (notebookId == null || !mounted || notebookId == _selectedNotebookId) {
       return;
     }
     setState(() {
-      _selectedSectionId = sectionId;
-      _selectedSectionColor = _sectionColorForId(sectionId);
+      _selectedNotebookId = notebookId;
     });
     _queueAutosave();
-  }
-
-  NoteCardColor _sectionColorForId(String sectionId) {
-    for (final section in widget.sections) {
-      if (section.id == sectionId) {
-        return section.color;
-      }
-    }
-    return NoteCardColor.standard;
-  }
-
-  Future<void> _showSectionColorPicker() async {
-    final color = await showNoteSectionColorPicker(
-      context,
-      current: _selectedSectionColor,
-    );
-    if (color == null || !mounted || color == _selectedSectionColor) {
-      return;
-    }
-    await widget.onSectionColorChanged?.call(_selectedSectionId, color);
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _selectedSectionColor = color;
-    });
   }
 
   Future<void> _showTagsDialog() async {
@@ -1523,7 +1491,7 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
   String _noteActionLabel(_NoteEditorAction action) {
     return switch (action) {
       _NoteEditorAction.noteColor => 'Note color',
-      _NoteEditorAction.addToNotebook => 'Add to Notebook / Move',
+      _NoteEditorAction.selectNotebook => 'Choose Notebook',
       _NoteEditorAction.addTags => 'Add Tags',
       _NoteEditorAction.addAttachment => 'Add Attachment',
       _NoteEditorAction.insertDate => 'Insert Date',
@@ -1537,7 +1505,7 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
   IconData _noteActionIcon(_NoteEditorAction action) {
     return switch (action) {
       _NoteEditorAction.noteColor => Icons.palette_outlined,
-      _NoteEditorAction.addToNotebook => Icons.drive_file_move_outline,
+      _NoteEditorAction.selectNotebook => Icons.drive_file_move_outline,
       _NoteEditorAction.addTags => Icons.sell_outlined,
       _NoteEditorAction.addAttachment => Icons.attach_file_rounded,
       _NoteEditorAction.insertDate => Icons.calendar_today_outlined,
@@ -1553,8 +1521,8 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
       case _NoteEditorAction.noteColor:
         unawaited(_showNoteColorPicker());
         break;
-      case _NoteEditorAction.addToNotebook:
-        unawaited(_openSectionPicker());
+      case _NoteEditorAction.selectNotebook:
+        unawaited(_openNotebookPicker());
         break;
       case _NoteEditorAction.addTags:
         unawaited(_showTagsDialog());
@@ -1823,15 +1791,9 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
               ),
               const SizedBox(height: 14),
               Text(
-                'Text & Section Colors',
+                'Text Colors',
                 style: Theme.of(context).textTheme.titleMedium
                     ?.copyWith(fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 14),
-              _formattingColorGroup(
-                context,
-                title: 'Section colors',
-                target: _FormattingColorTarget.section,
               ),
               const SizedBox(height: 14),
               _formattingColorGroup(
@@ -2015,7 +1977,7 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
         onPressed: () => _toggleInlineAttribute(quill.Attribute.underline),
       ),
       _toolbarButton(
-        tooltip: 'Text and section colors',
+        tooltip: 'Text colors',
         icon: Icons.palette_outlined,
         onPressed: _showFormattingColorPicker,
       ),
@@ -2133,44 +2095,41 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
         children: [
           Row(
             children: [
-              ActionChip(
-                key: const ValueKey('rich-note-section-dropdown'),
-                label: Text(_selectedSectionName),
-                labelStyle: theme.textTheme.labelSmall?.copyWith(
-                  color: noteSectionAccentColor(theme, _selectedSectionColor),
-                  fontWeight: FontWeight.w600,
-                ),
-                backgroundColor: noteSectionSurfaceColor(
-                  theme,
-                  _selectedSectionColor,
-                ),
-                side: BorderSide.none,
-                visualDensity: VisualDensity.compact,
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                onPressed: _showSectionColorPicker,
-              ),
-              if (widget.notebookName != null) ...[
-                const SizedBox(width: 8),
-                Flexible(
-                  child: Text(
-                    widget.notebookName!,
+              Expanded(
+                child: ActionChip(
+                  key: const ValueKey('rich-note-notebook-dropdown'),
+                  label: Text(
+                    'Notebook: $_selectedNotebookName  ›',
+                    maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.labelSmall
-                        ?.copyWith(color: colorScheme.onSurfaceVariant),
                   ),
+                  labelStyle: theme.textTheme.labelSmall?.copyWith(
+                    color: colorScheme.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  backgroundColor: colorScheme.primaryContainer,
+                  side: BorderSide.none,
+                  visualDensity: VisualDensity.compact,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  onPressed: _openNotebookPicker,
                 ),
-              ],
-              const Spacer(),
+              ),
+              const SizedBox(width: 8),
               ValueListenableBuilder<String>(
                 valueListenable: _autosaveMessage,
                 builder: (context, value, _) {
                   if (value.isEmpty) {
                     return const SizedBox.shrink();
                   }
-                  return Text(
-                    value,
-                    style: Theme.of(context).textTheme.labelSmall
-                        ?.copyWith(color: colorScheme.onSurfaceVariant),
+                  return ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 92),
+                    child: Text(
+                      value,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.labelSmall
+                          ?.copyWith(color: colorScheme.onSurfaceVariant),
+                    ),
                   );
                 },
               ),
@@ -2281,7 +2240,7 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
                           key: const ValueKey('rich-note-content-editor'),
                           controller: _quillController,
                           config: quill.QuillEditorConfig(
-                            autoFocus: false,
+                            autoFocus: widget.focusOnOpen,
                             placeholder: 'Write something...',
                             padding: const EdgeInsets.fromLTRB(56, 16, 18, 24),
                             embedBuilders: const [NoteTableEmbedBuilder()],

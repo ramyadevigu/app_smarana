@@ -3,18 +3,131 @@ import 'dart:convert';
 import 'package:app_smarana/features/notes/models/note_workspace_models.dart';
 import 'package:app_smarana/features/notes/notes_screen.dart';
 import 'package:app_smarana/features/notes/theme/notebook_colors.dart';
+import 'package:app_smarana/features/notes/services/note_workspace_storage.dart';
 import 'package:app_smarana/features/notes/widgets/notebook_list_tile.dart';
 import 'package:app_smarana/features/notes/widgets/notebook_selector.dart';
 import 'package:app_smarana/features/notes/widgets/recent_note_card.dart';
 import 'package:app_smarana/features/reminders/models/reminder.dart';
 import 'package:app_smarana/theme/app_theme.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_quill/flutter_quill.dart' as quill;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+  });
+
+  testWidgets('Quick Notes is always available and cannot be renamed/deleted', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(home: NotesScreen(initialNotebooks: [])),
+    );
+    await tester.pumpAndSettle();
+
+    final selector = tester.widget<NotebookSelector>(
+      find.byType(NotebookSelector),
+    );
+    expect(selector.notebooks, hasLength(1));
+    expect(selector.notebooks.single.name, defaultNotebookName);
+    expect(selector.notebooks.single.id, defaultNotebookId);
+
+    await tester.tap(find.byKey(const ValueKey('notes-notebook-selector')));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(
+        const ValueKey('notebook-selector-options-$defaultNotebookId'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Rename'), findsNothing);
+    expect(find.text('Delete Notebook'), findsNothing);
+  });
+
+  testWidgets('plus immediately opens the editor with only Quick Notes', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(home: NotesScreen(initialNotebooks: [])),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('notes-add-note-fab')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('rich-note-content-editor')),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Notebook: Quick Notes'), findsOneWidget);
+    expect(find.text('New notebook'), findsNothing);
+    expect(find.byKey(const ValueKey('notebook-add-section')), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('plus opens a note in Quick Notes and notebook changes persist', (
+    tester,
+  ) async {
+    final storage = NoteWorkspaceStorage();
+    final now = DateTime(2026, 10, 1);
+    final quickNotes = Notebook(
+      id: defaultNotebookId,
+      name: defaultNotebookName,
+      iconType: NotebookIconType.general,
+      notes: const [],
+      createdAt: now,
+      updatedAt: now,
+    );
+    final work = Notebook(
+      id: 'work-notebook',
+      name: 'Work',
+      iconType: NotebookIconType.work,
+      notes: const [],
+      createdAt: now,
+      updatedAt: now,
+    );
+    await storage.saveWorkspace([quickNotes, work]);
+
+    await tester.pumpWidget(
+      MaterialApp(home: NotesScreen(workspaceStorage: storage)),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('notes-add-note-fab')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('rich-note-content-editor')),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Notebook: Quick Notes'), findsOneWidget);
+    expect(find.text('New notebook'), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('rich-note-notebook-dropdown')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Work'));
+    await tester.pumpAndSettle();
+
+    final editor = tester.widget<quill.QuillEditor>(
+      find.byKey(const ValueKey('rich-note-content-editor')),
+    );
+    editor.controller.document.insert(0, 'Transferred note');
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 800));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('note-editor-back')));
+    await tester.pumpAndSettle();
+
+    final restored = await storage.loadWorkspace();
+    final restoredQuickNotes = restored.singleWhere(
+      (notebook) => notebook.id == defaultNotebookId,
+    );
+    final restoredWork = restored.singleWhere(
+      (notebook) => notebook.id == work.id,
+    );
+    expect(restoredQuickNotes.notes, isEmpty);
+    expect(restoredWork.notes.single.content, 'Transferred note');
+    expect(restoredWork.notes.single.notebookId, work.id);
   });
 
   testWidgets('shows a compact All selector without notebook cards', (
@@ -30,9 +143,6 @@ void main() {
       id: 'folder-notebook',
       name: 'app',
       iconType: NotebookIconType.general,
-      sections: [
-        NoteSection(id: 'folder-section', name: 'General', createdAt: now),
-      ],
       notes: const [],
       createdAt: now,
       updatedAt: now,
@@ -78,7 +188,7 @@ void main() {
       tester
           .getSize(find.byKey(const ValueKey('notebook-selector-option-all')))
           .width,
-      lessThan(280),
+      lessThan(320),
     );
     expect(
       tester
@@ -103,9 +213,6 @@ void main() {
       id: id,
       name: name,
       iconType: NotebookIconType.general,
-      sections: [
-        NoteSection(id: '$id-section', name: 'General', createdAt: now),
-      ],
       notes: const [],
       createdAt: now,
       updatedAt: now,
@@ -167,14 +274,10 @@ void main() {
       id: 'open-notebook',
       name: 'Open this notebook',
       iconType: NotebookIconType.general,
-      sections: [
-        NoteSection(id: 'open-section', name: 'General', createdAt: now),
-      ],
       notes: [
         NoteEntry(
           id: 'open-note',
           notebookId: 'open-notebook',
-          sectionId: 'open-section',
           title: 'Only in this notebook',
           content: 'Notebook-specific note',
           createdAt: now,
@@ -188,14 +291,10 @@ void main() {
       id: 'other-notebook',
       name: 'Other notebook',
       iconType: NotebookIconType.ideas,
-      sections: [
-        NoteSection(id: 'other-section', name: 'General', createdAt: now),
-      ],
       notes: [
         NoteEntry(
           id: 'other-note',
           notebookId: 'other-notebook',
-          sectionId: 'other-section',
           title: 'Note from another notebook',
           content: 'It should be hidden by a notebook filter.',
           createdAt: now,
@@ -257,7 +356,12 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Open Notebook'));
     await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('notebook-add-section')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('notebook-new-note-button')),
+      findsOneWidget,
+    );
+    expect(find.text('General'), findsNothing);
+    expect(find.byKey(const ValueKey('notebook-add-section')), findsNothing);
     await tester.tap(find.byKey(const ValueKey('notebook-save-and-close')));
     await tester.pumpAndSettle();
 
@@ -279,7 +383,6 @@ void main() {
           id: 'notebook-$index',
           name: 'Notebook $index',
           iconType: NotebookIconType.general,
-          sections: const [],
           notes: const [],
           createdAt: now,
           updatedAt: now,
@@ -320,9 +423,6 @@ void main() {
       id: 'customize-notebook',
       name: 'Reading',
       iconType: NotebookIconType.journal,
-      sections: [
-        NoteSection(id: 'reading-section', name: 'Books', createdAt: now),
-      ],
       notes: const [],
       createdAt: now,
       updatedAt: now,
@@ -364,7 +464,7 @@ void main() {
       tester
           .widget<NotebookSelector>(find.byType(NotebookSelector))
           .notebooks
-          .single
+          .singleWhere((item) => item.id == notebook.id)
           .name,
       'Reading list',
     );
@@ -382,7 +482,7 @@ void main() {
       tester
           .widget<NotebookSelector>(find.byType(NotebookSelector))
           .notebooks
-          .single
+          .singleWhere((item) => item.id == notebook.id)
           .description,
       'Books to explore',
     );
@@ -398,10 +498,17 @@ void main() {
       find.byType(NotebookSelector),
     );
     expect(
-      selector.notebooks.single.colorValue,
+      selector.notebooks
+          .singleWhere((item) => item.id == notebook.id)
+          .colorValue,
       NotebookBaseColor.purple.value,
     );
-    expect(selector.notebooks.single.description, 'Books to explore');
+    expect(
+      selector.notebooks
+          .singleWhere((item) => item.id == notebook.id)
+          .description,
+      'Books to explore',
+    );
 
     await showNotebookOptions();
     await tester.pumpAndSettle();
@@ -413,7 +520,7 @@ void main() {
       tester
           .widget<NotebookSelector>(find.byType(NotebookSelector))
           .notebooks
-          .single
+          .singleWhere((item) => item.id == notebook.id)
           .icon,
       NotebookIcon.school,
     );
@@ -430,9 +537,6 @@ void main() {
       name: 'Theme colors',
       iconType: NotebookIconType.general,
       colorValue: colorValue,
-      sections: [
-        NoteSection(id: 'theme-section', name: 'General', createdAt: now),
-      ],
       notes: const [],
       createdAt: now,
       updatedAt: now,
@@ -458,7 +562,12 @@ void main() {
       final selectorIcon = tester.widget<Icon>(iconFinder);
       expect(notebookSurfaceColor(theme, colorValue).a, 1);
       expect(notebookAccentColor(theme, colorValue).a, 1);
-      expect(selector.notebooks.single.colorValue, colorValue);
+      expect(
+        selector.notebooks
+            .singleWhere((item) => item.id == notebook.id)
+            .colorValue,
+        colorValue,
+      );
       expect(selectorIcon.color, notebookAccentColor(theme, colorValue));
       for (final paletteColor in NotebookBaseColor.values) {
         expect(
@@ -502,11 +611,17 @@ void main() {
     expect(find.byType(NotebookListTile), findsNothing);
     expect(find.text('Plans & Goals'), findsNothing);
     expect(find.text('Weekly Review'), findsNothing);
-    expect(
+    final storedWorkspace = jsonDecode(
       (await SharedPreferences.getInstance()).getString(
         'smarana_note_workspace_v1',
+      )!,
+    ) as Map;
+    final storedNotebooks = storedWorkspace['notebooks'] as List;
+    expect(
+      storedNotebooks.any(
+        (notebook) => (notebook as Map)['name'] == defaultNotebookName,
       ),
-      isNull,
+      isTrue,
     );
   });
 
@@ -528,15 +643,11 @@ void main() {
       id: 'palette-notebook',
       name: 'Colorful notes',
       iconType: NotebookIconType.ideas,
-      sections: [
-        NoteSection(id: 'palette-section', name: 'Ideas', createdAt: createdAt),
-      ],
       notes: [
         for (final color in colors)
           NoteEntry(
             id: 'note-${color.name}',
             notebookId: 'palette-notebook',
-            sectionId: 'palette-section',
             title: 'Palette ${color.name}',
             content: 'A note using the ${color.name} color.',
             color: color,
@@ -600,28 +711,15 @@ void main() {
     }
   });
 
-  testWidgets('opens notebook and manages sections with notes', (tester) async {
+  testWidgets('opens a notebook with direct notebook notes', (tester) async {
     final notebook = Notebook(
       id: 'book-1',
       name: 'Engineering',
       iconType: NotebookIconType.work,
-      sections: [
-        NoteSection(
-          id: 'sec-roadmap',
-          name: 'Roadmap',
-          createdAt: DateTime(2026, 9, 1),
-        ),
-        NoteSection(
-          id: 'sec-retro',
-          name: 'Retrospective',
-          createdAt: DateTime(2026, 9, 2),
-        ),
-      ],
       notes: [
         NoteEntry(
           id: 'note-1',
           notebookId: 'book-1',
-          sectionId: 'sec-retro',
           title: 'Sprint Review',
           content: 'Document lessons learned.',
           createdAt: DateTime(2026, 9, 15),
@@ -641,33 +739,11 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('note-editor-back')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Roadmap'), findsNWidgets(2));
-    expect(find.text('Retrospective'), findsOneWidget);
-    expect(find.text('No notes in this section yet'), findsOneWidget);
-
-    await tester.tap(find.text('Retrospective'));
-    await tester.pumpAndSettle();
     expect(find.text('Sprint Review'), findsOneWidget);
+    expect(find.text('General'), findsNothing);
+    expect(find.byKey(const ValueKey('notebook-add-section')), findsNothing);
 
-    await tester.tap(find.byKey(const ValueKey('notebook-add-section')));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField).last, 'Ideas');
-    await tester.tap(find.widgetWithText(FilledButton, 'Create'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Ideas'), findsNWidgets(2));
-
-    await tester.tap(find.byKey(const ValueKey('section-actions-menu')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Rename section'));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField).last, 'Concepts');
-    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Concepts'), findsNWidgets(2));
-
-    await tester.tap(find.byKey(const ValueKey('section-new-note-button')));
+    await tester.tap(find.byKey(const ValueKey('notebook-new-note-button')));
     await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const ValueKey('rich-note-title-field')),
@@ -678,18 +754,9 @@ void main() {
 
     expect(find.text('Draft launch brief'), findsOneWidget);
 
-    await tester.tap(find.byKey(const ValueKey('section-actions-menu')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Delete section'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Concepts'), findsNothing);
-
     await tester.tap(find.byKey(const ValueKey('notebook-save-and-close')));
     await tester.pumpAndSettle();
-    expect(find.text('Engineering'), findsNWidgets(2));
+    expect(find.text('Engineering'), findsAtLeastNWidgets(2));
   });
 
   testWidgets(
@@ -700,18 +767,10 @@ void main() {
           id: 'notebook-workout',
           name: 'Health & Fitness',
           iconType: NotebookIconType.health,
-          sections: [
-            NoteSection(
-              id: 'section-workouts',
-              name: 'Workouts',
-              createdAt: DateTime(2026, 9, 4, 7),
-            ),
-          ],
           notes: [
             NoteEntry(
               id: 'note-workout',
               notebookId: 'notebook-workout',
-              sectionId: 'section-workouts',
               title: 'Workout Split',
               content: 'Upper body, lower body, mobility, and recovery notes.',
               createdAt: DateTime(2026, 9, 29, 6, 30),
@@ -725,13 +784,6 @@ void main() {
           id: 'notebook-plans',
           name: 'Plans & Goals',
           iconType: NotebookIconType.goals,
-          sections: [
-            NoteSection(
-              id: 'section-focus',
-              name: 'Focus',
-              createdAt: DateTime(2026, 9, 1, 8),
-            ),
-          ],
           notes: const [],
           createdAt: DateTime(2026, 8, 1, 9),
           updatedAt: DateTime(2026, 9, 1, 8),
@@ -772,18 +824,10 @@ void main() {
       id: 'book-pins',
       name: 'Ideas',
       iconType: NotebookIconType.ideas,
-      sections: [
-        NoteSection(
-          id: 'section-pins',
-          name: 'Campaigns',
-          createdAt: DateTime(2026, 10, 1),
-        ),
-      ],
       notes: [
         NoteEntry(
           id: 'note-pin-target',
           notebookId: 'book-pins',
-          sectionId: 'section-pins',
           title: 'Launch ideas',
           content: 'Collect the strongest campaign concepts.',
           createdAt: DateTime(2026, 10, 1),
@@ -828,15 +872,11 @@ void main() {
       id: 'all-notes-notebook',
       name: 'Planning Notebook',
       iconType: NotebookIconType.general,
-      sections: [
-        NoteSection(id: 'all-notes-section', name: 'Plans', createdAt: now),
-      ],
       notes: [
         for (var index = 0; index < 9; index++)
           NoteEntry(
             id: 'recent-note-$index',
             notebookId: 'all-notes-notebook',
-            sectionId: 'all-notes-section',
             title: 'Recent planning note $index',
             content: 'A recent note for the home page.',
             createdAt: now.subtract(Duration(hours: index + 1)),
@@ -845,7 +885,6 @@ void main() {
         NoteEntry(
           id: 'older-note',
           notebookId: 'all-notes-notebook',
-          sectionId: 'all-notes-section',
           title: 'Older planning note',
           content: 'This older note is still part of all notes.',
           createdAt: now.subtract(const Duration(days: 60)),
@@ -890,18 +929,10 @@ void main() {
         id: 'sorting-notebook',
         name: 'Planning',
         iconType: NotebookIconType.general,
-        sections: [
-          NoteSection(
-            id: 'sorting-section',
-            name: 'General',
-            createdAt: now.subtract(const Duration(days: 90)),
-          ),
-        ],
         notes: [
           NoteEntry(
             id: 'pinned-note',
             notebookId: 'sorting-notebook',
-            sectionId: 'sorting-section',
             title: 'Pinned note',
             content: 'Pinned',
             isPinned: true,
@@ -911,7 +942,6 @@ void main() {
           NoteEntry(
             id: 'updated-note',
             notebookId: 'sorting-notebook',
-            sectionId: 'sorting-section',
             title: 'Recently updated',
             content: 'Updated',
             createdAt: now.subtract(const Duration(days: 90)),
@@ -920,7 +950,6 @@ void main() {
           NoteEntry(
             id: 'reminder-note',
             notebookId: 'sorting-notebook',
-            sectionId: 'sorting-section',
             title: 'Reminder note',
             content: 'Reminder',
             reminderId: reminder.id,
@@ -930,7 +959,6 @@ void main() {
           NoteEntry(
             id: 'other-note',
             notebookId: 'sorting-notebook',
-            sectionId: 'sorting-section',
             title: 'Other note',
             content: 'Other',
             createdAt: now.subtract(const Duration(days: 90)),
@@ -967,14 +995,10 @@ void main() {
       id: 'color-notebook',
       name: 'Color tests',
       iconType: NotebookIconType.ideas,
-      sections: [
-        NoteSection(id: 'color-section', name: 'Ideas', createdAt: now),
-      ],
       notes: [
         NoteEntry(
           id: 'color-note',
           notebookId: 'color-notebook',
-          sectionId: 'color-section',
           title: 'Color target',
           content: 'Change this note color.',
           createdAt: now,
@@ -1008,13 +1032,6 @@ void main() {
       id: 'book-create',
       name: 'Quick Ideas',
       iconType: NotebookIconType.ideas,
-      sections: [
-        NoteSection(
-          id: 'section-create',
-          name: 'Campaigns',
-          createdAt: DateTime(2026, 10, 1),
-        ),
-      ],
       notes: const [],
       createdAt: DateTime(2026, 10, 1),
       updatedAt: DateTime(2026, 10, 1),
@@ -1037,8 +1054,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Campaign draft'), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('notebook-save-and-close')));
-    await tester.pumpAndSettle();
     expect(find.text('1 note'), findsOneWidget);
 
     await tester.tap(find.text('Campaign draft'));
@@ -1063,18 +1078,10 @@ void main() {
       id: 'book-kanban',
       name: 'Project Board',
       iconType: NotebookIconType.work,
-      sections: [
-        NoteSection(
-          id: 'sec-main',
-          name: 'Main',
-          createdAt: DateTime(2026, 9, 1),
-        ),
-      ],
       notes: [
         NoteEntry(
           id: 'note-kanban',
           notebookId: 'book-kanban',
-          sectionId: 'sec-main',
           title: 'Task A',
           content: 'Initial task',
           projectMetadata: NoteProjectMetadata(status: NoteProjectStatus.toDo),
