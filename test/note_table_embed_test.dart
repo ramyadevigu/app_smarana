@@ -21,6 +21,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    await tester.ensureVisible(find.byTooltip('Insert table'));
     await tester.tap(find.byTooltip('Insert table'));
     await tester.pumpAndSettle();
 
