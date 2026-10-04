@@ -24,9 +24,22 @@ enum _NoteEditorAction {
   addToNotebook,
   addTags,
   addAttachment,
+  insertDate,
+  insertTemplate,
   duplicate,
   share,
   delete,
+}
+
+enum _FormattingColorTarget { section, highlight, text }
+
+enum _NoteTemplate { meeting, project, daily }
+
+class _FormattingColorChoice {
+  const _FormattingColorChoice(this.color, this.target);
+
+  final Color color;
+  final _FormattingColorTarget target;
 }
 
 class RichNoteEditorScreen extends StatefulWidget {
@@ -92,6 +105,16 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
   String? _reminderSoundUri;
   String _reminderSoundName = 'Default';
   List<ReminderSoundOption> _availableAlarmSounds = const [];
+
+  static const List<Color> _formattingColors = [
+    Color(0xFFFFF0BE),
+    Color(0xFFFFDCE7),
+    Color(0xFFE8DDFB),
+    Color(0xFFDDE9FF),
+    Color(0xFFDDF3DC),
+    Color(0xFFD7F3F4),
+    Color(0xFFFFE4C2),
+  ];
 
   @override
   void initState() {
@@ -777,33 +800,71 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
     if (_loadingReminder) {
       return;
     }
+    final colorScheme = Theme.of(context).colorScheme;
     await showModalBottomSheet<void>(
       context: context,
       useSafeArea: true,
       isScrollControlled: true,
-      showDragHandle: true,
+      backgroundColor: colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+      ),
       builder: (context) => StatefulBuilder(
         builder: (context, refreshSheet) {
-          return DraggableScrollableSheet(
-            expand: false,
-            initialChildSize: 0.62,
-            minChildSize: 0.42,
-            maxChildSize: 0.9,
-            builder: (context, scrollController) {
-              return ListView(
-                controller: scrollController,
-                padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+          return ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(context).height * 0.82,
+            ),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    'Reminder',
-                    style: Theme.of(context).textTheme.titleLarge
-                        ?.copyWith(fontWeight: FontWeight.w700),
+                  Center(
+                    child: Container(
+                      width: 34,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: colorScheme.outlineVariant,
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                    ),
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Set Reminder',
+                          style: Theme.of(context).textTheme.titleLarge
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Close reminder settings',
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.close_rounded),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ],
+                  ),
                   _buildReminderSection(() => refreshSheet(() {})),
+                  const SizedBox(height: 14),
+                  FilledButton(
+                    key: const ValueKey('note-reminder-done-button'),
+                    onPressed: () => Navigator.of(context).pop(),
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size.fromHeight(48),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(13),
+                      ),
+                    ),
+                    child: const Text('Done'),
+                  ),
                 ],
-              );
-            },
+              ),
+            ),
           );
         },
       ),
@@ -823,83 +884,102 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
         SwitchListTile.adaptive(
           key: const ValueKey('note-reminder-enabled-switch'),
           contentPadding: EdgeInsets.zero,
-          title: Text(
-            _reminderSectionVisible ? 'Reminder enabled' : 'Set a reminder',
-          ),
-          subtitle: _reminderSectionVisible
-              ? Text(
-                  _reminderStatusText(localizations, time),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                )
-              : const Text('Choose a date and time for this note.'),
+          title: const Text('Set a reminder'),
+          subtitle: const Text('Choose a date and time for this note.'),
           value: isEnabled,
           onChanged: (value) {
             _toggleReminderEnabled(value);
             refreshSheet();
           },
         ),
-        const SizedBox(height: 4),
-        Text(
-          'Set Date & Time',
-          style: theme.textTheme.labelLarge?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
+        Padding(
+          padding: const EdgeInsets.only(top: 4, bottom: 8),
+          child: Text(
+            'Date & Time',
+            style: theme.textTheme.labelLarge?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ),
-        const SizedBox(height: 8),
         Row(
           children: [
             Expanded(
-              child: OutlinedButton.icon(
+              child: _reminderDateTimeButton(
+                context,
                 key: const ValueKey('note-reminder-date-button'),
+                icon: Icons.calendar_today_outlined,
+                label: localizations.formatMediumDate(_reminderDateTime),
                 onPressed: () async {
                   await _pickReminderDate();
                   refreshSheet();
                 },
-                icon: const Icon(Icons.calendar_today_outlined, size: 18),
-                label: Text(
-                  localizations.formatMediumDate(_reminderDateTime),
-                  overflow: TextOverflow.ellipsis,
-                ),
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: OutlinedButton.icon(
+              child: _reminderDateTimeButton(
+                context,
                 key: const ValueKey('note-reminder-time-button'),
+                icon: Icons.access_time_outlined,
+                label: localizations.formatTimeOfDay(time),
                 onPressed: () async {
                   await _pickReminderTime();
                   refreshSheet();
                 },
-                icon: const Icon(Icons.access_time_outlined, size: 18),
-                label: Text(localizations.formatTimeOfDay(time)),
               ),
             ),
           ],
         ),
         const SizedBox(height: 12),
-        DropdownButtonFormField<NoteRepeatOption>(
-          key: const ValueKey('note-reminder-repeat-dropdown'),
-          initialValue: _repeatOption,
-          decoration: const InputDecoration(
-            labelText: 'Repeat',
-            prefixIcon: Icon(Icons.repeat_rounded),
+        DecoratedBox(
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(13),
           ),
-          items: NoteRepeatOption.values
-              .map(
-                (option) => DropdownMenuItem<NoteRepeatOption>(
-                  value: option,
-                  child: Text(option.label),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.repeat_rounded,
+                  size: 19,
+                  color: theme.colorScheme.onSurfaceVariant,
                 ),
-              )
-              .toList(),
-          onChanged: (value) {
-            if (value != null) {
-              _selectRepeatOption(value);
-              refreshSheet();
-            }
-          },
+                const SizedBox(width: 10),
+                const Text('Repeat'),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: DropdownButton<NoteRepeatOption>(
+                    key: const ValueKey('note-reminder-repeat-dropdown'),
+                    value: _repeatOption,
+                    isDense: true,
+                    isExpanded: true,
+                    underline: const SizedBox.shrink(),
+                    borderRadius: BorderRadius.circular(14),
+                    items: NoteRepeatOption.values
+                        .map(
+                          (option) => DropdownMenuItem<NoteRepeatOption>(
+                            value: option,
+                            child: Text(
+                              option.label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      if (value != null) {
+                        _selectRepeatOption(value);
+                        refreshSheet();
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
         const SizedBox(height: 4),
         ListTile(
@@ -929,7 +1009,9 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
           contentPadding: EdgeInsets.zero,
           secondary: const Icon(Icons.lightbulb_outline_rounded),
           title: const Text('Project Mode'),
-          subtitle: const Text('Add dates, priority, owner and project tags.'),
+          subtitle: const Text(
+            'Add due date, status, priority and project tags.',
+          ),
           value: _projectMetadataVisible,
           onChanged: (value) {
             setState(() {
@@ -988,17 +1070,40 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
     );
   }
 
-  String _reminderStatusText(
-    MaterialLocalizations localizations,
-    TimeOfDay time,
-  ) {
-    final dateLabel = localizations.formatMediumDate(_reminderDateTime);
-    final timeLabel = localizations.formatTimeOfDay(time);
-    final repeatLabel = _repeatOption == NoteRepeatOption.doesNotRepeat
-        ? ''
-        : ' · ${_repeatOption.label}';
-    final statusLabel = _reminderEnabled ? '' : ' · Disabled';
-    return 'Reminds on $dateLabel at $timeLabel$repeatLabel$statusLabel';
+  Widget _reminderDateTimeButton(
+    BuildContext context, {
+    required Key key,
+    required IconData icon,
+    required String label,
+    required VoidCallback onPressed,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Material(
+      color: colorScheme.surfaceContainerLow,
+      borderRadius: BorderRadius.circular(13),
+      child: InkWell(
+        key: key,
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(13),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 13),
+          child: Row(
+            children: [
+              Icon(icon, size: 17, color: colorScheme.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelMedium,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _toggleInlineAttribute(quill.Attribute attribute) {
@@ -1199,6 +1304,110 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
     }
   }
 
+  Future<void> _showMoreOptions() async {
+    final action = await showModalBottomSheet<_NoteEditorAction>(
+      context: context,
+      useSafeArea: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+      ),
+      builder: (context) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(context).height * 0.78,
+          ),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 34,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.outlineVariant,
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Text(
+                      'More Options',
+                      style: Theme.of(context).textTheme.titleLarge
+                          ?.copyWith(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                for (
+                  var index = 0;
+                  index < _NoteEditorAction.values.length;
+                  index++
+                ) ...[
+                  if (index == 4 || index == 6)
+                    Divider(
+                      height: 8,
+                      color: Theme.of(context).colorScheme.outlineVariant
+                          .withValues(alpha: 0.55),
+                    ),
+                  _moreOptionTile(context, _NoteEditorAction.values[index]),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    if (action != null && mounted) {
+      _handleMoreAction(action);
+    }
+  }
+
+  Widget _moreOptionTile(BuildContext context, _NoteEditorAction action) {
+    final isDestructive = action == _NoteEditorAction.delete;
+    final color = isDestructive
+        ? Theme.of(context).colorScheme.error
+        : Theme.of(context).colorScheme.onSurface;
+    return ListTile(
+      dense: true,
+      leading: Icon(_noteActionIcon(action), color: color, size: 20),
+      title: Text(_noteActionLabel(action), style: TextStyle(color: color)),
+      onTap: () => Navigator.of(context).pop(action),
+    );
+  }
+
+  String _noteActionLabel(_NoteEditorAction action) {
+    return switch (action) {
+      _NoteEditorAction.noteColor => 'Note color',
+      _NoteEditorAction.addToNotebook => 'Add to Notebook / Move',
+      _NoteEditorAction.addTags => 'Add Tags',
+      _NoteEditorAction.addAttachment => 'Add Attachment',
+      _NoteEditorAction.insertDate => 'Insert Date',
+      _NoteEditorAction.insertTemplate => 'Insert Template',
+      _NoteEditorAction.duplicate => 'Duplicate',
+      _NoteEditorAction.share => 'Share',
+      _NoteEditorAction.delete => 'Delete',
+    };
+  }
+
+  IconData _noteActionIcon(_NoteEditorAction action) {
+    return switch (action) {
+      _NoteEditorAction.noteColor => Icons.palette_outlined,
+      _NoteEditorAction.addToNotebook => Icons.drive_file_move_outline,
+      _NoteEditorAction.addTags => Icons.sell_outlined,
+      _NoteEditorAction.addAttachment => Icons.attach_file_rounded,
+      _NoteEditorAction.insertDate => Icons.calendar_today_outlined,
+      _NoteEditorAction.insertTemplate => Icons.description_outlined,
+      _NoteEditorAction.duplicate => Icons.copy_all_outlined,
+      _NoteEditorAction.share => Icons.ios_share_rounded,
+      _NoteEditorAction.delete => Icons.delete_outline_rounded,
+    };
+  }
+
   void _handleMoreAction(_NoteEditorAction action) {
     switch (action) {
       case _NoteEditorAction.noteColor:
@@ -1213,6 +1422,12 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
       case _NoteEditorAction.addAttachment:
         unawaited(_showAttachmentOptions());
         break;
+      case _NoteEditorAction.insertDate:
+        _insertCurrentDate();
+        break;
+      case _NoteEditorAction.insertTemplate:
+        unawaited(_showTemplatePicker());
+        break;
       case _NoteEditorAction.duplicate:
         unawaited(_duplicateCurrentNote());
         break;
@@ -1223,6 +1438,77 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
         unawaited(_deleteCurrentNote());
         break;
     }
+  }
+
+  void _insertCurrentDate() {
+    final selection = _quillController.selection;
+    final date = MaterialLocalizations.of(context)
+        .formatMediumDate(DateTime.now());
+    _quillController.replaceText(
+      selection.start,
+      selection.end - selection.start,
+      date,
+      TextSelection.collapsed(offset: selection.start + date.length),
+    );
+    _queueAutosave();
+  }
+
+  Future<void> _showTemplatePicker() async {
+    final template = await showModalBottomSheet<_NoteTemplate>(
+      context: context,
+      useSafeArea: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+      ),
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              title: Text(
+                'Choose a template',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+            for (final item in _NoteTemplate.values)
+              ListTile(
+                leading: const Icon(Icons.description_outlined),
+                title: Text(_templateLabel(item)),
+                onTap: () => Navigator.of(context).pop(item),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (template == null || !mounted) {
+      return;
+    }
+    final selection = _quillController.selection;
+    final text = _templateText(template);
+    _quillController.replaceText(
+      selection.start,
+      selection.end - selection.start,
+      text,
+      TextSelection.collapsed(offset: selection.start + text.length),
+    );
+    _queueAutosave();
+  }
+
+  String _templateLabel(_NoteTemplate template) {
+    return switch (template) {
+      _NoteTemplate.meeting => 'Meeting notes',
+      _NoteTemplate.project => 'Project brief',
+      _NoteTemplate.daily => 'Daily journal',
+    };
+  }
+
+  String _templateText(_NoteTemplate template) {
+    return switch (template) {
+      _NoteTemplate.meeting => 'Agenda\n\nNotes\n\nAction items\n',
+      _NoteTemplate.project => 'Goals\n\nKey milestones\n\nNext steps\n',
+      _NoteTemplate.daily => 'Today\n\nWhat went well\n\nTomorrow\n',
+    };
   }
 
   Future<void> _showNoteColorPicker() async {
@@ -1390,38 +1676,148 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
   }
 
   Future<void> _showHighlightColors() async {
-    final colorScheme = Theme.of(context).colorScheme;
-    final colors = [
-      colorScheme.primaryContainer,
-      colorScheme.secondaryContainer,
-      colorScheme.tertiaryContainer,
-      colorScheme.surfaceContainerHighest,
-    ];
-    final selectedColor = await showModalBottomSheet<Color>(
+    await _showFormattingColorPicker();
+  }
+
+  Future<void> _showFormattingColorPicker() async {
+    final selection = _quillController.selection;
+    if (selection.isCollapsed) {
+      _showAttachmentError('Select text before applying a color.');
+      return;
+    }
+
+    final choice = await showModalBottomSheet<_FormattingColorChoice>(
       context: context,
       useSafeArea: true,
-      showDragHandle: true,
-      builder: (context) => Padding(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-        child: Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: [
-            for (var index = 0; index < colors.length; index++)
-              ActionChip(
-                avatar: CircleAvatar(backgroundColor: colors[index]),
-                label: Text('Accent ${index + 1}'),
-                onPressed: () => Navigator.of(context).pop(colors[index]),
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+      ),
+      builder: (context) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Center(
+                child: Container(
+                  width: 34,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.outlineVariant,
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                ),
               ),
-          ],
+              const SizedBox(height: 14),
+              Text(
+                'Text & Section Colors',
+                style: Theme.of(context).textTheme.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 14),
+              _formattingColorGroup(
+                context,
+                title: 'Section colors',
+                target: _FormattingColorTarget.section,
+              ),
+              const SizedBox(height: 14),
+              _formattingColorGroup(
+                context,
+                title: 'Text highlight',
+                target: _FormattingColorTarget.highlight,
+              ),
+              const SizedBox(height: 14),
+              _formattingColorGroup(
+                context,
+                title: 'Text color',
+                target: _FormattingColorTarget.text,
+              ),
+            ],
+          ),
         ),
       ),
     );
-    if (selectedColor == null || !mounted) {
+    if (choice == null || !mounted) {
       return;
     }
-    final color = selectedColor.toARGB32().toRadixString(16).substring(2);
-    _toggleInlineAttribute(quill.BackgroundAttribute('#$color'));
+    _quillController.updateSelection(selection, quill.ChangeSource.local);
+    final hex = choice.color
+        .toARGB32()
+        .toRadixString(16)
+        .padLeft(8, '0')
+        .substring(2)
+        .toUpperCase();
+    final attribute = choice.target == _FormattingColorTarget.text
+        ? quill.ColorAttribute('#$hex')
+        : quill.BackgroundAttribute('#$hex');
+    _toggleInlineAttribute(attribute);
+  }
+
+  Widget _formattingColorGroup(
+    BuildContext context, {
+    required String title,
+    required _FormattingColorTarget target,
+  }) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final colors = _formattingColors
+        .map((color) {
+          if (target == _FormattingColorTarget.text) {
+            final hsl = HSLColor.fromColor(color);
+            return hsl
+                .withSaturation(math.max(0.62, hsl.saturation))
+                .withLightness(
+                  theme.brightness == Brightness.light ? 0.22 : 0.88,
+                )
+                .toColor();
+          }
+          return theme.brightness == Brightness.dark
+              ? Color.lerp(color, colorScheme.surface, 0.75)!
+              : color;
+        })
+        .toList(growable: false);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: Theme.of(context).textTheme.labelLarge
+              ?.copyWith(color: colorScheme.onSurfaceVariant),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 12,
+          runSpacing: 10,
+          children: [
+            for (var index = 0; index < colors.length; index++)
+              Tooltip(
+                message: '$title ${index + 1}',
+                child: Semantics(
+                  button: true,
+                  label: '$title color ${index + 1}',
+                  child: InkWell(
+                    customBorder: const CircleBorder(),
+                    onTap: () =>
+                        Navigator.of(context)
+                            .pop(_FormattingColorChoice(colors[index], target)),
+                    child: Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: colors[index],
+                        border: Border.all(color: colorScheme.outlineVariant),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
   }
 
   void _insertDivider() {
@@ -1450,15 +1846,15 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
     required VoidCallback onPressed,
   }) {
     return SizedBox(
-      width: 40,
-      height: 40,
+      width: 36,
+      height: 36,
       child: IconButton(
         tooltip: tooltip,
         onPressed: onPressed,
-        icon: Icon(icon, size: 19),
+        icon: Icon(icon, size: 18),
         style: IconButton.styleFrom(
           padding: EdgeInsets.zero,
-          minimumSize: const Size(36, 36),
+          minimumSize: const Size(32, 32),
           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         ),
       ),
@@ -1491,6 +1887,11 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
         tooltip: 'Underline',
         icon: Icons.format_underlined_rounded,
         onPressed: () => _toggleInlineAttribute(quill.Attribute.underline),
+      ),
+      _toolbarButton(
+        tooltip: 'Text and section colors',
+        icon: Icons.palette_outlined,
+        onPressed: _showFormattingColorPicker,
       ),
       _toolbarButton(
         tooltip: 'Checklist',
@@ -1552,7 +1953,7 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
         clipBehavior: Clip.antiAlias,
         child: _toolbarExpanded
             ? ConstrainedBox(
-                constraints: BoxConstraints(maxHeight: maxHeight, maxWidth: 44),
+                constraints: BoxConstraints(maxHeight: maxHeight, maxWidth: 40),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -1694,10 +2095,16 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
         }
       },
       child: Scaffold(
+        backgroundColor: Theme.of(context).colorScheme.surface,
         resizeToAvoidBottomInset: true,
         appBar: AppBar(
           leadingWidth: 48,
+          toolbarHeight: 54,
           titleSpacing: 0,
+          backgroundColor: Theme.of(context).colorScheme.surface,
+          surfaceTintColor: Colors.transparent,
+          elevation: 0,
+          scrolledUnderElevation: 0,
           leading: IconButton(
             key: const ValueKey('note-editor-back'),
             tooltip: 'Close editor',
@@ -1716,7 +2123,7 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
               isDense: true,
               contentPadding: EdgeInsets.zero,
             ),
-            style: Theme.of(context).textTheme.titleLarge
+            style: Theme.of(context).textTheme.titleMedium
                 ?.copyWith(fontWeight: FontWeight.w700),
           ),
           actions: [
@@ -1730,70 +2137,11 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
                     : Icons.notifications_none_rounded,
               ),
             ),
-            PopupMenuButton<_NoteEditorAction>(
+            IconButton(
               key: const ValueKey('note-editor-more-menu'),
               tooltip: 'More options',
+              onPressed: _showMoreOptions,
               icon: const Icon(Icons.more_vert_rounded),
-              onSelected: _handleMoreAction,
-              itemBuilder: (context) => const [
-                PopupMenuItem<_NoteEditorAction>(
-                  value: _NoteEditorAction.noteColor,
-                  child: ListTile(
-                    dense: true,
-                    leading: Icon(Icons.palette_outlined),
-                    title: Text('Note color'),
-                  ),
-                ),
-                PopupMenuItem<_NoteEditorAction>(
-                  value: _NoteEditorAction.addToNotebook,
-                  child: ListTile(
-                    dense: true,
-                    leading: Icon(Icons.drive_file_move_outline),
-                    title: Text('Add to Notebook / Move'),
-                  ),
-                ),
-                PopupMenuItem<_NoteEditorAction>(
-                  value: _NoteEditorAction.addTags,
-                  child: ListTile(
-                    dense: true,
-                    leading: Icon(Icons.sell_outlined),
-                    title: Text('Add Tags'),
-                  ),
-                ),
-                PopupMenuItem<_NoteEditorAction>(
-                  value: _NoteEditorAction.addAttachment,
-                  child: ListTile(
-                    dense: true,
-                    leading: Icon(Icons.attach_file_rounded),
-                    title: Text('Add Attachment'),
-                  ),
-                ),
-                PopupMenuDivider(),
-                PopupMenuItem<_NoteEditorAction>(
-                  value: _NoteEditorAction.duplicate,
-                  child: ListTile(
-                    dense: true,
-                    leading: Icon(Icons.copy_all_outlined),
-                    title: Text('Duplicate'),
-                  ),
-                ),
-                PopupMenuItem<_NoteEditorAction>(
-                  value: _NoteEditorAction.share,
-                  child: ListTile(
-                    dense: true,
-                    leading: Icon(Icons.ios_share_rounded),
-                    title: Text('Share'),
-                  ),
-                ),
-                PopupMenuItem<_NoteEditorAction>(
-                  value: _NoteEditorAction.delete,
-                  child: ListTile(
-                    dense: true,
-                    leading: Icon(Icons.delete_outline_rounded),
-                    title: Text('Delete'),
-                  ),
-                ),
-              ],
             ),
           ],
         ),
@@ -1811,8 +2159,9 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
                           key: const ValueKey('rich-note-content-editor'),
                           controller: _quillController,
                           config: quill.QuillEditorConfig(
-                            autoFocus: true,
-                            padding: const EdgeInsets.fromLTRB(60, 16, 18, 24),
+                            autoFocus: false,
+                            placeholder: 'Write something...',
+                            padding: const EdgeInsets.fromLTRB(56, 16, 18, 24),
                             embedBuilders: const [NoteTableEmbedBuilder()],
                           ),
                         ),

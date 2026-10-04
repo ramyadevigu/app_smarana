@@ -84,7 +84,9 @@ class RecentNoteCard extends StatelessWidget {
                                   : Icons.push_pin_rounded,
                             ),
                             const SizedBox(width: 12),
-                            Text(note.note.isPinned ? 'Unpin note' : 'Pin note'),
+                            Text(
+                              note.note.isPinned ? 'Unpin note' : 'Pin note',
+                            ),
                           ],
                         ),
                       ),
@@ -124,12 +126,17 @@ class RecentNoteCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                Text(
-                  MaterialLocalizations.of(
-                    context,
-                  ).formatShortDate(note.note.updatedAt),
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    MaterialLocalizations.of(context)
+                        .formatShortDate(note.note.updatedAt),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.end,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ),
               ],

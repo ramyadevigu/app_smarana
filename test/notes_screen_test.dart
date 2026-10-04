@@ -1,5 +1,6 @@
 import 'package:app_smarana/features/notes/models/note_workspace_models.dart';
 import 'package:app_smarana/features/notes/notes_screen.dart';
+import 'package:app_smarana/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -67,6 +68,84 @@ void main() {
       ),
       isNull,
     );
+  });
+
+  testWidgets('home displays multicolor notes across theme modes and sizes', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(
+      tester.binding.platformDispatcher.clearPlatformBrightnessTestValue,
+    );
+
+    final createdAt = DateTime(2026, 10, 1);
+    final colors = NoteCardColor.values
+        .where((color) => color != NoteCardColor.standard)
+        .toList();
+    final notebook = Notebook(
+      id: 'palette-notebook',
+      name: 'Colorful notes',
+      iconType: NotebookIconType.ideas,
+      sections: [
+        NoteSection(id: 'palette-section', name: 'Ideas', createdAt: createdAt),
+      ],
+      notes: [
+        for (final color in colors)
+          NoteEntry(
+            id: 'note-${color.name}',
+            notebookId: 'palette-notebook',
+            sectionId: 'palette-section',
+            title: 'Palette ${color.name}',
+            content: 'A note using the ${color.name} color.',
+            color: color,
+            createdAt: createdAt,
+            updatedAt: createdAt,
+          ),
+      ],
+      createdAt: createdAt,
+      updatedAt: createdAt,
+    );
+    final cases = [
+      (ThemeMode.light, Brightness.light, const Size(320, 640)),
+      (ThemeMode.dark, Brightness.light, const Size(375, 812)),
+      (ThemeMode.system, Brightness.light, const Size(800, 1024)),
+      (ThemeMode.system, Brightness.dark, const Size(320, 640)),
+    ];
+
+    for (final (mode, systemBrightness, size) in cases) {
+      tester.binding.platformDispatcher.platformBrightnessTestValue =
+          systemBrightness;
+      tester.view.physicalSize = size;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildLightTheme(),
+          darkTheme: buildDarkTheme(),
+          themeMode: mode,
+          home: NotesScreen(initialNotebooks: [notebook]),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final expectedBrightness = mode == ThemeMode.system
+          ? systemBrightness
+          : mode == ThemeMode.dark
+          ? Brightness.dark
+          : Brightness.light;
+      expect(
+        Theme.of(
+          tester.element(find.byKey(const ValueKey('notes-workspace-search'))),
+        ).brightness,
+        expectedBrightness,
+      );
+      expect(find.byKey(const ValueKey('notes-search-button')), findsOneWidget);
+
+      final finalColorNote = find.text('Palette lavender');
+      await tester.ensureVisible(finalColorNote);
+      expect(finalColorNote, findsOneWidget);
+      expect(tester.takeException(), isNull);
+    }
   });
 
   testWidgets('opens notebook and manages sections with notes', (tester) async {

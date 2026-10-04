@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../reminders/services/reminder_storage.dart';
 import 'models/note_workspace_models.dart';
 import 'screens/notebook_detail_screen.dart';
+import 'theme/note_card_colors.dart';
 import 'services/note_workspace_storage.dart';
 import 'widgets/notebook_list_tile.dart';
 import 'widgets/recent_note_card.dart';
@@ -29,6 +30,7 @@ class NotesScreen extends StatefulWidget {
 
 class _NotesScreenState extends State<NotesScreen> {
   final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
   late final NoteWorkspaceStorage _workspaceStorage;
   late List<Notebook> _notebooks;
   bool _isLoading = true;
@@ -57,6 +59,7 @@ class _NotesScreenState extends State<NotesScreen> {
   @override
   void dispose() {
     _searchController.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
   }
 
@@ -121,8 +124,7 @@ class _NotesScreenState extends State<NotesScreen> {
   List<Notebook> get _filteredNotebooks {
     final query = _query;
     return _notebooks.where((notebook) {
-      if (_selectedCategory != null &&
-          notebook.iconType != _selectedCategory) {
+      if (_selectedCategory != null && notebook.iconType != _selectedCategory) {
         return false;
       }
       if (query.isEmpty) {
@@ -322,14 +324,12 @@ class _NotesScreenState extends State<NotesScreen> {
         _notebooks = _notebooks
             .where((item) => item.id != notebook.id)
             .toList();
-        _selectedCategory = _notebooks.any(
-          (item) => item.iconType == _selectedCategory,
-        )
+        _selectedCategory =
+            _notebooks.any((item) => item.iconType == _selectedCategory)
             ? _selectedCategory
             : null;
-        _selectedCategory = _notebooks.any(
-          (item) => item.iconType == _selectedCategory,
-        )
+        _selectedCategory =
+            _notebooks.any((item) => item.iconType == _selectedCategory)
             ? _selectedCategory
             : null;
       });
@@ -436,6 +436,8 @@ class _NotesScreenState extends State<NotesScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        elevation: 0,
+        scrolledUnderElevation: 0,
         title: Text(
           'Notes',
           style: theme.textTheme.headlineSmall?.copyWith(
@@ -443,6 +445,12 @@ class _NotesScreenState extends State<NotesScreen> {
           ),
         ),
         actions: [
+          IconButton(
+            key: const ValueKey('notes-search-button'),
+            tooltip: 'Search notes',
+            onPressed: () => _searchFocusNode.requestFocus(),
+            icon: const Icon(Icons.search_rounded),
+          ),
           IconButton(
             key: const ValueKey('notes-new-notebook-button'),
             tooltip: 'New notebook',
@@ -536,6 +544,7 @@ class _NotesScreenState extends State<NotesScreen> {
             context,
             label: 'All',
             icon: Icons.folder_copy_outlined,
+            noteColor: NoteCardColor.blue,
             count: _notebooks.fold<int>(
               0,
               (total, notebook) => total + notebook.noteCount,
@@ -548,6 +557,7 @@ class _NotesScreenState extends State<NotesScreen> {
               context,
               label: _categoryLabel(type),
               icon: _categoryIcon(type),
+              noteColor: _categoryColor(type),
               count: _notebooks
                   .where((notebook) => notebook.iconType == type)
                   .fold<int>(
@@ -566,12 +576,19 @@ class _NotesScreenState extends State<NotesScreen> {
     BuildContext context, {
     required String label,
     required IconData icon,
+    required NoteCardColor noteColor,
     required int count,
     required bool selected,
     required VoidCallback onTap,
   }) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final iconColor = colorScheme.onSurface;
+    final tileColor = Color.lerp(
+      colorScheme.surface,
+      noteCardSwatchColor(theme, noteColor),
+      selected ? 0.26 : 0.13,
+    )!;
 
     return Padding(
       padding: const EdgeInsets.only(right: 8),
@@ -580,47 +597,47 @@ class _NotesScreenState extends State<NotesScreen> {
         selected: selected,
         label: '$label, $count notes',
         child: Material(
-          color: selected
-              ? colorScheme.primaryContainer
-              : colorScheme.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(14),
+          color: tileColor,
+          borderRadius: BorderRadius.circular(13),
           child: InkWell(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(13),
             onTap: onTap,
-            child: SizedBox(
-              width: 82,
-              height: 78,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    icon,
-                    size: 20,
-                    color: selected
-                        ? colorScheme.onPrimaryContainer
-                        : colorScheme.primary,
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: selected
-                          ? colorScheme.onPrimaryContainer
-                          : colorScheme.onSurface,
+            child: Ink(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(13),
+                border: Border.all(
+                  color: selected
+                      ? colorScheme.onSurface
+                      : colorScheme.outlineVariant,
+                ),
+              ),
+              child: SizedBox(
+                width: 76,
+                height: 64,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(icon, size: 18, color: iconColor),
+                    const SizedBox(height: 2),
+                    Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: colorScheme.onSurface,
+                      ),
                     ),
-                  ),
-                  Text(
-                    '$count',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: selected
-                          ? colorScheme.onPrimaryContainer
-                          : colorScheme.onSurfaceVariant,
+                    Text(
+                      '$count',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        fontSize: 10,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -651,17 +668,30 @@ class _NotesScreenState extends State<NotesScreen> {
     };
   }
 
+  NoteCardColor _categoryColor(NotebookIconType type) {
+    return switch (type) {
+      NotebookIconType.work => NoteCardColor.pink,
+      NotebookIconType.goals => NoteCardColor.mint,
+      NotebookIconType.journal => NoteCardColor.lavender,
+      NotebookIconType.health => NoteCardColor.lightGreen,
+      NotebookIconType.ideas => NoteCardColor.peach,
+      NotebookIconType.general => NoteCardColor.cyan,
+    };
+  }
+
   Widget _buildSearchBar(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
     return TextField(
       key: const ValueKey('notes-workspace-search'),
       controller: _searchController,
+      focusNode: _searchFocusNode,
       decoration: InputDecoration(
         hintText: 'Search notes...',
         prefixIcon: const Icon(Icons.search_rounded),
         filled: true,
         fillColor: colorScheme.surfaceContainerLow,
+        isDense: true,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(24),
           borderSide: BorderSide.none,
@@ -694,10 +724,7 @@ class _NotesScreenState extends State<NotesScreen> {
                     value: false,
                     child: Text('Newest first'),
                   ),
-                  PopupMenuItem<bool>(
-                    value: true,
-                    child: Text('Oldest first'),
-                  ),
+                  PopupMenuItem<bool>(value: true, child: Text('Oldest first')),
                 ],
                 icon: const Icon(Icons.tune_rounded),
               ),
@@ -798,9 +825,8 @@ class _NotesScreenState extends State<NotesScreen> {
       children: [
         Text(
           'Notebooks',
-          style: Theme.of(
-            context,
-          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+          style: Theme.of(context).textTheme.titleMedium
+              ?.copyWith(fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 10),
         if (notebooks.isEmpty)

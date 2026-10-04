@@ -1,6 +1,9 @@
 import 'package:app_smarana/features/notes/models/note_workspace_models.dart';
+import 'package:app_smarana/features/notes/models/rich_note_draft.dart';
 import 'package:app_smarana/features/notes/screens/rich_note_editor_screen.dart';
+import 'package:app_smarana/theme/app_theme.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_quill/flutter_quill.dart' as quill;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -63,10 +66,12 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('note-editor-reminder-button')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Set Date & Time'), findsOneWidget);
+    expect(find.text('Set Reminder'), findsOneWidget);
+    expect(find.text('Date & Time'), findsOneWidget);
     expect(find.text('Repeat'), findsOneWidget);
     expect(find.text('Alert sound'), findsOneWidget);
     expect(find.text('Project Mode'), findsOneWidget);
+    expect(find.text('Done'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -143,4 +148,323 @@ void main() {
     expect(find.bySemanticsLabel('Pink note color, selected'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('all seven note colors can be selected', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RichNoteEditorScreen(
+          sections: [
+            NoteSection(
+              id: 'section-palette',
+              name: 'General',
+              createdAt: DateTime(2026, 10, 1),
+            ),
+          ],
+          initialSectionId: 'section-palette',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    for (final color in [
+      'Blue',
+      'Cyan',
+      'Mint',
+      'Light Green',
+      'Peach',
+      'Pink',
+      'Lavender',
+    ]) {
+      await tester.tap(find.byKey(const ValueKey('note-editor-more-menu')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Note color'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip(color));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('note-editor-more-menu')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Note color'));
+      await tester.pumpAndSettle();
+      expect(
+        find.bySemanticsLabel('$color note color, selected'),
+        findsOneWidget,
+      );
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pumpAndSettle();
+    }
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('selected text highlight is saved as a rich-text attribute', (
+    tester,
+  ) async {
+    RichNoteDraft? savedDraft;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RichNoteEditorScreen(
+          sections: [
+            NoteSection(
+              id: 'section-highlight',
+              name: 'General',
+              createdAt: DateTime(2026, 10, 1),
+            ),
+          ],
+          initialSectionId: 'section-highlight',
+          onAutosave: (draft) async {
+            savedDraft = draft;
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final editor = tester.widget<quill.QuillEditor>(
+      find.byKey(const ValueKey('rich-note-content-editor')),
+    );
+    final controller = editor.controller;
+    const noteText = 'Campaign goals';
+    controller.document.insert(0, '$noteText\n');
+    controller.updateSelection(
+      TextSelection(baseOffset: 0, extentOffset: noteText.length),
+      quill.ChangeSource.local,
+    );
+    await tester.pump();
+
+    await tester.tap(find.byTooltip('Text and section colors'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Text highlight 1'));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 800));
+    await tester.pump();
+
+    final delta = controller.document.toDelta().toJson();
+    expect(
+      delta.whereType<Map>().any(
+        (operation) =>
+            operation['attributes'] is Map &&
+            (operation['attributes'] as Map).containsKey('background'),
+      ),
+      isTrue,
+    );
+    expect(savedDraft?.richContentDelta, contains('background'));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('multiple text colors remain readable in both theme modes', (
+    tester,
+  ) async {
+    const words = ['One', 'two', 'three', 'four', 'five', 'six', 'seven'];
+    final content = '${words.join(' ')}\n';
+
+    for (final brightness in [Brightness.light, Brightness.dark]) {
+      RichNoteDraft? savedDraft;
+      final mode = brightness == Brightness.light
+          ? ThemeMode.light
+          : ThemeMode.dark;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildLightTheme(),
+          darkTheme: buildDarkTheme(),
+          themeMode: mode,
+          home: RichNoteEditorScreen(
+            key: ValueKey('editor-${brightness.name}'),
+            sections: [
+              NoteSection(
+                id: 'section-colors',
+                name: 'General',
+                createdAt: DateTime(2026, 10, 1),
+              ),
+            ],
+            initialSectionId: 'section-colors',
+            onAutosave: (draft) async {
+              savedDraft = draft;
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final editor = tester.widget<quill.QuillEditor>(
+        find.byKey(const ValueKey('rich-note-content-editor')),
+      );
+      final controller = editor.controller;
+      expect(
+        Theme.of(
+          tester.element(
+            find.byKey(const ValueKey('rich-note-content-editor')),
+          ),
+        ).brightness,
+        brightness,
+      );
+      controller.document.insert(0, content);
+
+      for (var index = 0; index < words.length; index++) {
+        final start = content.indexOf(words[index]);
+        controller.updateSelection(
+          TextSelection(
+            baseOffset: start,
+            extentOffset: start + words[index].length,
+          ),
+          quill.ChangeSource.local,
+        );
+        await tester.pump();
+        await tester.tap(find.byTooltip('Text and section colors'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('Text highlight ${index + 1}'));
+        await tester.pumpAndSettle();
+      }
+
+      for (var index = 0; index < words.length; index++) {
+        final start = content.indexOf(words[index]);
+        controller.updateSelection(
+          TextSelection(
+            baseOffset: start,
+            extentOffset: start + words[index].length,
+          ),
+          quill.ChangeSource.local,
+        );
+        await tester.pump();
+        await tester.tap(find.byTooltip('Text and section colors'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('Text color ${index + 1}'));
+        await tester.pumpAndSettle();
+      }
+      await tester.pump(const Duration(milliseconds: 800));
+      await tester.pump();
+
+      final delta = controller.document.toDelta().toJson();
+      final highlightColors = <String>{};
+      final textColors = <String>{};
+      final runs = <String, Map>{};
+      for (final operation in delta.whereType<Map>()) {
+        final insertedText = operation['insert'];
+        final attributes = operation['attributes'];
+        if (insertedText is! String || attributes is! Map) {
+          continue;
+        }
+        final background = attributes['background'];
+        final foreground = attributes['color'];
+        if (background is String) {
+          highlightColors.add(background);
+        }
+        if (foreground is String) {
+          textColors.add(foreground);
+        }
+        for (final word in words) {
+          if (insertedText.contains(word)) {
+            runs[word] = attributes;
+          }
+        }
+      }
+
+      expect(
+        highlightColors,
+        hasLength(words.length),
+        reason: 'Serialized delta: $delta',
+      );
+      expect(textColors, hasLength(words.length));
+      for (final word in words) {
+        final attributes = runs[word]!;
+        final foreground = _colorFromHex(attributes['color']! as String);
+        final background = _colorFromHex(attributes['background']! as String);
+        expect(
+          _contrastRatio(foreground, background),
+          greaterThanOrEqualTo(4.5),
+        );
+      }
+      expect(savedDraft?.richContentDelta, contains('background'));
+      expect(savedDraft?.richContentDelta, contains('color'));
+      expect(tester.takeException(), isNull);
+    }
+  });
+
+  testWidgets('editor and reminder sheet render across theme modes and sizes', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(
+      tester.binding.platformDispatcher.clearPlatformBrightnessTestValue,
+    );
+
+    final cases = [
+      (ThemeMode.light, Brightness.light, const Size(320, 640)),
+      (ThemeMode.dark, Brightness.light, const Size(375, 812)),
+      (ThemeMode.system, Brightness.light, const Size(800, 1024)),
+      (ThemeMode.system, Brightness.dark, const Size(320, 640)),
+    ];
+
+    for (final (mode, systemBrightness, size) in cases) {
+      tester.binding.platformDispatcher.platformBrightnessTestValue =
+          systemBrightness;
+      tester.view.physicalSize = size;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildLightTheme(),
+          darkTheme: buildDarkTheme(),
+          themeMode: mode,
+          home: RichNoteEditorScreen(
+            sections: [
+              NoteSection(
+                id: 'section-theme',
+                name: 'General',
+                createdAt: DateTime(2026, 10, 1),
+              ),
+            ],
+            initialSectionId: 'section-theme',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final expectedBrightness = mode == ThemeMode.system
+          ? systemBrightness
+          : mode == ThemeMode.dark
+          ? Brightness.dark
+          : Brightness.light;
+      expect(
+        Theme.of(
+          tester.element(
+            find.byKey(const ValueKey('rich-note-content-editor')),
+          ),
+        ).brightness,
+        expectedBrightness,
+      );
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(
+        find.byKey(const ValueKey('note-editor-reminder-button')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Set Reminder'), findsOneWidget);
+      expect(
+        Theme.of(tester.element(find.text('Set Reminder'))).brightness,
+        expectedBrightness,
+      );
+      expect(tester.takeException(), isNull);
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('note-reminder-done-button')),
+      );
+      await tester.tap(find.byKey(const ValueKey('note-reminder-done-button')));
+      await tester.pumpAndSettle();
+    }
+  });
+}
+
+Color _colorFromHex(String hex) {
+  final value = hex.replaceFirst('#', '');
+  return Color(0xFF000000 | int.parse(value, radix: 16));
+}
+
+double _contrastRatio(Color first, Color second) {
+  final firstLuminance = first.computeLuminance();
+  final secondLuminance = second.computeLuminance();
+  final lighter = firstLuminance > secondLuminance
+      ? firstLuminance
+      : secondLuminance;
+  final darker = firstLuminance > secondLuminance
+      ? secondLuminance
+      : firstLuminance;
+  return (lighter + 0.05) / (darker + 0.05);
 }
