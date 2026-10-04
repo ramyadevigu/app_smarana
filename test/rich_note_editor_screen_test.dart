@@ -281,21 +281,34 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byIcon(Icons.folder_outlined), findsNothing);
-    await tester.tap(
-      find.byKey(const ValueKey('rich-note-section-dropdown')),
-    );
+    await tester.tap(find.byKey(const ValueKey('rich-note-section-dropdown')));
     await tester.pumpAndSettle();
 
     expect(find.text('Category Color'), findsOneWidget);
-    expect(find.byType(Tooltip), findsNWidgets(7));
+    for (final color in [
+      NoteCardColor.blue,
+      NoteCardColor.cyan,
+      NoteCardColor.mint,
+      NoteCardColor.green,
+      NoteCardColor.orange,
+      NoteCardColor.pink,
+      NoteCardColor.lavender,
+    ]) {
+      expect(
+        find.byKey(ValueKey('section-color-${color.name}')),
+        findsOneWidget,
+      );
+    }
     await tester.tap(find.byKey(const ValueKey('section-color-pink')));
     await tester.pumpAndSettle();
 
     expect(savedSectionId, 'section-general');
     expect(savedColor, NoteCardColor.pink);
+    await tester.tap(find.byKey(const ValueKey('rich-note-section-dropdown')));
+    await tester.pumpAndSettle();
     expect(
       find.bySemanticsLabel('Pink category color, selected'),
-      findsNothing,
+      findsOneWidget,
     );
     expect(tester.takeException(), isNull);
   });

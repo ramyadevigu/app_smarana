@@ -178,7 +178,8 @@ class _SectionColorSwatch extends StatelessWidget {
                 ? Icon(
                     Icons.check_rounded,
                     size: 19,
-                    color: ThemeData.estimateBrightnessForColor(
+                    color:
+                        ThemeData.estimateBrightnessForColor(
                               noteSectionSwatchColor(color),
                             ) ==
                             Brightness.dark

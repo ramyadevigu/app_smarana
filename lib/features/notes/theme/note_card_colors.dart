@@ -125,7 +125,11 @@ Color noteSectionSurfaceColor(ThemeData theme, NoteCardColor color) {
     return theme.colorScheme.secondaryContainer;
   }
   final blend = theme.brightness == Brightness.light ? 0.16 : 0.28;
-  return Color.lerp(theme.colorScheme.surfaceContainerLow, paletteColor, blend)!;
+  return Color.lerp(
+    theme.colorScheme.surfaceContainerLow,
+    paletteColor,
+    blend,
+  )!;
 }
 
 Color noteSectionAccentColor(ThemeData theme, NoteCardColor color) {

@@ -2136,10 +2136,7 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
                 key: const ValueKey('rich-note-section-dropdown'),
                 label: Text(_selectedSectionName),
                 labelStyle: theme.textTheme.labelSmall?.copyWith(
-                  color: noteSectionAccentColor(
-                    theme,
-                    _selectedSectionColor,
-                  ),
+                  color: noteSectionAccentColor(theme, _selectedSectionColor),
                   fontWeight: FontWeight.w600,
                 ),
                 backgroundColor: noteSectionSurfaceColor(
