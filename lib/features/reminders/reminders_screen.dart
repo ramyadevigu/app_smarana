@@ -339,7 +339,10 @@ class _RemindersScreenState extends State<RemindersScreen> {
       margin: EdgeInsets.zero,
       elevation: 1,
       color: reminder.enabled
-          ? colorScheme.primaryContainer
+          ? Color.alphaBlend(
+              colorScheme.primary.withValues(alpha: 0.06),
+              colorScheme.surfaceContainerLow,
+            )
           : colorScheme.surfaceContainerLow,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
@@ -400,6 +403,10 @@ class _RemindersScreenState extends State<RemindersScreen> {
                         child: Switch(
                           key: ValueKey('reminder-switch-${reminder.id}'),
                           value: reminder.enabled,
+                          activeTrackColor: colorScheme.primary,
+                          activeThumbColor: colorScheme.onPrimary,
+                          inactiveTrackColor: colorScheme.surfaceContainerHigh,
+                          inactiveThumbColor: colorScheme.onSurfaceVariant,
                           onChanged: (value) {
                             _updateReminder(reminder.copyWith(enabled: value));
                           },

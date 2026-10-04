@@ -354,7 +354,16 @@ class NotificationService implements ReminderNotificationScheduler {
 }
 
 Future<String> _readLocalTimezone() async {
-  return (await FlutterTimezone.getLocalTimezone()).identifier;
+  final timezoneInfo = await FlutterTimezone.getLocalTimezone();
+  final identifier = timezoneInfo.identifier;
+
+  // Android may return the legacy alias "Asia/Calcutta".
+  // The timezone package uses the canonical "Asia/Kolkata" identifier.
+  if (identifier == 'Asia/Calcutta') {
+    return 'Asia/Kolkata';
+  }
+
+  return identifier;
 }
 
 class _FlutterLocalNotificationPlatform implements NotificationPlatform {

@@ -1,11 +1,11 @@
 {
-    "name": "app_smarana",
-    "short_name": "app_smarana",
+    "name": "Total Reminders",
+    "short_name": "Total Reminders",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "Manage reminders, calendar events, notes, alarms, and timers.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

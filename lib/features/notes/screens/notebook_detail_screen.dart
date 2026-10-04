@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../reminders/services/reminder_storage.dart';
 import '../models/note_workspace_models.dart';
 import '../models/rich_note_draft.dart';
+import '../services/note_attachment_storage.dart';
 import 'rich_note_editor_screen.dart';
 
 enum NotebookViewMode { notes, list, kanban }
@@ -20,11 +23,15 @@ class NotebookDetailScreen extends StatefulWidget {
     required this.notebook,
     this.onNotebookChanged,
     this.reminderStorage,
+    this.createNoteOnOpen = false,
+    this.initialNoteId,
   });
 
   final Notebook notebook;
   final Future<void> Function(Notebook notebook)? onNotebookChanged;
   final ReminderStorage? reminderStorage;
+  final bool createNoteOnOpen;
+  final String? initialNoteId;
 
   @override
   State<NotebookDetailScreen> createState() => _NotebookDetailScreenState();
@@ -34,6 +41,7 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
   late Notebook _notebook;
   late String _selectedSectionId;
   late final ReminderStorage _reminderStorage;
+  late final NoteAttachmentStorage _attachmentStorage;
   NotebookViewMode _viewMode = NotebookViewMode.notes;
 
   @override
@@ -42,6 +50,26 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
     _notebook = widget.notebook;
     _selectedSectionId = _notebook.sections.first.id;
     _reminderStorage = widget.reminderStorage ?? ReminderStorage();
+    _attachmentStorage = NoteAttachmentStorage();
+    if (widget.createNoteOnOpen) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          unawaited(_createNote());
+        }
+      });
+    } else if (widget.initialNoteId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+        final matches = _notebook.notes.where(
+          (note) => note.id == widget.initialNoteId,
+        );
+        if (matches.isNotEmpty) {
+          unawaited(_editNote(matches.first));
+        }
+      });
+    }
   }
 
   List<NoteEntry> get _sectionNotes {
@@ -174,9 +202,26 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
       MaterialPageRoute<RichNoteDraft>(
         builder: (_) => RichNoteEditorScreen(
           note: note,
+          notebookName: _notebook.name,
           sections: _notebook.sections,
           initialSectionId: _selectedSectionId,
           reminderStorage: _reminderStorage,
+          onDuplicate: _duplicateDraft,
+          onDelete: (draft) async {
+            if (draft.reminderId != null) {
+              await _reminderStorage.deleteReminder(draft.reminderId!);
+            }
+            if (wasInserted) {
+              await _publishNotebook(
+                _notebook.copyWith(
+                  notes: _notebook.notes
+                      .where((existing) => existing.id != note.id)
+                      .toList(),
+                  updatedAt: DateTime.now(),
+                ),
+              );
+            }
+          },
           onAutosave: (snapshot) async {
             if (!_hasMeaningfulContent(snapshot) || !mounted) {
               return;
@@ -232,9 +277,24 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
       MaterialPageRoute<RichNoteDraft>(
         builder: (_) => RichNoteEditorScreen(
           note: note,
+          notebookName: _notebook.name,
           sections: _notebook.sections,
           initialSectionId: note.sectionId,
           reminderStorage: _reminderStorage,
+          onDuplicate: _duplicateDraft,
+          onDelete: (draft) async {
+            if (draft.reminderId != null) {
+              await _reminderStorage.deleteReminder(draft.reminderId!);
+            }
+            await _publishNotebook(
+              _notebook.copyWith(
+                notes: _notebook.notes
+                    .where((existing) => existing.id != note.id)
+                    .toList(),
+                updatedAt: DateTime.now(),
+              ),
+            );
+          },
           onAutosave: (snapshot) async {
             if (!mounted) {
               return;
@@ -264,6 +324,35 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
     );
   }
 
+  Future<void> _duplicateDraft(RichNoteDraft draft) async {
+    final id = _id('note');
+    final attachments = await _attachmentStorage.duplicateAttachments(
+      attachments: draft.attachments,
+      noteId: id,
+    );
+    final now = DateTime.now();
+    final title = draft.title.trim().isEmpty ? 'Untitled' : draft.title.trim();
+    final duplicate = NoteEntry(
+      id: id,
+      notebookId: _notebook.id,
+      sectionId: draft.sectionId,
+      title: '$title copy',
+      content: draft.plainContent,
+      richContentDelta: draft.richContentDelta,
+      attachments: attachments,
+      projectMetadata: draft.projectMetadata,
+      createdAt: now,
+      updatedAt: now,
+      color: draft.color,
+    );
+    await _publishNotebook(
+      _notebook.copyWith(
+        notes: _upsertNote(_notebook.notes, duplicate),
+        updatedAt: now,
+      ),
+    );
+  }
+
   Future<void> _publishNotebook(Notebook updated) async {
     setState(() {
       _notebook = updated;
@@ -286,6 +375,7 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
       updatedAt: draft.updatedAt,
       reminderId: draft.reminderId,
       clearReminderId: draft.reminderId == null,
+      color: draft.color,
     );
   }
 

@@ -1,1 +1,1 @@
-enum CalendarViewMode { stacked, split }
+enum CalendarViewMode { list, year, month, week, threeDay, day }
