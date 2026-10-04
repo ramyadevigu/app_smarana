@@ -48,6 +48,27 @@ void main() {
     expect(find.text('Project X'), findsNothing);
   });
 
+  testWidgets('starts with a real empty workspace instead of demo notes', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const MaterialApp(home: NotesScreen()));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+
+    expect(
+      find.text('No notebooks yet. Create your first notebook.'),
+      findsOneWidget,
+    );
+    expect(find.text('Plans & Goals'), findsNothing);
+    expect(find.text('Weekly Review'), findsNothing);
+    expect(
+      (await SharedPreferences.getInstance()).getString(
+        'smarana_note_workspace_v1',
+      ),
+      isNull,
+    );
+  });
+
   testWidgets('opens notebook and manages sections with notes', (tester) async {
     final notebook = Notebook(
       id: 'book-1',
@@ -139,12 +160,54 @@ void main() {
   });
 
   testWidgets('search filters notebook and recent note lists', (tester) async {
-    await tester.pumpWidget(const MaterialApp(home: NotesScreen()));
-    await tester.pump(const Duration(seconds: 1));
-    await tester.pump();
+    final notebooks = [
+      Notebook(
+        id: 'notebook-workout',
+        name: 'Health & Fitness',
+        iconType: NotebookIconType.health,
+        sections: [
+          NoteSection(
+            id: 'section-workouts',
+            name: 'Workouts',
+            createdAt: DateTime(2026, 9, 4, 7),
+          ),
+        ],
+        notes: [
+          NoteEntry(
+            id: 'note-workout',
+            notebookId: 'notebook-workout',
+            sectionId: 'section-workouts',
+            title: 'Workout Split',
+            content: 'Upper body, lower body, mobility, and recovery notes.',
+            createdAt: DateTime(2026, 9, 29, 6, 30),
+            updatedAt: DateTime(2026, 9, 29, 7, 5),
+          ),
+        ],
+        createdAt: DateTime(2026, 8, 1, 9),
+        updatedAt: DateTime(2026, 9, 29, 7, 5),
+      ),
+      Notebook(
+        id: 'notebook-plans',
+        name: 'Plans & Goals',
+        iconType: NotebookIconType.goals,
+        sections: [
+          NoteSection(
+            id: 'section-focus',
+            name: 'Focus',
+            createdAt: DateTime(2026, 9, 1, 8),
+          ),
+        ],
+        notes: const [],
+        createdAt: DateTime(2026, 8, 1, 9),
+        updatedAt: DateTime(2026, 9, 1, 8),
+      ),
+    ];
+    await tester.pumpWidget(
+      MaterialApp(home: NotesScreen(initialNotebooks: notebooks)),
+    );
 
     expect(find.text('Plans & Goals'), findsOneWidget);
-    expect(find.text('Weekly Review'), findsOneWidget);
+    expect(find.text('Workout Split'), findsOneWidget);
 
     await tester.enterText(
       find.byKey(const ValueKey('notes-workspace-search')),

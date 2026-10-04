@@ -120,6 +120,32 @@ void main() {
     );
   });
 
+  test('each selectable theme has readable primary foregrounds', () {
+    for (final colorTheme in SmaranaColorTheme.values) {
+      for (final theme in [
+        buildLightTheme(colorTheme),
+        buildDarkTheme(colorTheme),
+      ]) {
+        final primary = theme.colorScheme.primary;
+        final foreground = theme.colorScheme.onPrimary;
+        final luminance = primary.computeLuminance();
+        final foregroundLuminance = foreground.computeLuminance();
+        final lighter = luminance > foregroundLuminance
+            ? luminance
+            : foregroundLuminance;
+        final darker = luminance > foregroundLuminance
+            ? foregroundLuminance
+            : luminance;
+
+        expect(
+          (lighter + 0.05) / (darker + 0.05),
+          greaterThanOrEqualTo(4.5),
+          reason: '${colorTheme.label} ${theme.brightness} primary contrast',
+        );
+      }
+    }
+  });
+
   testWidgets('reminders, form, and pickers use light and dark themes', (
     tester,
   ) async {

@@ -161,6 +161,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
+  final Set<int> _visitedTabs = {0};
   final ReminderPreferencesStore _preferencesStore =
       const ReminderPreferencesStore();
   CalendarViewMode _calendarViewMode = CalendarViewMode.month;
@@ -187,25 +188,17 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final screens = [
-      CalendarScreen(
-        viewMode: _calendarViewMode,
-        onViewModeChanged: _changeCalendarViewMode,
-        appMenu: _buildAppMenu(),
-      ),
-      NotesScreen(appMenu: _buildAppMenu(), onBackToSmarana: _returnToCalendar),
-      RemindersScreen(title: 'Alarms', appMenu: _buildAppMenu()),
-      StopwatchScreen(appMenu: _buildAppMenu()),
-      TimerScreen(appMenu: _buildAppMenu()),
-    ];
-
     return Scaffold(
-      body: screens[_currentIndex],
+      body: IndexedStack(
+        index: _currentIndex,
+        children: List<Widget>.generate(5, _buildTab),
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
         indicatorColor: Theme.of(context).colorScheme.primary,
         onDestinationSelected: (index) {
           setState(() {
+            _visitedTabs.add(index);
             _currentIndex = index;
           });
         },
@@ -258,6 +251,28 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildTab(int index) {
+    if (!_visitedTabs.contains(index)) {
+      return const SizedBox.shrink();
+    }
+
+    return switch (index) {
+      0 => CalendarScreen(
+        viewMode: _calendarViewMode,
+        onViewModeChanged: _changeCalendarViewMode,
+        appMenu: _buildAppMenu(),
+      ),
+      1 => NotesScreen(
+        appMenu: _buildAppMenu(),
+        onBackToSmarana: _returnToCalendar,
+      ),
+      2 => RemindersScreen(title: 'Alarms', appMenu: _buildAppMenu()),
+      3 => StopwatchScreen(appMenu: _buildAppMenu()),
+      4 => TimerScreen(appMenu: _buildAppMenu()),
+      _ => const SizedBox.shrink(),
+    };
   }
 
   Widget _buildAppMenu() {

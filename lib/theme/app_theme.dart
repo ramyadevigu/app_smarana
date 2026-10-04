@@ -35,10 +35,13 @@ ThemeData _buildTheme(
 }) {
   final isLight = brightness == Brightness.light;
   final primary = colorTheme.color;
-  final onPrimary = primary.computeLuminance() > 0.45
-      ? AppColors.deepBlack
-      : AppColors.white;
-  final surface = isLight ? AppColors.lightSurface : AppColors.darkSurface;
+  final onPrimary = AppColors.highContrastForeground(primary);
+  final background = isLight
+      ? Color.lerp(AppColors.lightBackground, primary, 0.025)!
+      : AppColors.deepBlack;
+  final surface = isLight
+      ? Color.lerp(AppColors.lightSurface, primary, 0.012)!
+      : AppColors.darkSurface;
   final outline = isLight ? AppColors.lightOutline : AppColors.darkOutline;
   final outlineVariant = isLight
       ? AppColors.lightOutlineVariant
@@ -50,15 +53,9 @@ ThemeData _buildTheme(
       ColorScheme.fromSeed(seedColor: primary, brightness: brightness).copyWith(
         primary: primary,
         onPrimary: onPrimary,
-        secondary: primary,
-        onSecondary: onPrimary,
-        tertiary: primary,
-        onTertiary: onPrimary,
         surface: surface,
         onSurface: isLight ? AppColors.deepBlack : AppColors.darkOnSurface,
-        surfaceContainerLowest: isLight
-            ? AppColors.lightBackground
-            : AppColors.deepBlack,
+        surfaceContainerLowest: background,
         surfaceContainerLow: isLight
             ? AppColors.lightSurfaceLow
             : AppColors.darkSurfaceLow,
@@ -77,19 +74,20 @@ ThemeData _buildTheme(
   return ThemeData(
     useMaterial3: true,
     colorScheme: colorScheme,
+    dividerTheme: DividerThemeData(
+      color: outlineVariant,
+      thickness: 1,
+      space: 1,
+    ),
     pageTransitionsTheme: const PageTransitionsTheme(
       builders: {
         TargetPlatform.android: CupertinoPageTransitionsBuilder(),
         TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
       },
     ),
-    scaffoldBackgroundColor: isLight
-        ? AppColors.lightBackground
-        : AppColors.deepBlack,
+    scaffoldBackgroundColor: background,
     appBarTheme: AppBarTheme(
-      backgroundColor: isLight
-          ? AppColors.lightBackground
-          : AppColors.deepBlack,
+      backgroundColor: background,
       foregroundColor: isLight ? AppColors.deepBlack : AppColors.darkOnSurface,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
@@ -98,25 +96,67 @@ ThemeData _buildTheme(
       color: isLight ? AppColors.lightSurface : AppColors.darkSurfaceLow,
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(14),
         side: BorderSide(color: outlineVariant),
       ),
+    ),
+    navigationBarTheme: NavigationBarThemeData(
+      backgroundColor: isLight ? AppColors.lightSurface : AppColors.darkSurface,
+      elevation: 0,
+      height: 72,
+      indicatorColor: primary,
+      labelTextStyle: WidgetStateProperty.resolveWith((states) {
+        final selected = states.contains(WidgetState.selected);
+        return TextStyle(
+          fontSize: 12,
+          fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+        );
+      }),
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: isLight ? AppColors.lightSurface : AppColors.darkSurfaceLow,
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(12),
         borderSide: BorderSide(color: outline),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(12),
         borderSide: BorderSide(color: outline),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(12),
         borderSide: BorderSide(color: focusColor, width: 1.5),
       ),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(
+        minimumSize: const Size(64, 48),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
+    ),
+    dialogTheme: DialogThemeData(
+      backgroundColor: surface,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+    ),
+    bottomSheetTheme: BottomSheetThemeData(
+      backgroundColor: surface,
+      surfaceTintColor: Colors.transparent,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+    ),
+    snackBarTheme: SnackBarThemeData(
+      behavior: SnackBarBehavior.floating,
+      backgroundColor: isLight ? AppColors.deepBlack : AppColors.darkSurfaceHigh,
+      contentTextStyle: const TextStyle(color: AppColors.white),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+    ),
+    textSelectionTheme: TextSelectionThemeData(
+      cursorColor: primary,
+      selectionColor: primary.withValues(alpha: 0.24),
+      selectionHandleColor: primary,
     ),
     floatingActionButtonTheme: FloatingActionButtonThemeData(
       backgroundColor: primary,

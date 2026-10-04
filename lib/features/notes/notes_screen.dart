@@ -38,141 +38,14 @@ class _NotesScreenState extends State<NotesScreen> {
   bool _showAllRecent = false;
   bool _oldestFirst = false;
 
-  static final List<Notebook> _defaultNotebooks = [
-    Notebook(
-      id: 'nb-plans',
-      name: 'Plans & Goals',
-      iconType: NotebookIconType.goals,
-      sections: [
-        NoteSection(
-          id: 'section-plans-focus',
-          name: 'Focus',
-          createdAt: DateTime(2026, 9, 1, 8),
-        ),
-        NoteSection(
-          id: 'section-plans-review',
-          name: 'Review',
-          createdAt: DateTime(2026, 9, 1, 8, 10),
-        ),
-      ],
-      notes: [
-        NoteEntry(
-          id: 'note-weekly-review',
-          notebookId: 'nb-plans',
-          sectionId: 'section-plans-review',
-          title: 'Weekly Review',
-          content:
-              'Capture wins, blockers, and next focus areas for this week.',
-          createdAt: DateTime(2026, 9, 30, 9, 0),
-          updatedAt: DateTime(2026, 9, 30, 9, 12),
-        ),
-      ],
-      createdAt: DateTime(2026, 8, 1, 9),
-      updatedAt: DateTime(2026, 9, 30, 9, 12),
-    ),
-    Notebook(
-      id: 'nb-work',
-      name: 'Work Notes',
-      iconType: NotebookIconType.work,
-      sections: [
-        NoteSection(
-          id: 'section-work-meetings',
-          name: 'Meetings',
-          createdAt: DateTime(2026, 9, 2, 10),
-        ),
-        NoteSection(
-          id: 'section-work-action-items',
-          name: 'Action Items',
-          createdAt: DateTime(2026, 9, 2, 10, 5),
-        ),
-      ],
-      notes: [
-        NoteEntry(
-          id: 'note-client-call-highlights',
-          notebookId: 'nb-work',
-          sectionId: 'section-work-meetings',
-          title: 'Client Call Highlights',
-          content: 'Action items, deadlines, and follow-up topics from Tuesday call.',
-          createdAt: DateTime(2026, 9, 29, 18, 20),
-          updatedAt: DateTime(2026, 9, 29, 18, 42),
-        ),
-      ],
-      createdAt: DateTime(2026, 8, 1, 9),
-      updatedAt: DateTime(2026, 9, 29, 18, 42),
-    ),
-    Notebook(
-      id: 'nb-journal',
-      name: 'Journal',
-      iconType: NotebookIconType.journal,
-      sections: [
-        NoteSection(
-          id: 'section-journal-daily',
-          name: 'Daily',
-          createdAt: DateTime(2026, 9, 1, 6),
-        ),
-      ],
-      notes: const [],
-      createdAt: DateTime(2026, 8, 1, 9),
-      updatedAt: DateTime(2026, 9, 1, 6),
-    ),
-    Notebook(
-      id: 'nb-health',
-      name: 'Health & Fitness',
-      iconType: NotebookIconType.health,
-      sections: [
-        NoteSection(
-          id: 'section-health-workouts',
-          name: 'Workouts',
-          createdAt: DateTime(2026, 9, 4, 7),
-        ),
-      ],
-      notes: [
-        NoteEntry(
-          id: 'note-workout-split',
-          notebookId: 'nb-health',
-          sectionId: 'section-health-workouts',
-          title: 'Workout Split',
-          content: 'Upper body, lower body, mobility, and recovery notes.',
-          createdAt: DateTime(2026, 9, 29, 6, 30),
-          updatedAt: DateTime(2026, 9, 29, 7, 5),
-        ),
-      ],
-      createdAt: DateTime(2026, 8, 1, 9),
-      updatedAt: DateTime(2026, 9, 29, 7, 5),
-    ),
-    Notebook(
-      id: 'nb-ideas',
-      name: 'Quick Ideas',
-      iconType: NotebookIconType.ideas,
-      sections: [
-        NoteSection(
-          id: 'section-ideas-campaigns',
-          name: 'Campaigns',
-          createdAt: DateTime(2026, 9, 5, 12),
-        ),
-      ],
-      notes: [
-        NoteEntry(
-          id: 'note-festival-campaign',
-          notebookId: 'nb-ideas',
-          sectionId: 'section-ideas-campaigns',
-          title: 'Festival Campaign Concepts',
-          content: 'Headline options and social story hooks for the upcoming campaign.',
-          createdAt: DateTime(2026, 9, 28, 21, 45),
-          updatedAt: DateTime(2026, 9, 28, 22, 30),
-        ),
-      ],
-      createdAt: DateTime(2026, 8, 1, 9),
-      updatedAt: DateTime(2026, 9, 28, 22, 30),
-    ),
-  ];
+  static const List<Notebook> _emptyNotebookList = [];
 
   @override
   void initState() {
     super.initState();
     _workspaceStorage = widget.workspaceStorage ?? NoteWorkspaceStorage();
     _notebooks = List<Notebook>.of(
-      widget.initialNotebooks ?? _defaultNotebooks,
+      widget.initialNotebooks ?? _emptyNotebookList,
     );
     if (widget.initialNotebooks != null) {
       _isLoading = false;
@@ -192,25 +65,19 @@ class _NotesScreenState extends State<NotesScreen> {
   Future<void> _loadWorkspace() async {
     try {
       final saved = await _workspaceStorage.loadWorkspace();
-      final notebooks = saved.isEmpty
-          ? List<Notebook>.of(_defaultNotebooks)
-          : saved;
       if (!mounted) {
         return;
       }
       setState(() {
-        _notebooks = notebooks;
+        _notebooks = saved;
         _isLoading = false;
       });
-      if (saved.isEmpty) {
-        await _workspaceStorage.saveWorkspace(notebooks);
-      }
     } on Exception catch (error) {
       if (!mounted) {
         return;
       }
       setState(() {
-        _notebooks = List<Notebook>.of(_defaultNotebooks);
+        _notebooks = List<Notebook>.of(_emptyNotebookList);
         _isLoading = false;
         _storageError = 'Notes could not be restored. Changes may not persist.';
       });

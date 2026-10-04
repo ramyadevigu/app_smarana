@@ -17,6 +17,28 @@ import 'package:app_smarana/features/time_tools/timer_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  testWidgets('preserves tab state while switching destinations', (
+    WidgetTester tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(const AppSmarana());
+
+    for (var frame = 0; frame < 6; frame++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    await tester.tap(find.byKey(const ValueKey('nav-stopwatch')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('stopwatch-primary-action')));
+    await tester.pump(const Duration(milliseconds: 120));
+
+    await tester.tap(find.byKey(const ValueKey('nav-calendar')));
+    await tester.pump(const Duration(milliseconds: 60));
+    await tester.tap(find.byKey(const ValueKey('nav-stopwatch')));
+    await tester.pump(const Duration(milliseconds: 60));
+
+    expect(find.text('Pause'), findsOneWidget);
+  });
+
   testWidgets('app starts on the calendar screen', (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(const AppSmarana());

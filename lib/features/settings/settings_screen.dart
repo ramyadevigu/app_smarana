@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../calender/models/calendar_view_mode.dart';
 import '../../services/notification_service.dart';
+import '../../theme/app_colors.dart';
 import '../reminders/models/reminder.dart';
 import '../../theme/app_theme.dart';
 import 'services/reminder_preferences_store.dart';
@@ -414,9 +415,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _colorThemeSwatch(BuildContext context, SmaranaColorTheme colorTheme) {
     final selected = _selectedColorTheme == colorTheme;
-    final foreground = colorTheme.color.computeLuminance() > 0.45
-        ? Colors.black
-        : Colors.white;
+    final foreground = AppColors.highContrastForeground(colorTheme.color);
     return Semantics(
       button: true,
       selected: selected,
