@@ -16,7 +16,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  testWidgets('shows individual notebooks alongside category filters', (
+  testWidgets('shows notebooks without a General category filter', (
     tester,
   ) async {
     final now = DateTime.now();
@@ -38,7 +38,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('All'), findsOneWidget);
-    expect(find.text('General'), findsOneWidget);
+    expect(find.text('General'), findsNothing);
     expect(find.text('Notebooks'), findsOneWidget);
     expect(find.text('app'), findsOneWidget);
     expect(find.byKey(const ValueKey('notes-add-note-fab')), findsOneWidget);

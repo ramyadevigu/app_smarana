@@ -1224,7 +1224,11 @@ class _NotesScreenState extends State<NotesScreen> {
 
   Widget _buildCategoryStrip(BuildContext context) {
     final categories = NotebookIconType.values
-        .where((type) => _notebooks.any((book) => book.iconType == type))
+        .where(
+          (type) =>
+              type != NotebookIconType.general &&
+              _notebooks.any((book) => book.iconType == type),
+        )
         .toList();
 
     return SingleChildScrollView(
