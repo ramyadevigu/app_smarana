@@ -4,6 +4,7 @@ import 'package:app_smarana/features/notes/models/note_workspace_models.dart';
 import 'package:app_smarana/features/notes/notes_screen.dart';
 import 'package:app_smarana/features/notes/theme/notebook_colors.dart';
 import 'package:app_smarana/features/notes/widgets/notebook_list_tile.dart';
+import 'package:app_smarana/features/notes/widgets/notebook_selector.dart';
 import 'package:app_smarana/features/notes/widgets/recent_note_card.dart';
 import 'package:app_smarana/features/reminders/models/reminder.dart';
 import 'package:app_smarana/theme/app_theme.dart';
@@ -16,7 +17,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  testWidgets('shows notebooks without a General category filter', (
+  testWidgets('shows a compact All selector without notebook cards', (
     tester,
   ) async {
     final now = DateTime.now();
@@ -37,14 +38,19 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('All'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('notes-notebook-selector')),
+      findsOneWidget,
+    );
     expect(find.text('General'), findsNothing);
-    expect(find.text('Notebooks'), findsOneWidget);
-    expect(find.text('app'), findsOneWidget);
+    expect(find.text('Notebooks'), findsNothing);
+    expect(find.text('app'), findsNothing);
+    expect(find.byType(NotebookSelector), findsOneWidget);
+    expect(find.byType(NotebookListTile), findsNothing);
     expect(find.byKey(const ValueKey('notes-add-note-fab')), findsOneWidget);
   });
 
-  testWidgets('tapping a notebook opens it and keeps it selected', (
+  testWidgets('selecting a notebook filters notes and keeps open action', (
     tester,
   ) async {
     final now = DateTime(2026, 10, 1);
@@ -55,29 +61,148 @@ void main() {
       sections: [
         NoteSection(id: 'open-section', name: 'General', createdAt: now),
       ],
-      notes: const [],
+      notes: [
+        NoteEntry(
+          id: 'open-note',
+          notebookId: 'open-notebook',
+          sectionId: 'open-section',
+          title: 'Only in this notebook',
+          content: 'Notebook-specific note',
+          createdAt: now,
+          updatedAt: now,
+        ),
+      ],
       createdAt: now,
       updatedAt: now,
     );
-    final notebookFinder = find.byKey(
-      const ValueKey('notebook-card-open-notebook'),
+    final otherNotebook = Notebook(
+      id: 'other-notebook',
+      name: 'Other notebook',
+      iconType: NotebookIconType.ideas,
+      sections: [
+        NoteSection(id: 'other-section', name: 'General', createdAt: now),
+      ],
+      notes: [
+        NoteEntry(
+          id: 'other-note',
+          notebookId: 'other-notebook',
+          sectionId: 'other-section',
+          title: 'Note from another notebook',
+          content: 'It should be hidden by a notebook filter.',
+          createdAt: now,
+          updatedAt: now,
+        ),
+      ],
+      createdAt: now,
+      updatedAt: now,
     );
 
     await tester.pumpWidget(
-      MaterialApp(home: NotesScreen(initialNotebooks: [notebook])),
+      MaterialApp(
+        home: NotesScreen(initialNotebooks: [notebook, otherNotebook]),
+      ),
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(notebookFinder);
+    expect(find.text('Only in this notebook'), findsOneWidget);
+    expect(find.text('Note from another notebook'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('notes-notebook-selector')));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('notebook-selector-option-open-notebook')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Only in this notebook'), findsOneWidget);
+    expect(find.text('Note from another notebook'), findsNothing);
+    expect(
+      tester
+          .widget<NotebookSelector>(find.byType(NotebookSelector))
+          .selectedNotebookId,
+      'open-notebook',
+    );
+
+    await tester.tap(find.byKey(const ValueKey('notes-notebook-selector')));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('notebook-selector-option-all')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Only in this notebook'), findsOneWidget);
+    expect(find.text('Note from another notebook'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('notes-notebook-selector')));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('notebook-selector-option-open-notebook')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('notes-notebook-selector')));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('notebook-selector-options-open-notebook')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Open Notebook'));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('notebook-add-section')), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('notebook-save-and-close')));
     await tester.pumpAndSettle();
 
-    expect(tester.widget<NotebookListTile>(notebookFinder).selected, isTrue);
+    expect(
+      tester
+          .widget<NotebookSelector>(find.byType(NotebookSelector))
+          .selectedNotebookId,
+      'open-notebook',
+    );
   });
 
-  testWidgets('long-press notebook options edit its settings', (tester) async {
+  testWidgets('notebook selector lazily scrolls long notebook lists', (
+    tester,
+  ) async {
+    final now = DateTime(2026, 10, 1);
+    final notebooks = [
+      for (var index = 0; index < 50; index++)
+        Notebook(
+          id: 'notebook-$index',
+          name: 'Notebook $index',
+          iconType: NotebookIconType.general,
+          sections: const [],
+          notes: const [],
+          createdAt: now,
+          updatedAt: now,
+        ),
+    ];
+
+    await tester.pumpWidget(
+      MaterialApp(home: NotesScreen(initialNotebooks: notebooks)),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('notes-notebook-selector')));
+    await tester.pumpAndSettle();
+
+    final lastOption = find.byKey(
+      const ValueKey('notebook-selector-option-notebook-49'),
+    );
+    expect(lastOption, findsNothing);
+    await tester.scrollUntilVisible(
+      lastOption,
+      180,
+      scrollable: find.byType(Scrollable).last,
+    );
+    expect(lastOption, findsOneWidget);
+    await tester.tap(lastOption);
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<NotebookSelector>(find.byType(NotebookSelector))
+          .selectedNotebookId,
+      'notebook-49',
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('notebook selector options edit its settings', (tester) async {
     final now = DateTime(2026, 10, 1);
     final notebook = Notebook(
       id: 'customize-notebook',
@@ -90,8 +215,8 @@ void main() {
       createdAt: now,
       updatedAt: now,
     );
-    final notebookFinder = find.byKey(
-      const ValueKey('notebook-card-customize-notebook'),
+    final optionsFinder = find.byKey(
+      const ValueKey('notebook-selector-options-customize-notebook'),
     );
 
     await tester.pumpWidget(
@@ -103,7 +228,14 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.longPress(notebookFinder);
+    Future<void> showNotebookOptions() async {
+      await tester.tap(find.byKey(const ValueKey('notes-notebook-selector')));
+      await tester.pumpAndSettle();
+      await tester.tap(optionsFinder);
+      await tester.pumpAndSettle();
+    }
+
+    await showNotebookOptions();
     await tester.pumpAndSettle();
     expect(find.text('Rename'), findsOneWidget);
     expect(find.text('Change Icon'), findsOneWidget);
@@ -116,36 +248,61 @@ void main() {
     await tester.enterText(find.byType(TextField).last, 'Reading list');
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await tester.pumpAndSettle();
-    expect(find.text('Reading list'), findsOneWidget);
+    expect(
+      tester
+          .widget<NotebookSelector>(find.byType(NotebookSelector))
+          .notebooks
+          .single
+          .name,
+      'Reading list',
+    );
 
-    await tester.longPress(notebookFinder);
+    await showNotebookOptions();
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Edit Description'));
+    final editDescription = find.text('Edit Description');
+    await tester.ensureVisible(editDescription);
+    await tester.tap(editDescription);
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, 'Books to explore');
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await tester.pumpAndSettle();
-    expect(find.text('Books to explore'), findsOneWidget);
+    expect(
+      tester
+          .widget<NotebookSelector>(find.byType(NotebookSelector))
+          .notebooks
+          .single
+          .description,
+      'Books to explore',
+    );
 
-    await tester.longPress(notebookFinder);
+    await showNotebookOptions();
     await tester.pumpAndSettle();
     await tester.tap(find.text('Change Color'));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Purple'));
     await tester.pumpAndSettle();
 
-    final notebookTile = tester.widget<NotebookListTile>(notebookFinder);
-    expect(notebookTile.notebook.colorValue, NotebookBaseColor.purple.value);
-    expect(notebookTile.notebook.description, 'Books to explore');
+    final selector = tester.widget<NotebookSelector>(
+      find.byType(NotebookSelector),
+    );
+    expect(
+      selector.notebooks.single.colorValue,
+      NotebookBaseColor.purple.value,
+    );
+    expect(selector.notebooks.single.description, 'Books to explore');
 
-    await tester.longPress(notebookFinder);
+    await showNotebookOptions();
     await tester.pumpAndSettle();
     await tester.tap(find.text('Change Icon'));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('School'));
     await tester.pumpAndSettle();
     expect(
-      tester.widget<NotebookListTile>(notebookFinder).notebook.icon,
+      tester
+          .widget<NotebookSelector>(find.byType(NotebookSelector))
+          .notebooks
+          .single
+          .icon,
       NotebookIcon.school,
     );
     expect(tester.takeException(), isNull);
@@ -168,9 +325,7 @@ void main() {
       createdAt: now,
       updatedAt: now,
     );
-    final tileFinder = find.byKey(
-      const ValueKey('notebook-card-theme-notebook'),
-    );
+    final selectorFinder = find.byType(NotebookSelector);
 
     for (final mode in [ThemeMode.light, ThemeMode.dark]) {
       await tester.pumpWidget(
@@ -182,19 +337,17 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('notes-notebook-selector')));
+      await tester.pumpAndSettle();
 
-      final theme = Theme.of(tester.element(tileFinder));
-      final tile = tester.widget<NotebookListTile>(tileFinder);
-      final materialFinder = find
-          .descendant(of: tileFinder, matching: find.byType(Material))
-          .first;
-      expect(
-        tester.widget<Material>(materialFinder).color,
-        notebookSurfaceColor(theme, colorValue),
-      );
+      final theme = Theme.of(tester.element(selectorFinder));
+      final selector = tester.widget<NotebookSelector>(selectorFinder);
+      final iconFinder = find.byIcon(notebookIconData(null, notebook.iconType));
+      final selectorIcon = tester.widget<Icon>(iconFinder);
       expect(notebookSurfaceColor(theme, colorValue).a, 1);
       expect(notebookAccentColor(theme, colorValue).a, 1);
-      expect(tile.notebook.colorValue, colorValue);
+      expect(selector.notebooks.single.colorValue, colorValue);
+      expect(selectorIcon.color, notebookAccentColor(theme, colorValue));
       for (final paletteColor in NotebookBaseColor.values) {
         expect(
           _contrastRatio(
@@ -207,6 +360,8 @@ void main() {
               '${theme.brightness.name} mode.',
         );
       }
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
     }
   });
@@ -222,7 +377,7 @@ void main() {
       find.text('No recent notes yet. Open a notebook and start writing.'),
       findsOneWidget,
     );
-    expect(find.text('Notebooks'), findsOneWidget);
+    expect(find.text('Notebooks'), findsNothing);
     expect(find.byType(NotebookListTile), findsNothing);
     expect(find.text('Plans & Goals'), findsNothing);
     expect(find.text('Weekly Review'), findsNothing);
@@ -416,71 +571,78 @@ void main() {
     expect(find.text('Engineering'), findsNWidgets(2));
   });
 
-  testWidgets('search filters recent notes while retaining notebook cards', (
-    tester,
-  ) async {
-    final notebooks = [
-      Notebook(
-        id: 'notebook-workout',
-        name: 'Health & Fitness',
-        iconType: NotebookIconType.health,
-        sections: [
-          NoteSection(
-            id: 'section-workouts',
-            name: 'Workouts',
-            createdAt: DateTime(2026, 9, 4, 7),
-          ),
-        ],
-        notes: [
-          NoteEntry(
-            id: 'note-workout',
-            notebookId: 'notebook-workout',
-            sectionId: 'section-workouts',
-            title: 'Workout Split',
-            content: 'Upper body, lower body, mobility, and recovery notes.',
-            createdAt: DateTime(2026, 9, 29, 6, 30),
-            updatedAt: DateTime(2026, 9, 29, 7, 5),
-          ),
-        ],
-        createdAt: DateTime(2026, 8, 1, 9),
-        updatedAt: DateTime(2026, 9, 29, 7, 5),
-      ),
-      Notebook(
-        id: 'notebook-plans',
-        name: 'Plans & Goals',
-        iconType: NotebookIconType.goals,
-        sections: [
-          NoteSection(
-            id: 'section-focus',
-            name: 'Focus',
-            createdAt: DateTime(2026, 9, 1, 8),
-          ),
-        ],
-        notes: const [],
-        createdAt: DateTime(2026, 8, 1, 9),
-        updatedAt: DateTime(2026, 9, 1, 8),
-      ),
-    ];
-    await tester.pumpWidget(
-      MaterialApp(home: NotesScreen(initialNotebooks: notebooks)),
-    );
+  testWidgets(
+    'search filters recent notes independently of notebook selector',
+    (tester) async {
+      final notebooks = [
+        Notebook(
+          id: 'notebook-workout',
+          name: 'Health & Fitness',
+          iconType: NotebookIconType.health,
+          sections: [
+            NoteSection(
+              id: 'section-workouts',
+              name: 'Workouts',
+              createdAt: DateTime(2026, 9, 4, 7),
+            ),
+          ],
+          notes: [
+            NoteEntry(
+              id: 'note-workout',
+              notebookId: 'notebook-workout',
+              sectionId: 'section-workouts',
+              title: 'Workout Split',
+              content: 'Upper body, lower body, mobility, and recovery notes.',
+              createdAt: DateTime(2026, 9, 29, 6, 30),
+              updatedAt: DateTime(2026, 9, 29, 7, 5),
+            ),
+          ],
+          createdAt: DateTime(2026, 8, 1, 9),
+          updatedAt: DateTime(2026, 9, 29, 7, 5),
+        ),
+        Notebook(
+          id: 'notebook-plans',
+          name: 'Plans & Goals',
+          iconType: NotebookIconType.goals,
+          sections: [
+            NoteSection(
+              id: 'section-focus',
+              name: 'Focus',
+              createdAt: DateTime(2026, 9, 1, 8),
+            ),
+          ],
+          notes: const [],
+          createdAt: DateTime(2026, 8, 1, 9),
+          updatedAt: DateTime(2026, 9, 1, 8),
+        ),
+      ];
+      await tester.pumpWidget(
+        MaterialApp(home: NotesScreen(initialNotebooks: notebooks)),
+      );
 
-    expect(find.text('Notebooks'), findsOneWidget);
-    expect(find.text('Plans & Goals'), findsOneWidget);
-    expect(find.text('Workout Split'), findsOneWidget);
+      expect(find.text('Notebooks'), findsNothing);
+      expect(find.text('Plans & Goals'), findsNothing);
+      expect(find.text('Workout Split'), findsOneWidget);
 
-    await tester.tap(find.byKey(const ValueKey('notes-search-button')));
-    await tester.pumpAndSettle();
-    await tester.enterText(
-      find.byKey(const ValueKey('notes-workspace-search')),
-      'workout',
-    );
-    await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('notes-notebook-selector')));
+      await tester.pumpAndSettle();
+      expect(find.text('Plans & Goals'), findsOneWidget);
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pumpAndSettle();
 
-    expect(find.text('Health & Fitness'), findsNWidgets(2));
-    expect(find.text('Workout Split'), findsOneWidget);
-    expect(find.text('Plans & Goals'), findsOneWidget);
-  });
+      await tester.tap(find.byKey(const ValueKey('notes-search-button')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('notes-workspace-search')),
+        'workout',
+      );
+      await tester.pump();
+
+      expect(find.text('Health & Fitness'), findsOneWidget);
+      expect(find.text('Workout Split'), findsOneWidget);
+      expect(find.text('Plans & Goals'), findsNothing);
+    },
+  );
 
   testWidgets('pins and unpins a note from the recent notes menu', (
     tester,

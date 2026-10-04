@@ -13,7 +13,7 @@ import '../../../theme/premium_surface.dart';
 import 'theme/note_card_colors.dart';
 import 'theme/notebook_colors.dart';
 import 'services/note_workspace_storage.dart';
-import 'widgets/notebook_list_tile.dart';
+import 'widgets/notebook_selector.dart';
 import 'widgets/recent_note_card.dart';
 
 class NotesScreen extends StatefulWidget {
@@ -52,6 +52,11 @@ class _NotesScreenState extends State<NotesScreen> {
   Map<String, NoteCardColor>? _recentNotesTagColorSource;
   Map<String, Reminder>? _recentNotesReminderSource;
   DateTime? _recentNotesCacheExpiresAt;
+  List<RecentNoteView>? _filteredRecentNotesCache;
+  List<RecentNoteView>? _filteredRecentNotesSource;
+  String? _filteredNotebookId;
+  NotebookIconType? _filteredCategory;
+  String? _filteredQuery;
 
   static const Duration _recentUpdateWindow = Duration(days: 7);
 
@@ -157,7 +162,17 @@ class _NotesScreenState extends State<NotesScreen> {
 
   List<RecentNoteView> get _filteredRecentNotes {
     final query = _query;
-    return _recentNotes().where((note) {
+    final recentNotes = _recentNotes();
+    final cachedNotes = _filteredRecentNotesCache;
+    if (cachedNotes != null &&
+        identical(_filteredRecentNotesSource, recentNotes) &&
+        _filteredNotebookId == _selectedNotebookId &&
+        _filteredCategory == _selectedCategory &&
+        _filteredQuery == query) {
+      return cachedNotes;
+    }
+
+    final filteredNotes = recentNotes.where((note) {
       if (_selectedNotebookId != null &&
           note.notebookId != _selectedNotebookId) {
         return false;
@@ -174,6 +189,12 @@ class _NotesScreenState extends State<NotesScreen> {
           note.sectionName.toLowerCase().contains(query) ||
           note.note.preview.toLowerCase().contains(query);
     }).toList();
+    _filteredRecentNotesCache = filteredNotes;
+    _filteredRecentNotesSource = recentNotes;
+    _filteredNotebookId = _selectedNotebookId;
+    _filteredCategory = _selectedCategory;
+    _filteredQuery = query;
+    return filteredNotes;
   }
 
   List<RecentNoteView> _recentNotes() {
@@ -377,14 +398,6 @@ class _NotesScreenState extends State<NotesScreen> {
     await _updateNotebook(updated);
   }
 
-  Future<void> _selectAndOpenNotebook(Notebook notebook) async {
-    setState(() {
-      _selectedNotebookId = notebook.id;
-      _selectedCategory = null;
-    });
-    await _openNotebook(notebook);
-  }
-
   Future<void> _showNotebookOptions(Notebook notebook) async {
     final action = await showModalBottomSheet<String>(
       context: context,
@@ -449,6 +462,12 @@ class _NotesScreenState extends State<NotesScreen> {
                     const SizedBox(height: 8),
                     _notebookOptionTile(
                       context,
+                      icon: Icons.open_in_new_rounded,
+                      label: 'Open Notebook',
+                      value: 'open',
+                    ),
+                    _notebookOptionTile(
+                      context,
                       icon: Icons.edit_outlined,
                       label: 'Rename',
                       value: 'rename',
@@ -492,6 +511,9 @@ class _NotesScreenState extends State<NotesScreen> {
     }
 
     switch (action) {
+      case 'open':
+        await _openNotebook(notebook);
+        break;
       case 'rename':
         await _renameNotebook(notebook);
         break;
@@ -1123,7 +1145,7 @@ class _NotesScreenState extends State<NotesScreen> {
 
     return PremiumSurface(
       key: const ValueKey('notes-notebook-panel'),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(10),
       radius: AppRadius.section,
       elevation: AppElevation.subtle,
       glass: true,
@@ -1133,71 +1155,36 @@ class _NotesScreenState extends State<NotesScreen> {
           Row(
             children: [
               Expanded(
-                child: Text(
-                  'Notebooks',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
+                child: NotebookSelector(
+                  notebooks: _notebooks,
+                  selectedNotebookId: _selectedNotebookId,
+                  onSelected: (notebookId) {
+                    setState(() {
+                      _selectedNotebookId = notebookId;
+                      _selectedCategory = null;
+                    });
+                  },
+                  onCreateNotebook: _createNotebook,
+                  onNotebookOptions: _showNotebookOptions,
                 ),
               ),
-              Text(
-                '${_notebooks.length}',
-                style: theme.textTheme.labelMedium?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(width: 4),
+              const SizedBox(width: 8),
               IconButton(
                 key: const ValueKey('notes-new-notebook-button'),
                 tooltip: 'New notebook',
-                visualDensity: VisualDensity.compact,
                 onPressed: _createNotebook,
+                style: IconButton.styleFrom(
+                  backgroundColor: colorScheme.surfaceContainerHighest,
+                  foregroundColor: colorScheme.primary,
+                  minimumSize: const Size(48, 48),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.control),
+                  ),
+                ),
                 icon: const Icon(Icons.create_new_folder_outlined),
               ),
             ],
           ),
-          if (_notebooks.isEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Create a notebook to organize your notes.',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ),
-            )
-          else
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final columns = (constraints.maxWidth / 185)
-                    .floor()
-                    .clamp(1, 4)
-                    .toInt();
-                final tileWidth =
-                    (constraints.maxWidth - (columns - 1) * 8) / columns;
-                return Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    for (final notebook in _notebooks)
-                      SizedBox(
-                        width: tileWidth,
-                        height: 76,
-                        child: NotebookListTile(
-                          key: ValueKey('notebook-card-${notebook.id}'),
-                          notebook: notebook,
-                          selected: _selectedNotebookId == notebook.id,
-                          onOpen: () => _selectAndOpenNotebook(notebook),
-                          onOptions: () => _showNotebookOptions(notebook),
-                        ),
-                      ),
-                  ],
-                );
-              },
-            ),
           const SizedBox(height: 6),
           Divider(height: 1, color: colorScheme.outlineVariant),
           const SizedBox(height: 8),
@@ -1460,39 +1447,74 @@ class _NotesScreenState extends State<NotesScreen> {
         _buildRecentNotesHeading(context),
         const SizedBox(height: 8),
         if (visibleNotes.isEmpty)
-          _SectionEmptyState(
-            message: _query.isEmpty
-                ? 'No recent notes yet. Open a notebook and start writing.'
-                : 'No recent notes match your search.',
+          _buildRecentNotesContent(
+            context,
+            key: ValueKey(
+              'notes-content-${_selectedNotebookId ?? 'all'}-empty',
+            ),
+            child: _SectionEmptyState(
+              message: _query.isEmpty
+                  ? 'No recent notes yet. Open a notebook and start writing.'
+                  : 'No recent notes match your search.',
+            ),
           )
         else
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: visibleNotes.length,
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: isWide ? 3 : 2,
-              mainAxisExtent: 176,
-              crossAxisSpacing: 10,
-              mainAxisSpacing: 10,
+          _buildRecentNotesContent(
+            context,
+            key: ValueKey(
+              'notes-content-${_selectedNotebookId ?? 'all'}-notes',
             ),
-            itemBuilder: (context, index) {
-              final note = visibleNotes[index];
-              return Semantics(
-                button: true,
-                label: 'Open ${note.note.title} in ${note.notebookName}',
-                child: RecentNoteCard(
-                  note: note,
-                  compact: true,
-                  onTap: () => _openRecentNote(note),
-                  onTogglePinned: () => _togglePinnedNote(note),
-                  onColorChanged: (color) => _changeNoteColor(note, color),
-                  onTagColorChanged: _changeTagColor,
-                ),
-              );
-            },
+            child: GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: visibleNotes.length,
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: isWide ? 3 : 2,
+                mainAxisExtent: 176,
+                crossAxisSpacing: 10,
+                mainAxisSpacing: 10,
+              ),
+              itemBuilder: (context, index) {
+                final note = visibleNotes[index];
+                return Semantics(
+                  button: true,
+                  label: 'Open ${note.note.title} in ${note.notebookName}',
+                  child: RecentNoteCard(
+                    note: note,
+                    compact: true,
+                    onTap: () => _openRecentNote(note),
+                    onTogglePinned: () => _togglePinnedNote(note),
+                    onColorChanged: (color) => _changeNoteColor(note, color),
+                    onTagColorChanged: _changeTagColor,
+                  ),
+                );
+              },
+            ),
           ),
       ],
+    );
+  }
+
+  Widget _buildRecentNotesContent(
+    BuildContext context, {
+    required Key key,
+    required Widget child,
+  }) {
+    return AnimatedSwitcher(
+      duration: AppMotion.resolve(context, AppMotion.interaction),
+      switchInCurve: AppMotion.enter,
+      switchOutCurve: Curves.easeIn,
+      transitionBuilder: (child, animation) => FadeTransition(
+        opacity: animation,
+        child: SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(0, 0.025),
+            end: Offset.zero,
+          ).animate(animation),
+          child: child,
+        ),
+      ),
+      child: KeyedSubtree(key: key, child: child),
     );
   }
 }
