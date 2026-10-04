@@ -119,9 +119,9 @@ ThemeData _buildTheme(Color accentColor, {required Brightness brightness}) {
         TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
       },
     ),
-    scaffoldBackgroundColor: Colors.transparent,
+    scaffoldBackgroundColor: background,
     appBarTheme: AppBarTheme(
-      backgroundColor: Colors.transparent,
+      backgroundColor: surface,
       foregroundColor: onSurface,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
@@ -143,7 +143,7 @@ ThemeData _buildTheme(Color accentColor, {required Brightness brightness}) {
       shape: cardShape,
     ),
     navigationBarTheme: NavigationBarThemeData(
-      backgroundColor: Colors.transparent,
+      backgroundColor: surfaceLow,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
       height: 68,

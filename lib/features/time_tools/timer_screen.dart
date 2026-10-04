@@ -448,7 +448,6 @@ class _EmptyTimersState extends StatelessWidget {
           child: PremiumSurface(
             padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 36),
             radius: AppRadius.section,
-            glass: true,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [

@@ -26,13 +26,6 @@ abstract final class AppElevation {
   static const double floating = 3;
 }
 
-abstract final class AppGlass {
-  static const double lightSurfaceOpacity = 0.88;
-  static const double darkSurfaceOpacity = 0.9;
-  static const double lightBorderOpacity = 0.72;
-  static const double darkBorderOpacity = 0.58;
-}
-
 abstract final class AppMotion {
   static const Duration micro = Duration(milliseconds: 140);
   static const Duration interaction = Duration(milliseconds: 190);

@@ -404,7 +404,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return PremiumSurface(
       color: colorScheme.surfaceContainerLow,
       radius: AppRadius.card,
-      glass: true,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(AppRadius.card),
         child: Material(

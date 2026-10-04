@@ -13,7 +13,6 @@ class PremiumSurface extends StatelessWidget {
     this.radius = AppRadius.card,
     this.elevation = AppElevation.flat,
     this.selected = false,
-    this.glass = false,
   });
 
   final Widget child;
@@ -24,39 +23,24 @@ class PremiumSurface extends StatelessWidget {
   final double radius;
   final double elevation;
   final bool selected;
-  final bool glass;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final isLight = theme.brightness == Brightness.light;
-    final baseColor =
-        color ??
-        (isLight
-            ? colorScheme.surfaceContainerLow
-            : colorScheme.surfaceContainerLow);
+    final baseColor = color ?? colorScheme.surfaceContainerLow;
     final surfaceColor = selected
         ? Color.alphaBlend(
             colorScheme.primary.withValues(alpha: isLight ? 0.08 : 0.16),
             baseColor,
-          )
-        : glass
-        ? baseColor.withValues(
-            alpha: isLight
-                ? AppGlass.lightSurfaceOpacity
-                : AppGlass.darkSurfaceOpacity,
           )
         : baseColor;
     final resolvedBorderColor =
         borderColor ??
         (selected
             ? colorScheme.primary.withValues(alpha: isLight ? 0.38 : 0.48)
-            : colorScheme.outlineVariant.withValues(
-                alpha: isLight
-                    ? AppGlass.lightBorderOpacity
-                    : AppGlass.darkBorderOpacity,
-              ));
+            : colorScheme.outlineVariant.withValues(alpha: 0.72));
 
     return Container(
       margin: margin,

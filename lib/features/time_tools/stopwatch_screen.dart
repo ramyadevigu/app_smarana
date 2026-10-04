@@ -122,7 +122,6 @@ class _StopwatchScreenState extends State<StopwatchScreen> {
                             padding: const EdgeInsets.all(24),
                             radius: AppRadius.section,
                             elevation: AppElevation.subtle,
-                            glass: true,
                             child: SizedBox(
                               width: double.infinity,
                               child: ValueListenableBuilder<Duration>(
@@ -163,7 +162,6 @@ class _StopwatchScreenState extends State<StopwatchScreen> {
                         height: 180,
                         child: PremiumSurface(
                           radius: AppRadius.compactCard,
-                          glass: true,
                           child: ListView.separated(
                             key: const ValueKey('stopwatch-laps'),
                             padding: const EdgeInsets.symmetric(vertical: 4),

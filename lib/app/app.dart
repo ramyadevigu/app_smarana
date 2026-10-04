@@ -359,7 +359,6 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final isLight = Theme.of(context).brightness == Brightness.light;
     return Scaffold(
       body: Center(
         child: ConstrainedBox(
@@ -374,9 +373,7 @@ class _HomeScreenState extends State<HomeScreen> {
         padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
         child: DecoratedBox(
           decoration: BoxDecoration(
-            color: colorScheme.surfaceContainerLow.withValues(
-              alpha: isLight ? 0.94 : 0.92,
-            ),
+            color: colorScheme.surfaceContainerLow,
             borderRadius: BorderRadius.circular(22),
             border: Border.all(
               color: colorScheme.outlineVariant.withValues(alpha: 0.75),
@@ -384,10 +381,12 @@ class _HomeScreenState extends State<HomeScreen> {
             boxShadow: [
               BoxShadow(
                 color: colorScheme.shadow.withValues(
-                  alpha: isLight ? 0.07 : 0.2,
+                  alpha: Theme.of(context).brightness == Brightness.light
+                      ? 0.045
+                      : 0.12,
                 ),
-                blurRadius: 20,
-                offset: const Offset(0, 6),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
               ),
             ],
           ),

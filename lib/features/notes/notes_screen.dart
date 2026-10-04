@@ -1041,7 +1041,7 @@ class _NotesScreenState extends State<NotesScreen> {
       appBar: AppBar(
         elevation: 0,
         scrolledUnderElevation: 0,
-        backgroundColor: theme.colorScheme.surface.withValues(alpha: 0.88),
+        backgroundColor: theme.colorScheme.surface,
         title: Text(
           'Notes',
           style: theme.textTheme.headlineSmall?.copyWith(
@@ -1148,7 +1148,6 @@ class _NotesScreenState extends State<NotesScreen> {
       padding: const EdgeInsets.all(10),
       radius: AppRadius.section,
       elevation: AppElevation.subtle,
-      glass: true,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

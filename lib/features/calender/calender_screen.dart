@@ -1282,7 +1282,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 4),
       radius: AppRadius.compactCard,
       elevation: AppElevation.subtle,
-      glass: true,
       child: SizedBox(
         height: 48,
         child: Row(
@@ -1482,7 +1481,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
           padding: EdgeInsets.all(surfacePadding),
           radius: AppRadius.section,
           elevation: AppElevation.subtle,
-          glass: true,
           child: GridView.builder(
             key: ValueKey(
               twoWeekPreview ? 'calendar-week-preview' : 'calendar-month-grid',
