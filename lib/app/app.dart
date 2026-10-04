@@ -2,8 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../theme/app_colors.dart';
-
 import '../features/calender/models/calendar_view_mode.dart';
 import '../features/calender/calender_screen.dart';
 import '../features/notes/notes_screen.dart';
@@ -12,6 +10,8 @@ import '../features/reminders/services/reminder_storage.dart';
 import '../features/reminders/reminders_screen.dart';
 import '../features/settings/services/reminder_preferences_store.dart';
 import '../features/settings/settings_screen.dart';
+import '../features/time_tools/stopwatch_screen.dart';
+import '../features/time_tools/timer_screen.dart';
 import '../services/notification_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/theme_preference_store.dart';
@@ -22,10 +22,12 @@ class AppSmarana extends StatefulWidget {
   const AppSmarana({
     super.key,
     this.initialThemeMode = ThemeMode.system,
+    this.initialAccentColor = defaultAccentColor,
     this.themePreferenceStore = const ThemePreferenceStore(),
   });
 
   final ThemeMode initialThemeMode;
+  final Color initialAccentColor;
   final ThemePreferenceStore themePreferenceStore;
 
   @override
@@ -35,6 +37,7 @@ class AppSmarana extends StatefulWidget {
 class _AppSmaranaState extends State<AppSmarana> {
   final _navigatorKey = GlobalKey<NavigatorState>();
   late ThemeMode _themeMode;
+  late Color _accentColor;
   StreamSubscription<String>? _notificationSubscription;
   bool _openingNotificationReminder = false;
 
@@ -42,6 +45,7 @@ class _AppSmaranaState extends State<AppSmarana> {
   void initState() {
     super.initState();
     _themeMode = widget.initialThemeMode;
+    _accentColor = widget.initialAccentColor;
     final notifications = NotificationService.instance;
     _notificationSubscription = notifications.openedReminderIds.listen(
       _openReminderFromNotification,
@@ -109,18 +113,29 @@ class _AppSmaranaState extends State<AppSmarana> {
     await widget.themePreferenceStore.saveThemeMode(themeMode);
   }
 
+  Future<void> _changeAccentColor(Color accentColor) async {
+    if (_accentColor == accentColor) {
+      return;
+    }
+
+    setState(() => _accentColor = accentColor);
+    await widget.themePreferenceStore.saveAccentColor(accentColor);
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       navigatorKey: _navigatorKey,
-      title: 'Smarana',
+      title: 'Total Reminders',
       debugShowCheckedModeBanner: false,
-      theme: lightTheme,
-      darkTheme: darkTheme,
+      theme: buildLightTheme(_accentColor),
+      darkTheme: buildDarkTheme(_accentColor),
       themeMode: _themeMode,
       home: HomeScreen(
         selectedThemeMode: _themeMode,
         onThemeModeChanged: _changeThemeMode,
+        selectedAccentColor: _accentColor,
+        onAccentColorChanged: _changeAccentColor,
       ),
     );
   }
@@ -131,10 +146,14 @@ class HomeScreen extends StatefulWidget {
     super.key,
     this.selectedThemeMode = ThemeMode.system,
     this.onThemeModeChanged,
+    this.selectedAccentColor = defaultAccentColor,
+    this.onAccentColorChanged,
   });
 
   final ThemeMode selectedThemeMode;
   final Future<void> Function(ThemeMode)? onThemeModeChanged;
+  final Color selectedAccentColor;
+  final Future<void> Function(Color)? onAccentColorChanged;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -142,9 +161,10 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
+  final Set<int> _visitedTabs = {0};
   final ReminderPreferencesStore _preferencesStore =
       const ReminderPreferencesStore();
-  CalendarViewMode _calendarViewMode = CalendarViewMode.stacked;
+  CalendarViewMode _calendarViewMode = CalendarViewMode.month;
 
   @override
   void initState() {
@@ -168,43 +188,37 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final screens = [
-      CalendarScreen(viewMode: _calendarViewMode, appMenu: _buildAppMenu()),
-      NotesScreen(appMenu: _buildAppMenu(), onBackToSmarana: _returnToCalendar),
-      RemindersScreen(title: 'Alarms', appMenu: _buildAppMenu()),
-      _TimeToolScreen(
-        title: 'Stopwatch',
-        icon: Icons.av_timer,
-        appMenu: _buildAppMenu(),
-      ),
-      _TimeToolScreen(
-        title: 'Timer',
-        icon: Icons.hourglass_bottom,
-        appMenu: _buildAppMenu(),
-      ),
-    ];
-
     return Scaffold(
-      body: screens[_currentIndex],
+      body: IndexedStack(
+        index: _currentIndex,
+        children: List<Widget>.generate(5, _buildTab),
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
-        indicatorColor: AppColors.azureBlue,
+        indicatorColor: Theme.of(context).colorScheme.primary,
         onDestinationSelected: (index) {
           setState(() {
+            _visitedTabs.add(index);
             _currentIndex = index;
           });
         },
-        destinations: const [
+        destinations: [
           NavigationDestination(
             key: ValueKey('nav-calendar'),
             icon: Icon(Icons.calendar_month_outlined),
-            selectedIcon: Icon(Icons.calendar_month, color: AppColors.white),
+            selectedIcon: Icon(
+              Icons.calendar_month,
+              color: Theme.of(context).colorScheme.onPrimary,
+            ),
             label: 'Calendar',
           ),
           NavigationDestination(
             key: ValueKey('nav-notes'),
             icon: Icon(Icons.sticky_note_2_outlined),
-            selectedIcon: Icon(Icons.sticky_note_2, color: AppColors.white),
+            selectedIcon: Icon(
+              Icons.sticky_note_2,
+              color: Theme.of(context).colorScheme.onPrimary,
+            ),
             label: 'Notes',
           ),
           NavigationDestination(
@@ -212,25 +226,53 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: Icon(Icons.notifications_none),
             selectedIcon: Icon(
               Icons.notifications_active,
-              color: AppColors.white,
+              color: Theme.of(context).colorScheme.onPrimary,
             ),
             label: 'Alarms',
           ),
           NavigationDestination(
             key: ValueKey('nav-stopwatch'),
             icon: Icon(Icons.av_timer_outlined),
-            selectedIcon: Icon(Icons.av_timer, color: AppColors.white),
+            selectedIcon: Icon(
+              Icons.av_timer,
+              color: Theme.of(context).colorScheme.onPrimary,
+            ),
             label: 'Stopwatch',
           ),
           NavigationDestination(
             key: ValueKey('nav-timer'),
             icon: Icon(Icons.hourglass_bottom_outlined),
-            selectedIcon: Icon(Icons.hourglass_bottom, color: AppColors.white),
+            selectedIcon: Icon(
+              Icons.hourglass_bottom,
+              color: Theme.of(context).colorScheme.onPrimary,
+            ),
             label: 'Timer',
           ),
         ],
       ),
     );
+  }
+
+  Widget _buildTab(int index) {
+    if (!_visitedTabs.contains(index)) {
+      return const SizedBox.shrink();
+    }
+
+    return switch (index) {
+      0 => CalendarScreen(
+        viewMode: _calendarViewMode,
+        onViewModeChanged: _changeCalendarViewMode,
+        appMenu: _buildAppMenu(),
+      ),
+      1 => NotesScreen(
+        appMenu: _buildAppMenu(),
+        onBackToSmarana: _returnToCalendar,
+      ),
+      2 => RemindersScreen(title: 'Alarms', appMenu: _buildAppMenu()),
+      3 => StopwatchScreen(appMenu: _buildAppMenu()),
+      4 => TimerScreen(appMenu: _buildAppMenu()),
+      _ => const SizedBox.shrink(),
+    };
   }
 
   Widget _buildAppMenu() {
@@ -275,9 +317,11 @@ class _HomeScreenState extends State<HomeScreen> {
           MaterialPageRoute<void>(
             builder: (_) => SettingsScreen(
               selectedThemeMode: widget.selectedThemeMode,
+              selectedAccentColor: widget.selectedAccentColor,
               selectedCalendarViewMode: _calendarViewMode,
               onCalendarViewModeChanged: _changeCalendarViewMode,
               onThemeModeChanged: _changeThemeMode,
+              onAccentColorChanged: widget.onAccentColorChanged,
             ),
           ),
         );
@@ -328,6 +372,10 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _calendarViewMode = viewMode;
     });
+    final defaults = await _preferencesStore.loadDefaults();
+    await _preferencesStore.saveDefaults(
+      defaults.copyWith(calendarViewMode: viewMode),
+    );
   }
 
   void _returnToCalendar() {
@@ -337,42 +385,5 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _currentIndex = 0;
     });
-  }
-}
-
-class _TimeToolScreen extends StatelessWidget {
-  const _TimeToolScreen({
-    required this.title,
-    required this.icon,
-    required this.appMenu,
-  });
-
-  final String title;
-  final IconData icon;
-  final Widget appMenu;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Scaffold(
-      appBar: AppBar(title: Text(title), actions: [appMenu]),
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 52, color: theme.colorScheme.primary),
-            const SizedBox(height: 16),
-            Text(title, style: theme.textTheme.titleLarge),
-            const SizedBox(height: 8),
-            Text(
-              'Coming soon',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }

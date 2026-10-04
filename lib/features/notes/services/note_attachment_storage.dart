@@ -45,6 +45,43 @@ class NoteAttachmentStorage {
     );
   }
 
+  Future<List<NoteAttachment>> duplicateAttachments({
+    required List<NoteAttachment> attachments,
+    required String noteId,
+  }) async {
+    if (attachments.isEmpty) {
+      return const [];
+    }
+    final root = await _attachmentsDirectory(noteId);
+    await root.create(recursive: true);
+    final copies = <NoteAttachment>[];
+    try {
+      for (final attachment in attachments) {
+        final id = _uuid.v4();
+        final destination = File(
+          '${root.path}${Platform.pathSeparator}'
+          '${id}_${_safeFilename(attachment.name)}',
+        );
+        await File(attachment.path).copy(destination.path);
+        copies.add(
+          NoteAttachment(
+            id: id,
+            name: attachment.name,
+            path: destination.path,
+            type: attachment.type,
+            addedAt: DateTime.now(),
+          ),
+        );
+      }
+    } on Exception {
+      for (final copy in copies) {
+        await remove(copy);
+      }
+      rethrow;
+    }
+    return copies;
+  }
+
   Future<bool> exists(NoteAttachment attachment) async {
     if (kIsWeb) {
       return false;

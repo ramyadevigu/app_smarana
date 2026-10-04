@@ -39,6 +39,14 @@ void main() {
     );
     final lightColorScheme = lightTheme.colorScheme;
     final darkColorScheme = darkTheme.colorScheme;
+    final lightEnabledCardColor = Color.alphaBlend(
+      lightColorScheme.primary.withValues(alpha: 0.06),
+      lightColorScheme.surfaceContainerLow,
+    );
+    final darkEnabledCardColor = Color.alphaBlend(
+      darkColorScheme.primary.withValues(alpha: 0.06),
+      darkColorScheme.surfaceContainerLow,
+    );
     expect(
       tester.widget<Card>(reminderCard).color,
       lightColorScheme.surfaceContainerLow,
@@ -48,11 +56,11 @@ void main() {
     await _pumpFrames(tester);
     expect((await storage.getReminders()).single.enabled, isTrue);
     expect(scheduler.scheduledReminders.keys, contains('toggle'));
-    expect(tester.widget<Switch>(reminderSwitch).value, isTrue);
-    expect(
-      tester.widget<Card>(reminderCard).color,
-      lightColorScheme.primaryContainer,
-    );
+    final enabledSwitch = tester.widget<Switch>(reminderSwitch);
+    expect(enabledSwitch.value, isTrue);
+    expect(enabledSwitch.activeTrackColor, lightColorScheme.primary);
+    expect(enabledSwitch.activeThumbColor, lightColorScheme.onPrimary);
+    expect(tester.widget<Card>(reminderCard).color, lightEnabledCardColor);
 
     await tester.pumpWidget(const SizedBox.shrink());
     final restartedStorage = ReminderStorage(notificationScheduler: scheduler);
@@ -64,11 +72,11 @@ void main() {
     );
     await _pumpFrames(tester);
     expect((await restartedStorage.getReminders()).single.enabled, isTrue);
-    expect(tester.widget<Switch>(reminderSwitch).value, isTrue);
-    expect(
-      tester.widget<Card>(reminderCard).color,
-      darkColorScheme.primaryContainer,
-    );
+    final darkEnabledSwitch = tester.widget<Switch>(reminderSwitch);
+    expect(darkEnabledSwitch.value, isTrue);
+    expect(darkEnabledSwitch.activeTrackColor, darkColorScheme.primary);
+    expect(darkEnabledSwitch.activeThumbColor, darkColorScheme.onPrimary);
+    expect(tester.widget<Card>(reminderCard).color, darkEnabledCardColor);
 
     await tester.tap(reminderSwitch);
     await _pumpFrames(tester);
@@ -154,11 +162,8 @@ void main() {
       expect(find.text('Call the team'), findsOneWidget);
       expect(find.text('Every Monday'), findsOneWidget);
       expect(find.text('3rd of every month'), findsOneWidget);
-      await tester.scrollUntilVisible(
-        find.text('Disabled one-time'),
-        200,
-        scrollable: find.byType(Scrollable).first,
-      );
+      await tester.drag(find.byType(Scrollable).first, const Offset(0, -240));
+      await _pumpFrames(tester);
       expect(find.text('Disabled'), findsOneWidget);
 
       await tester.tap(find.byTooltip('Add reminder'));
@@ -167,18 +172,22 @@ void main() {
         find.byKey(const ValueKey('title-field')),
         'New reminder',
       );
-      await tester.enterText(
-        find.byKey(const ValueKey('description-field')),
-        'Created from the list',
-      );
       await tester.ensureVisible(find.byKey(const ValueKey('save-reminder')));
       await tester.tap(find.byKey(const ValueKey('save-reminder')));
       await _pumpFrames(tester);
+      await _pumpFrames(tester);
 
       expect(find.text('New reminder'), findsOneWidget);
-      expect(find.text('Created from the list'), findsOneWidget);
+      expect(
+        (await storage.getReminders())
+            .singleWhere((reminder) => reminder.title == 'New reminder')
+            .description,
+        isNull,
+      );
       expect(await storage.getReminders(), hasLength(5));
 
+      await tester.drag(find.byType(Scrollable).first, const Offset(0, -240));
+      await _pumpFrames(tester);
       await tester.tap(find.text('New reminder'));
       await _pumpFrames(tester);
       await tester.enterText(
@@ -187,6 +196,7 @@ void main() {
       );
       await tester.ensureVisible(find.byKey(const ValueKey('save-reminder')));
       await tester.tap(find.byKey(const ValueKey('save-reminder')));
+      await _pumpFrames(tester);
       await _pumpFrames(tester);
 
       expect(find.text('New reminder'), findsNothing);

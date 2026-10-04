@@ -1,23 +1,57 @@
 import 'package:flutter/material.dart';
 
 import 'models/calendar_view_mode.dart';
+import 'widgets/calendar_view_selector.dart';
 import '../reminders/models/reminder.dart';
 import '../reminders/screens/add_reminder_screen.dart';
 import '../reminders/services/reminder_storage.dart';
 import 'services/calendar_service.dart';
+import 'theme/calendar_colors.dart';
+
+const _calendarMonthNames = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
+
+const _calendarShortMonthNames = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sept',
+  'Oct',
+  'Nov',
+  'Dec',
+];
 
 class CalendarScreen extends StatefulWidget {
   const CalendarScreen({
     super.key,
     this.storage,
     this.clock = DateTime.now,
-    this.viewMode = CalendarViewMode.stacked,
+    this.viewMode = CalendarViewMode.month,
+    this.onViewModeChanged,
     this.appMenu,
   });
 
   final ReminderStorage? storage;
   final DateTime Function() clock;
   final CalendarViewMode viewMode;
+  final ValueChanged<CalendarViewMode>? onViewModeChanged;
   final Widget? appMenu;
 
   @override
@@ -30,8 +64,13 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
   late DateTime _selectedDate;
   late DateTime _displayedMonth;
+  late DateTime _today;
+  late CalendarViewMode _activeViewMode;
   List<Reminder> _reminders = [];
   Map<DateTime, List<CalendarOccurrence>> _occurrencesByDate = {};
+  List<CalendarOccurrence> _upcomingOccurrences = [];
+  int _monthTransitionDirection = 1;
+  Offset? _monthPointerStart;
   bool _isLoading = true;
   bool _hasLoadError = false;
 
@@ -40,9 +79,36 @@ class _CalendarScreenState extends State<CalendarScreen> {
     super.initState();
     _storage = widget.storage ?? ReminderStorage();
     final today = _dateOnly(widget.clock());
+    _today = today;
+    _activeViewMode = widget.viewMode;
     _selectedDate = today;
     _displayedMonth = DateTime(today.year, today.month);
     _loadReminders();
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant CalendarScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.viewMode != widget.viewMode) {
+      _activeViewMode = widget.viewMode;
+      _refreshVisibleOccurrences();
+    }
+  }
+
+  void _selectViewMode(CalendarViewMode mode) {
+    if (_activeViewMode == mode) {
+      return;
+    }
+    setState(() {
+      _activeViewMode = mode;
+      _refreshVisibleOccurrences();
+    });
+    widget.onViewModeChanged?.call(mode);
   }
 
   Future<void> _loadReminders({bool showLoading = false}) async {
@@ -77,16 +143,54 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
   void _refreshVisibleOccurrences() {
     final firstOfMonth = DateTime(_displayedMonth.year, _displayedMonth.month);
-    final leadingDays = firstOfMonth.weekday - DateTime.monday;
+    final leadingDays = firstOfMonth.weekday % DateTime.daysPerWeek;
     final firstGridDate = firstOfMonth.subtract(Duration(days: leadingDays));
-    final endExclusive = firstGridDate.add(
+    final monthEndExclusive = firstGridDate.add(
       Duration(days: _monthGridCellCount()),
     );
+    final previewStart = _weekStart(_selectedDate)
+        .subtract(const Duration(days: 7));
+    final previewEndExclusive = previewStart.add(const Duration(days: 14));
+    var start = previewStart.isBefore(firstGridDate)
+        ? previewStart
+        : firstGridDate;
+    var endExclusive = previewEndExclusive.isAfter(monthEndExclusive)
+        ? previewEndExclusive
+        : monthEndExclusive;
+    switch (_activeViewMode) {
+      case CalendarViewMode.year:
+        start = DateTime(_displayedMonth.year);
+        endExclusive = DateTime(_displayedMonth.year + 1);
+      case CalendarViewMode.week:
+        start = _weekStart(_selectedDate);
+        endExclusive = start.add(const Duration(days: 7));
+      case CalendarViewMode.threeDay:
+        start = _selectedDate.subtract(const Duration(days: 1));
+        endExclusive = _selectedDate.add(const Duration(days: 2));
+      case CalendarViewMode.day:
+        start = _selectedDate;
+        endExclusive = _selectedDate.add(const Duration(days: 1));
+      case CalendarViewMode.list:
+      case CalendarViewMode.month:
+        break;
+    }
     _occurrencesByDate = _calendarService.occurrencesBetween(
       _reminders,
-      start: firstGridDate,
+      start: start,
       endExclusive: endExclusive,
     );
+    final countdownStart = _dateOnly(widget.clock());
+    final countdownOccurrences = _calendarService.occurrencesBetween(
+      _reminders,
+      start: countdownStart,
+      endExclusive: countdownStart.add(const Duration(days: 31)),
+    );
+    _upcomingOccurrences =
+        countdownOccurrences.values
+            .expand((occurrences) => occurrences)
+            .where((occurrence) => occurrence.dateTime.isAfter(widget.clock()))
+            .toList()
+          ..sort((first, second) => first.dateTime.compareTo(second.dateTime));
   }
 
   void _changeMonth(int offset) {
@@ -96,6 +200,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
     final lastDay = DateTime(nextMonth.year, nextMonth.month + 1, 0).day;
     setState(() {
+      _monthTransitionDirection = offset.sign;
       _displayedMonth = nextMonth;
       _selectedDate = DateTime(
         nextMonth.year,
@@ -106,7 +211,49 @@ class _CalendarScreenState extends State<CalendarScreen> {
     });
   }
 
+  void _changePeriod(int offset) {
+    if (_activeViewMode != CalendarViewMode.year) {
+      _changeMonth(offset);
+      return;
+    }
+    _setYear(_displayedMonth.year + offset);
+  }
+
+  void _setYear(int year) {
+    if (year == _displayedMonth.year) {
+      return;
+    }
+    final lastDay = DateTime(year, _selectedDate.month + 1, 0).day;
+    setState(() {
+      _monthTransitionDirection = year > _displayedMonth.year ? 1 : -1;
+      _displayedMonth = DateTime(year, _displayedMonth.month);
+      _selectedDate = DateTime(
+        year,
+        _selectedDate.month,
+        _selectedDate.day.clamp(1, lastDay),
+      );
+      _refreshVisibleOccurrences();
+    });
+  }
+
+  Future<void> _pickYear() async {
+    final year = await showDialog<int>(
+      context: context,
+      builder: (_) => _YearPickerDialog(
+        selectedYear: _displayedMonth.year,
+        currentYear: _today.year,
+      ),
+    );
+    if (year == null || !mounted || year == _displayedMonth.year) {
+      return;
+    }
+    _setYear(year);
+  }
+
   Future<void> _pickDate() async {
+    if (_activeViewMode == CalendarViewMode.year) {
+      return _pickYear();
+    }
     final date = await showDatePicker(
       context: context,
       initialDate: _selectedDate,
@@ -119,19 +266,28 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   void _selectDate(DateTime date) {
+    final selectedDate = _dateOnly(date);
     setState(() {
-      _selectedDate = _dateOnly(date);
+      if (selectedDate.year != _displayedMonth.year ||
+          selectedDate.month != _displayedMonth.month) {
+        _monthTransitionDirection = selectedDate.isAfter(_displayedMonth)
+            ? 1
+            : -1;
+      }
+      _selectedDate = selectedDate;
       if (_selectedDate.month != _displayedMonth.month ||
           _selectedDate.year != _displayedMonth.year) {
         _displayedMonth = DateTime(_selectedDate.year, _selectedDate.month);
-        _refreshVisibleOccurrences();
       }
+      _refreshVisibleOccurrences();
     });
   }
 
   void _returnToToday() {
     final today = _dateOnly(widget.clock());
     setState(() {
+      _monthTransitionDirection = today.isBefore(_displayedMonth) ? -1 : 1;
+      _today = today;
       _selectedDate = today;
       _displayedMonth = DateTime(today.year, today.month);
       _refreshVisibleOccurrences();
@@ -199,7 +355,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     }
   }
 
-  bool _isToday(DateTime date) => _sameDay(date, widget.clock());
+  bool _isToday(DateTime date) => _sameDay(date, _today);
 
   bool _sameDay(DateTime first, DateTime second) =>
       first.year == second.year &&
@@ -211,44 +367,21 @@ class _CalendarScreenState extends State<CalendarScreen> {
     return DateTime(localDate.year, localDate.month, localDate.day);
   }
 
-  List<CalendarOccurrence> _occurrencesFor(DateTime date) =>
-      _occurrencesByDate[_dateOnly(date)] ?? const [];
-
-  List<CalendarOccurrence> _selectedDateOccurrences() {
-    final occurrences = List<CalendarOccurrence>.of(
-      _occurrencesFor(_selectedDate),
-    );
-    occurrences.sort((first, second) {
-      final byTime = first.dateTime.compareTo(second.dateTime);
-      if (byTime != 0) {
-        return byTime;
-      }
-      return first.reminder.title.compareTo(second.reminder.title);
-    });
-    return occurrences;
-  }
+  List<CalendarOccurrence> _occurrencesFor(
+    DateTime date, [
+    Map<DateTime, List<CalendarOccurrence>>? occurrencesByDate,
+  ]) => (occurrencesByDate ?? _occurrencesByDate)[_dateOnly(date)] ?? const [];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Calendar'),
-        actions: [
-          TextButton.icon(
-            onPressed: _returnToToday,
-            icon: const Icon(Icons.today_outlined),
-            label: const Text('Today'),
-          ),
-          const SizedBox(width: 8),
-          ?widget.appMenu,
-        ],
-      ),
-      body: _buildBody(context),
+      body: SafeArea(child: _buildBody(context)),
       floatingActionButton: FloatingActionButton(
         heroTag: 'calendar-add-reminder',
+        shape: const CircleBorder(),
         onPressed: _openAddReminder,
         tooltip: 'Add reminder for selected date',
-        child: const Icon(Icons.add),
+        child: const Icon(Icons.add_rounded, size: 30),
       ),
     );
   }
@@ -288,68 +421,32 @@ class _CalendarScreenState extends State<CalendarScreen> {
       );
     }
 
-    return widget.viewMode == CalendarViewMode.split
-        ? _buildSplitLayout(context)
-        : _buildStackedLayout(context);
-  }
-
-  Widget _buildStackedLayout(BuildContext context) {
     return Padding(
-      key: const ValueKey('calendar-view-stacked'),
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _buildMonthHeader(context),
-          const SizedBox(height: 10),
-          _buildWeekdayHeader(context),
-          const SizedBox(height: 2),
-          Expanded(flex: 5, child: _buildMonthGridCard(context)),
-          const SizedBox(height: 10),
-          _buildSelectedDateHeader(context),
-          const SizedBox(height: 6),
-          Expanded(flex: 4, child: _buildSelectedDateList(context)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSplitLayout(BuildContext context) {
-    return Padding(
-      key: const ValueKey('calendar-view-split'),
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
+          _buildCalendarHeader(context),
+          const SizedBox(height: 8),
           Expanded(
-            flex: 3,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _buildMonthHeader(context, isCompact: true),
-                const SizedBox(height: 10),
-                _buildWeekdayHeader(context),
-                const SizedBox(height: 2),
-                Expanded(child: _buildMonthGridCard(context)),
-              ],
-            ),
-          ),
-          VerticalDivider(
-            key: const ValueKey('calendar-split-divider'),
-            width: 14,
-            thickness: 0.8,
-            color: Theme.of(context).colorScheme.outlineVariant,
-          ),
-          Expanded(
-            flex: 2,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SizedBox(height: 8),
-                _buildSelectedDateHeader(context, includeMonth: false),
-                const SizedBox(height: 8),
-                Expanded(child: _buildSelectedDateList(context)),
-              ],
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 260),
+              switchInCurve: Curves.easeInOutCubic,
+              switchOutCurve: Curves.easeInOutCubic,
+              transitionBuilder: (child, animation) => FadeTransition(
+                opacity: animation,
+                child: SlideTransition(
+                  position: Tween<Offset>(
+                    begin: const Offset(0.08, 0),
+                    end: Offset.zero,
+                  ).animate(animation),
+                  child: child,
+                ),
+              ),
+              child: _buildViewContent(
+                context,
+                key: ValueKey('calendar-view-${_activeViewMode.name}'),
+              ),
             ),
           ),
         ],
@@ -357,435 +454,512 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
-  Widget _buildMonthHeader(BuildContext context, {bool isCompact = false}) {
-    final localizations = MaterialLocalizations.of(context);
-    final title = localizations.formatMonthYear(_displayedMonth);
-    final theme = Theme.of(context);
-    final baseTextStyle =
-        (isCompact ? theme.textTheme.titleMedium : theme.textTheme.titleLarge)
-            ?.copyWith(fontWeight: FontWeight.w700);
-    final iconSize = isCompact ? 24.0 : 28.0;
-    final minButtonSize = isCompact ? 40.0 : 46.0;
-
-    return Row(
-      children: [
-        IconButton(
-          key: const ValueKey('calendar-previous-month'),
-          tooltip: 'Previous month',
-          onPressed: () => _changeMonth(-1),
-          icon: Icon(Icons.chevron_left, size: iconSize),
-          style: IconButton.styleFrom(
-            minimumSize: Size(minButtonSize, minButtonSize),
-            tapTargetSize: MaterialTapTargetSize.padded,
-          ),
-        ),
-        Expanded(
-          child: Semantics(
-            header: true,
-            child: TextButton(
-              key: const ValueKey('calendar-select-date'),
-              onPressed: _pickDate,
-              style: TextButton.styleFrom(
-                padding: EdgeInsets.symmetric(
-                  horizontal: isCompact ? 2 : 8,
-                  vertical: 6,
-                ),
-              ),
-              child: SizedBox(
-                height: isCompact ? 26 : 30,
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    title,
-                    maxLines: 1,
-                    textAlign: TextAlign.center,
-                    style: baseTextStyle,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-        IconButton(
-          key: const ValueKey('calendar-next-month'),
-          tooltip: 'Next month',
-          onPressed: () => _changeMonth(1),
-          icon: Icon(Icons.chevron_right, size: iconSize),
-          style: IconButton.styleFrom(
-            minimumSize: Size(minButtonSize, minButtonSize),
-            tapTargetSize: MaterialTapTargetSize.padded,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildWeekdayHeader(BuildContext context) {
-    final localizations = MaterialLocalizations.of(context);
-    final weekdays = localizations.narrowWeekdays;
-    final textStyle = Theme.of(context).textTheme.labelMedium?.copyWith(
-      color: Theme.of(context).colorScheme.onSurfaceVariant,
-      fontWeight: FontWeight.w600,
-    );
-    const mondayFirstIndexes = [1, 2, 3, 4, 5, 6, 0];
-
-    return Row(
-      children: [
-        for (final index in mondayFirstIndexes)
-          Expanded(
-            child: Center(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 6),
-                child: Text(weekdays[index], style: textStyle),
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-
-  Widget _buildMonthGridCard(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: Theme.of(context).colorScheme.outlineVariant,
-          width: 0.6,
-        ),
+  Widget _buildViewContent(BuildContext context, {required Key key}) {
+    return switch (_activeViewMode) {
+      CalendarViewMode.list => _buildListView(context, key),
+      CalendarViewMode.year => _buildYearView(context, key),
+      CalendarViewMode.month => _buildMonthView(context, key),
+      CalendarViewMode.week => _buildTimelineView(
+        context,
+        CalendarViewMode.week,
+        key,
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(4),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final rowCount = _monthGridCellCount() ~/ 7;
-            final cellExtent = (constraints.maxHeight / rowCount)
-                .clamp(44.0, 78.0)
-                .toDouble();
-            return _buildMonthGrid(context, cellExtent);
-          },
-        ),
+      CalendarViewMode.threeDay => _buildTimelineView(
+        context,
+        CalendarViewMode.threeDay,
+        key,
       ),
-    );
-  }
-
-  int _monthGridCellCount() {
-    final firstOfMonth = DateTime(_displayedMonth.year, _displayedMonth.month);
-    final leadingDays = firstOfMonth.weekday - DateTime.monday;
-    final daysInMonth = DateTime(
-      _displayedMonth.year,
-      _displayedMonth.month + 1,
-      0,
-    ).day;
-    return ((leadingDays + daysInMonth + 6) ~/ 7) * 7;
-  }
-
-  Widget _buildMonthGrid(BuildContext context, double cellExtent) {
-    final firstOfMonth = DateTime(_displayedMonth.year, _displayedMonth.month);
-    final leadingDays = firstOfMonth.weekday - DateTime.monday;
-    final firstGridDate = firstOfMonth.subtract(Duration(days: leadingDays));
-
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: _monthGridCellCount(),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 7,
-        mainAxisExtent: cellExtent,
+      CalendarViewMode.day => _buildTimelineView(
+        context,
+        CalendarViewMode.day,
+        key,
       ),
-      itemBuilder: (context, index) =>
-          _buildDateCell(context, firstGridDate.add(Duration(days: index))),
-    );
-  }
-
-  Widget _buildDateCell(BuildContext context, DateTime date) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final selected = _sameDay(date, _selectedDate);
-    final today = _isToday(date);
-    final inDisplayedMonth = date.month == _displayedMonth.month;
-    final reminders = _occurrencesFor(date);
-    final dayTextColor = selected
-        ? colorScheme.onPrimary
-        : inDisplayedMonth
-        ? colorScheme.onSurface
-        : colorScheme.onSurfaceVariant.withValues(alpha: 0.58);
-    final dateLabel = MaterialLocalizations.of(context).formatFullDate(date);
-    final semanticLabel = reminders.isEmpty
-        ? dateLabel
-        : '$dateLabel, ${reminders.length} reminder'
-              '${reminders.length == 1 ? '' : 's'}';
-
-    return Semantics(
-      key: ValueKey('calendar-day-${date.year}-${date.month}-${date.day}'),
-      button: true,
-      selected: selected,
-      label: semanticLabel,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(10),
-          onTap: () => _selectDate(date),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final chipHeight = (constraints.maxHeight - 10)
-                  .clamp(20.0, 32.0)
-                  .toDouble();
-              final chipWidth = (constraints.maxWidth - 10)
-                  .clamp(20.0, 34.0)
-                  .toDouble();
-              final dotSize = constraints.maxHeight < 40 ? 3.0 : 4.0;
-
-              return DecoratedBox(
-                decoration: BoxDecoration(
-                  color: today
-                      ? (selected
-                            ? colorScheme.primaryContainer
-                            : colorScheme.primaryContainer.withValues(
-                                alpha: 0.55,
-                              ))
-                      : null,
-                  border: Border.all(
-                    color: today
-                        ? colorScheme.primary.withValues(alpha: 0.55)
-                        : colorScheme.outlineVariant.withValues(alpha: 0.65),
-                    width: today ? 0.9 : 0.35,
-                  ),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 2,
-                    vertical: 3,
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        width: chipWidth,
-                        height: chipHeight,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: selected ? colorScheme.primary : null,
-                          borderRadius: BorderRadius.circular(10),
-                          border: today && !selected
-                              ? Border.all(
-                                  color: colorScheme.primary,
-                                  width: 1.2,
-                                )
-                              : null,
-                        ),
-                        child: Text(
-                          MaterialLocalizations.of(context)
-                              .formatDecimal(date.day),
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: today && !selected
-                                ? colorScheme.primary
-                                : dayTextColor,
-                            fontWeight: selected || today
-                                ? FontWeight.w700
-                                : null,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      SizedBox(
-                        height: dotSize,
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            for (
-                              var index = 0;
-                              index < reminders.length.clamp(0, 3);
-                              index++
-                            )
-                              Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 1,
-                                ),
-                                child: Container(
-                                  width: dotSize,
-                                  height: dotSize,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: selected
-                                        ? colorScheme.onPrimary
-                                        : _reminderDotColor(colorScheme, index),
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-      ),
-    );
-  }
-
-  Color _reminderDotColor(ColorScheme colorScheme, int index) {
-    return switch (index) {
-      0 => colorScheme.primary,
-      1 => colorScheme.secondary,
-      _ => colorScheme.tertiary,
     };
   }
 
-  Widget _buildSelectedDateHeader(
-    BuildContext context, {
-    bool includeMonth = true,
-  }) {
-    final localizations = MaterialLocalizations.of(context);
-    final fullDate = localizations.formatFullDate(_selectedDate);
-    final firstCommaIndex = fullDate.indexOf(',');
-    final weekday = firstCommaIndex == -1
-        ? fullDate
-        : fullDate.substring(0, firstCommaIndex);
-    final compactDate =
-        '$weekday, '
-        '${localizations.formatDecimal(_selectedDate.day)} '
-        '${localizations.formatDecimal(_selectedDate.year)}';
-
-    return Semantics(
-      header: true,
-      child: Text(
-        key: const ValueKey('calendar-selected-date-label'),
-        includeMonth ? fullDate : compactDate,
-        maxLines: 3,
-        overflow: TextOverflow.ellipsis,
-        style: Theme.of(context).textTheme.titleMedium
-            ?.copyWith(fontWeight: FontWeight.w700),
-      ),
+  Widget _buildListView(BuildContext context, Key key) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final displayedMonth = DateTime(
+          _displayedMonth.year,
+          _displayedMonth.month,
+        );
+        final selectedDate = _selectedDate;
+        final occurrencesByDate = _occurrencesByDate;
+        final monthKey = ValueKey(
+          'calendar-list-month-${displayedMonth.year}-'
+          '${displayedMonth.month}',
+        );
+        return Column(
+          key: key,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(
+              height: constraints.maxHeight * 0.55,
+              child: Column(
+                children: [
+                  _buildWeekdayHeader(context),
+                  Expanded(
+                    child: ClipRect(
+                      child: Listener(
+                        onPointerDown: (event) =>
+                            _monthPointerStart = event.position,
+                        onPointerUp: (event) {
+                          final start = _monthPointerStart;
+                          _monthPointerStart = null;
+                          if (start == null) {
+                            return;
+                          }
+                          final delta = event.position - start;
+                          if (delta.dx.abs() > 48 &&
+                              delta.dx.abs() > delta.dy.abs()) {
+                            _changeMonth(delta.dx < 0 ? 1 : -1);
+                          }
+                        },
+                        onPointerCancel: (_) => _monthPointerStart = null,
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 300),
+                          switchInCurve: Curves.easeOutCubic,
+                          switchOutCurve: Curves.easeInCubic,
+                          transitionBuilder: _buildMonthTransition,
+                          child: _buildMonthGridCard(
+                            context,
+                            key: monthKey,
+                            monthOnly: true,
+                            monthContext: displayedMonth,
+                            selectedDateContext: selectedDate,
+                            occurrencesByDateContext: occurrencesByDate,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Semantics(
+              button: true,
+              label: 'Expand Countdown reminders',
+              hint: 'Open the scrollable Countdown panel',
+              child: InkWell(
+                key: const ValueKey('calendar-countdown-toggle'),
+                onTap: _showCountdownSheet,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    children: [
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          'Countdown',
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                      ),
+                      Icon(
+                        Icons.expand_less,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: 4),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            Expanded(
+              child: _buildUpcomingList(
+                context,
+                const ValueKey('calendar-list-content'),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
-  Widget _buildSelectedDateList(BuildContext context) {
-    final occurrences = _selectedDateOccurrences();
-    if (occurrences.isEmpty) {
-      return _buildEmptyAgenda(context);
-    }
-
-    return ListView.separated(
-      key: const ValueKey('calendar-reminder-list'),
-      itemCount: occurrences.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 8),
-      itemBuilder: (context, index) =>
-          _buildReminderListTile(context, occurrences[index]),
-    );
-  }
-
-  Widget _buildEmptyAgenda(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      key: const ValueKey('calendar-empty-day'),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: theme.colorScheme.outlineVariant),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      child: Row(
-        children: [
-          Icon(
-            Icons.event_available_outlined,
-            color: theme.colorScheme.primary,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              'No Reminders today',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
+  Widget _buildMonthView(BuildContext context, Key key) {
+    return Column(
+      key: key,
+      children: [
+        _buildWeekdayHeader(context),
+        Expanded(
+          child: Listener(
+            onPointerDown: (event) => _monthPointerStart = event.position,
+            onPointerUp: (event) {
+              final start = _monthPointerStart;
+              _monthPointerStart = null;
+              if (start == null) {
+                return;
+              }
+              final delta = event.position - start;
+              if (delta.dx.abs() > 48 && delta.dx.abs() > delta.dy.abs()) {
+                _changeMonth(delta.dx < 0 ? 1 : -1);
+              }
+            },
+            onPointerCancel: (_) => _monthPointerStart = null,
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              transitionBuilder: _buildMonthTransition,
+              child: _buildMonthGridCard(
+                context,
+                monthOnly: true,
+                key: ValueKey(
+                  'calendar-month-${_displayedMonth.year}-'
+                  '${_displayedMonth.month}',
+                ),
               ),
             ),
           ),
-        ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMonthTransition(Widget child, Animation<double> animation) {
+    return ClipRect(
+      child: AnimatedBuilder(
+        animation: animation,
+        child: child,
+        builder: (context, child) {
+          final direction = animation.status == AnimationStatus.reverse
+              ? -_monthTransitionDirection
+              : _monthTransitionDirection;
+          final position = AlwaysStoppedAnimation(
+            Offset(direction * (1 - animation.value), 0),
+          );
+          return SlideTransition(position: position, child: child);
+        },
       ),
     );
   }
 
-  Widget _buildReminderListTile(
-    BuildContext context,
-    CalendarOccurrence occurrence,
-  ) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+  Widget _buildYearView(BuildContext context, Key key) {
+    final year = _displayedMonth.year;
+    final direction = _monthTransitionDirection;
+    return AnimatedSwitcher(
+      key: key,
+      duration: const Duration(milliseconds: 280),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      transitionBuilder: (child, animation) {
+        final incoming = child.key == ValueKey('calendar-year-$year');
+        final offset = Tween<Offset>(
+          begin: Offset(0, incoming ? 0.08 * direction : -0.08 * direction),
+          end: Offset.zero,
+        ).animate(animation);
+        return FadeTransition(
+          opacity: animation,
+          child: SlideTransition(position: offset, child: child),
+        );
+      },
+      child: _buildYearMonths(context, year),
+    );
+  }
 
-    return Material(
-      key: ValueKey('calendar-reminder-${occurrence.reminder.id}'),
-      color: colorScheme.surfaceContainerLow,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(10),
-        side: BorderSide(color: colorScheme.outlineVariant),
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(10),
-        onTap: () => _openEditReminder(occurrence.reminder),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(10, 8, 6, 8),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(
-                width: 72,
+  Widget _buildYearMonths(BuildContext context, int year) {
+    return LayoutBuilder(
+      key: ValueKey('calendar-year-$year'),
+      builder: (context, constraints) {
+        const horizontalPadding = 2.0;
+        const verticalPadding = 8.0;
+        const bottomPadding = 64.0;
+        const spacing = 8.0;
+        final monthWidth =
+            (constraints.maxWidth - horizontalPadding * 2 - spacing * 2) / 3;
+        final monthHeight =
+            (constraints.maxHeight -
+                verticalPadding -
+                bottomPadding -
+                spacing * 3) /
+            4;
+        // Content fits the viewport; bouncing physics gives a spring-back
+        // overscroll instead of changing the year.
+        return SingleChildScrollView(
+          physics: const BouncingScrollPhysics(
+            parent: AlwaysScrollableScrollPhysics(),
+          ),
+          padding: const EdgeInsets.fromLTRB(
+            horizontalPadding,
+            verticalPadding,
+            horizontalPadding,
+            bottomPadding,
+          ),
+          child: RepaintBoundary(
+            child: Column(
+              children: [
+                for (var row = 0; row < 4; row++) ...[
+                  if (row > 0) const SizedBox(height: spacing),
+                  SizedBox(
+                    height: monthHeight,
+                    child: Row(
+                      children: [
+                        for (var col = 0; col < 3; col++) ...[
+                          if (col > 0) const SizedBox(width: spacing),
+                          SizedBox(
+                            width: monthWidth,
+                            child: RepaintBoundary(
+                              child: _buildMiniMonth(
+                                context,
+                                DateTime(year, row * 3 + col + 1),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildMiniMonth(BuildContext context, DateTime month) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final firstDay = DateTime(month.year, month.month);
+    final leadingDays = firstDay.weekday % DateTime.daysPerWeek;
+    final dayCount = DateTime(month.year, month.month + 1, 0).day;
+    final rows = (leadingDays + dayCount + 6) ~/ 7;
+    final localizations = MaterialLocalizations.of(context);
+    final dayStyle = (theme.textTheme.labelSmall ?? const TextStyle()).copyWith(
+      fontSize: 7,
+      height: 1,
+    );
+    return Column(
+      children: [
+        SizedBox(
+          height: 22,
+          child: Semantics(
+            button: true,
+            label: 'Open ${_calendarMonthNames[month.month - 1]} ${month.year}',
+            child: InkWell(
+              key: ValueKey('calendar-year-month-${month.year}-${month.month}'),
+              borderRadius: BorderRadius.circular(4),
+              onTap: () => _openMonthFromYear(month),
+              child: Align(
+                alignment: Alignment.centerLeft,
                 child: Text(
-                  TimeOfDay.fromDateTime(occurrence.dateTime).format(context),
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    color: colorScheme.primary,
+                  _calendarShortMonthNames[month.month - 1],
+                  style: theme.textTheme.labelMedium?.copyWith(
                     fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
-              Container(
-                width: 3,
-                height: 40,
-                margin: const EdgeInsets.only(right: 10, top: 2),
-                decoration: BoxDecoration(
-                  color: colorScheme.primary,
-                  borderRadius: BorderRadius.circular(999),
-                ),
-              ),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      occurrence.reminder.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodyLarge?.copyWith(
-                        fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        SizedBox(
+          height: 14,
+          child: Row(
+            children: [
+              for (final weekday in MaterialLocalizations.of(
+                context,
+              ).narrowWeekdays)
+                Expanded(
+                  child: Center(
+                    child: Text(
+                      weekday,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        fontSize: 9,
+                        color: colors.onSurfaceVariant,
                       ),
                     ),
-                    if (occurrence.reminder.description
-                        case final String description
-                        when description.trim().isNotEmpty)
-                      Text(
-                        description,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: Column(
+            children: [
+              for (var row = 0; row < rows; row++)
+                Expanded(
+                  child: Row(
+                    children: [
+                      for (var col = 0; col < 7; col++)
+                        Expanded(
+                          child: _buildYearDay(
+                            month,
+                            row * 7 + col - leadingDays + 1,
+                            dayCount,
+                            dayStyle,
+                            colors,
+                            localizations,
+                          ),
                         ),
-                      ),
-                  ],
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildYearDay(
+    DateTime month,
+    int day,
+    int dayCount,
+    TextStyle style,
+    ColorScheme colors,
+    MaterialLocalizations localizations,
+  ) {
+    if (day < 1 || day > dayCount) {
+      return const SizedBox.shrink();
+    }
+    final date = DateTime(month.year, month.month, day);
+    final selected = _sameDay(date, _selectedDate);
+    final today = _isToday(date);
+    final eventCount = _occurrencesFor(date).length;
+    final hasEvents = eventCount > 0;
+    return Semantics(
+      key: ValueKey('calendar-day-${date.year}-${date.month}-${date.day}'),
+      button: true,
+      selected: selected,
+      label: [
+        localizations.formatFullDate(date),
+        if (today) 'today',
+        if (selected) 'selected',
+        if (hasEvents) '$eventCount reminders',
+      ].join(', '),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => _selectDate(date),
+        child: Center(
+          child: DecoratedBox(
+            key: ValueKey(
+              'calendar-day-marker-${date.year}-${date.month}-${date.day}',
+            ),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: selected ? colors.primary : null,
+              border: today && !selected
+                  ? Border.all(color: colors.primary.withValues(alpha: 0.7))
+                  : null,
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(1.5),
+              child: Text(
+                key: ValueKey(
+                  'calendar-day-number-${date.year}-${date.month}-${date.day}',
+                ),
+                '$day',
+                style: style.copyWith(
+                  color: selected
+                      ? colors.onPrimary
+                      : hasEvents
+                      ? colors.primary
+                      : colors.onSurface,
+                  fontWeight: selected || today || hasEvents
+                      ? FontWeight.w700
+                      : FontWeight.w500,
                 ),
               ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openMonthFromYear(DateTime month) {
+    final lastDay = DateTime(month.year, month.month + 1, 0).day;
+    setState(() {
+      _displayedMonth = DateTime(month.year, month.month);
+      _selectedDate = DateTime(
+        month.year,
+        month.month,
+        _selectedDate.day.clamp(1, lastDay),
+      );
+      _refreshVisibleOccurrences();
+    });
+    _selectViewMode(CalendarViewMode.month);
+  }
+
+  Widget _buildUpcomingList(BuildContext context, Key key) {
+    final localizations = MaterialLocalizations.of(context);
+    if (_upcomingOccurrences.isEmpty) {
+      return Center(
+        key: key,
+        child: Text(
+          'No upcoming reminders',
+          style: Theme.of(context).textTheme.bodyMedium
+              ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+        ),
+      );
+    }
+    return ListView.builder(
+      key: key,
+      padding: const EdgeInsets.fromLTRB(2, 0, 2, 100),
+      itemCount: _upcomingOccurrences.length,
+      itemBuilder: (context, index) {
+        final occurrence = _upcomingOccurrences[index];
+        final reminder = occurrence.reminder;
+        final color = CalendarColors.forReminder(reminder.id)
+            .foreground(Theme.of(context).brightness == Brightness.dark);
+        return ListTile(
+          key: ValueKey('calendar-list-${reminder.id}-${occurrence.dateTime}'),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+          leading: SizedBox(
+            width: 48,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  localizations.formatShortDate(occurrence.dateTime),
+                  maxLines: 1,
+                  style: Theme.of(context).textTheme.labelSmall,
+                ),
+                Text(
+                  MaterialLocalizations.of(context).formatTimeOfDay(
+                    TimeOfDay.fromDateTime(occurrence.dateTime),
+                    alwaysUse24HourFormat: true,
+                  ),
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          title: Text(
+            reminder.title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          subtitle:
+              reminder.description == null ||
+                  reminder.description!.trim().isEmpty
+              ? null
+              : Text(
+                  reminder.description!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                reminder.recurrenceRule.type == RecurrenceType.none
+                    ? Icons.event_outlined
+                    : Icons.repeat,
+                color: color,
+              ),
               PopupMenuButton<String>(
-                tooltip: 'More actions for ${occurrence.reminder.title}',
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                iconSize: 18,
+                tooltip: 'More actions for ${reminder.title}',
                 onSelected: (action) {
                   if (action == 'edit') {
-                    _openEditReminder(occurrence.reminder);
+                    _openEditReminder(reminder);
                   } else if (action == 'delete') {
-                    _deleteReminder(occurrence.reminder);
+                    _deleteReminder(reminder);
                   }
                 },
                 itemBuilder: (context) => const [
@@ -809,6 +983,1080 @@ class _CalendarScreenState extends State<CalendarScreen> {
               ),
             ],
           ),
+          onTap: () => _openEditReminder(reminder),
+        );
+      },
+    );
+  }
+
+  Widget _buildTimelineView(
+    BuildContext context,
+    CalendarViewMode mode,
+    Key key,
+  ) {
+    final dates = switch (mode) {
+      CalendarViewMode.week => List.generate(
+        7,
+        (index) => _weekStart(_selectedDate).add(Duration(days: index)),
+      ),
+      CalendarViewMode.threeDay => List.generate(
+        3,
+        (index) => _selectedDate.add(Duration(days: index - 1)),
+      ),
+      _ => [_selectedDate],
+    };
+    return Column(
+      key: key,
+      children: [
+        if (mode == CalendarViewMode.day)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Text(
+              MaterialLocalizations.of(context).formatFullDate(_selectedDate),
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+          )
+        else
+          _buildTimelineDateSelector(
+            context,
+            dates,
+            mode == CalendarViewMode.week
+                ? (date) {
+                    _selectDate(date);
+                    _selectViewMode(CalendarViewMode.day);
+                  }
+                : _selectDate,
+          ),
+        Expanded(
+          child: mode == CalendarViewMode.day
+              ? ListView.builder(
+                  key: ValueKey('calendar-timeline-${mode.name}'),
+                  padding: const EdgeInsets.only(bottom: 100),
+                  itemCount: 24,
+                  itemBuilder: (context, hour) =>
+                      _buildTimelineHour(context, hour),
+                )
+              : _buildMultiDayTimeline(context, mode, dates),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTimelineDateSelector(
+    BuildContext context,
+    List<DateTime> dates,
+    ValueChanged<DateTime> onDateSelected,
+  ) {
+    final theme = Theme.of(context);
+    final localizations = MaterialLocalizations.of(context);
+    return SizedBox(
+      height: 64,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: SizedBox(
+          width: 48 + dates.length * 112,
+          child: Row(
+            children: [
+              const SizedBox(width: 48),
+              for (final date in dates)
+                SizedBox(
+                  width: 112,
+                  child: Semantics(
+                    key: ValueKey(
+                      'calendar-timeline-date-${date.year}-${date.month}-${date.day}',
+                    ),
+                    button: true,
+                    selected: _sameDay(date, _selectedDate),
+                    label: localizations.formatFullDate(date),
+                    child: InkWell(
+                      onTap: () => onDateSelected(date),
+                      borderRadius: BorderRadius.circular(10),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 180),
+                        margin: const EdgeInsets.symmetric(horizontal: 2),
+                        decoration: BoxDecoration(
+                          color: _sameDay(date, _selectedDate)
+                              ? theme.colorScheme.primaryContainer
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              localizations.narrowWeekdays[date.weekday % 7],
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: _sameDay(date, _selectedDate)
+                                    ? theme.colorScheme.primary
+                                    : theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                            Text(
+                              '${date.day}',
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                color: _sameDay(date, _selectedDate)
+                                    ? theme.colorScheme.primary
+                                    : null,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTimelineHour(BuildContext context, int hour) {
+    final occurrences = _hourOccurrences(_selectedDate, hour);
+    final isCurrentHour =
+        _isToday(_selectedDate) && widget.clock().hour == hour;
+    return _buildTimelineHourRow(context, hour, [
+      _buildTimelineDateColumn(
+        context,
+        _selectedDate,
+        occurrences,
+        isCurrentHour,
+        0,
+      ),
+    ], occurrences.length);
+  }
+
+  Widget _buildMultiDayTimeline(
+    BuildContext context,
+    CalendarViewMode mode,
+    List<DateTime> dates,
+  ) {
+    return SingleChildScrollView(
+      key: ValueKey('calendar-timeline-${mode.name}'),
+      scrollDirection: Axis.horizontal,
+      child: SizedBox(
+        width: 48 + dates.length * 112,
+        child: ListView.builder(
+          padding: const EdgeInsets.only(bottom: 100),
+          itemCount: 24,
+          itemBuilder: (context, hour) {
+            final eventLists = [
+              for (final date in dates) _hourOccurrences(date, hour),
+            ];
+            final columns = [
+              for (var index = 0; index < dates.length; index++)
+                _buildTimelineDateColumn(
+                  context,
+                  dates[index],
+                  eventLists[index],
+                  _isToday(dates[index]) && widget.clock().hour == hour,
+                  index,
+                ),
+            ];
+            var maximumEventCount = 0;
+            for (final events in eventLists) {
+              if (events.length > maximumEventCount) {
+                maximumEventCount = events.length;
+              }
+            }
+            return _buildTimelineHourRow(
+              context,
+              hour,
+              columns,
+              maximumEventCount,
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  List<CalendarOccurrence> _hourOccurrences(DateTime date, int hour) =>
+      _occurrencesFor(date)
+          .where((occurrence) => occurrence.dateTime.hour == hour)
+          .toList();
+
+  Widget _buildTimelineHourRow(
+    BuildContext context,
+    int hour,
+    List<Widget> columns,
+    int maximumEventCount,
+  ) {
+    final theme = Theme.of(context);
+    final rowHeight = maximumEventCount < 3
+        ? 64.0
+        : maximumEventCount * 24.0 + 10;
+    return SizedBox(
+      height: rowHeight,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(minHeight: rowHeight),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 48,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 3),
+                child: Text(
+                  '${hour.toString().padLeft(2, '0')}:00',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ),
+            ),
+            Expanded(child: Row(children: columns)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTimelineDateColumn(
+    BuildContext context,
+    DateTime date,
+    List<CalendarOccurrence> occurrences,
+    bool isCurrentHour,
+    int index,
+  ) {
+    final theme = Theme.of(context);
+    final borderColor = theme.colorScheme.outlineVariant.withValues(
+      alpha: 0.55,
+    );
+    return Expanded(
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 58),
+        decoration: BoxDecoration(
+          border: Border(
+            top: BorderSide(color: borderColor, width: 0.7),
+            left: BorderSide(color: borderColor, width: index == 0 ? 0 : 0.5),
+          ),
+        ),
+        child: Stack(
+          children: [
+            if (isCurrentHour)
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: Container(height: 2, color: theme.colorScheme.primary),
+              ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(2, 3, 0, 3),
+              child: Column(
+                children: [
+                  for (final occurrence in occurrences)
+                    _buildEventRow(context, occurrence, dense: true),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCalendarHeader(BuildContext context) {
+    final localizations = MaterialLocalizations.of(context);
+    return SizedBox(
+      height: 48,
+      child: Row(
+        children: [
+          if (_activeViewMode == CalendarViewMode.week ||
+              _activeViewMode == CalendarViewMode.day)
+            IconButton(
+              key: const ValueKey('calendar-hierarchy-back'),
+              tooltip: _activeViewMode == CalendarViewMode.day
+                  ? 'Back to Week'
+                  : 'Back to Month',
+              visualDensity: VisualDensity.compact,
+              onPressed: () => _selectViewMode(
+                _activeViewMode == CalendarViewMode.day
+                    ? CalendarViewMode.week
+                    : CalendarViewMode.month,
+              ),
+              icon: const Icon(Icons.chevron_left),
+            ),
+          Expanded(
+            child: Semantics(
+              button: true,
+              label: _activeViewMode == CalendarViewMode.year
+                  ? 'Choose year ${_displayedMonth.year}'
+                  : 'Choose ${localizations.formatMonthYear(_displayedMonth)}',
+              child: InkWell(
+                key: const ValueKey('calendar-select-date'),
+                borderRadius: BorderRadius.circular(8),
+                onTap: _pickDate,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 180),
+                    child: Text.rich(
+                      TextSpan(
+                        children: _activeViewMode == CalendarViewMode.year
+                            ? [TextSpan(text: '${_displayedMonth.year}')]
+                            : [
+                                TextSpan(
+                                  text:
+                                      _calendarMonthNames[_displayedMonth
+                                              .month -
+                                          1],
+                                ),
+                                TextSpan(
+                                  text: ' ${_displayedMonth.year}',
+                                  style: Theme.of(context).textTheme.labelMedium
+                                      ?.copyWith(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurfaceVariant,
+                                      ),
+                                ),
+                              ],
+                      ),
+                      key: ValueKey(
+                        'calendar-month-title-${_displayedMonth.year}-'
+                        '${_displayedMonth.month}',
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleLarge
+                          ?.copyWith(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          CalendarViewSelector(
+            selectedMode: _activeViewMode,
+            onSelected: _selectViewMode,
+          ),
+          _buildMoreMenu(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMoreMenu() {
+    if (widget.appMenu case final appMenu?) {
+      return appMenu;
+    }
+    return PopupMenuButton<String>(
+      tooltip: 'More calendar views',
+      icon: const Icon(Icons.more_vert),
+      onSelected: (value) {
+        if (value == 'today') {
+          _returnToToday();
+        } else if (value == 'countdown') {
+          _showCountdownSheet();
+        } else if (value == 'previous-month') {
+          _changePeriod(-1);
+        } else if (value == 'next-month') {
+          _changePeriod(1);
+        }
+      },
+      itemBuilder: (context) {
+        final period = _activeViewMode == CalendarViewMode.year
+            ? 'year'
+            : 'month';
+        return [
+          const PopupMenuItem(
+            value: 'countdown',
+            child: ListTile(
+              leading: Icon(Icons.hourglass_bottom),
+              title: Text('Countdown'),
+              contentPadding: EdgeInsets.zero,
+            ),
+          ),
+          const PopupMenuItem(
+            value: 'today',
+            child: ListTile(
+              leading: Icon(Icons.today_outlined),
+              title: Text('Go to Today'),
+              contentPadding: EdgeInsets.zero,
+            ),
+          ),
+          PopupMenuItem(
+            value: 'previous-month',
+            child: ListTile(
+              leading: const Icon(Icons.chevron_left),
+              title: Text('Previous $period'),
+              contentPadding: EdgeInsets.zero,
+            ),
+          ),
+          PopupMenuItem(
+            value: 'next-month',
+            child: ListTile(
+              leading: const Icon(Icons.chevron_right),
+              title: Text('Next $period'),
+              contentPadding: EdgeInsets.zero,
+            ),
+          ),
+        ];
+      },
+    );
+  }
+
+  Widget _buildWeekdayHeader(BuildContext context, {bool compact = false}) {
+    final localizations = MaterialLocalizations.of(context);
+    const sundayFirstIndexes = [0, 1, 2, 3, 4, 5, 6];
+    final style = Theme.of(context).textTheme.labelSmall?.copyWith(
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
+      fontWeight: FontWeight.w700,
+    );
+    return SizedBox(
+      height: compact ? 18 : 28,
+      child: Row(
+        children: [
+          for (var index = 0; index < sundayFirstIndexes.length; index++)
+            Expanded(
+              child: Center(
+                child: Text(
+                  localizations.narrowWeekdays[sundayFirstIndexes[index]],
+                  style: style?.copyWith(
+                    color: index == 0 || index == 6
+                        ? Theme.of(context).colorScheme.tertiary
+                        : style.color,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMonthGridCard(
+    BuildContext context, {
+    Key? key,
+    bool monthOnly = false,
+    bool compact = false,
+    bool twoWeekPreview = false,
+    DateTime? monthContext,
+    DateTime? selectedDateContext,
+    Map<DateTime, List<CalendarOccurrence>>? occurrencesByDateContext,
+  }) {
+    return LayoutBuilder(
+      key: key ?? ValueKey('calendar-month-grid-$monthOnly-$twoWeekPreview'),
+      builder: (context, constraints) {
+        final cellCount = twoWeekPreview ? 14 : _monthGridCellCount();
+        final rowCount = cellCount ~/ 7;
+        final cellExtent = constraints.maxHeight / rowCount;
+        final firstGridDate = twoWeekPreview
+            ? _weekStart(_selectedDate).subtract(const Duration(days: 7))
+            : _monthGridStartDate(monthContext ?? _displayedMonth);
+        return GridView.builder(
+          key: ValueKey(
+            twoWeekPreview ? 'calendar-week-preview' : 'calendar-month-grid',
+          ),
+          padding: EdgeInsets.zero,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: cellCount,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 7,
+            mainAxisExtent: cellExtent,
+          ),
+          itemBuilder: (context, index) {
+            final date = firstGridDate.add(Duration(days: index));
+            return _buildDateCell(
+              context,
+              date,
+              monthOnly: monthOnly,
+              compact: compact,
+              monthContext: monthContext,
+              selectedDateContext: selectedDateContext,
+              occurrencesByDateContext: occurrencesByDateContext,
+            );
+          },
+        );
+      },
+    );
+  }
+
+  int _monthGridCellCount() {
+    return 42;
+  }
+
+  DateTime _monthGridStartDate(DateTime month) {
+    final firstOfMonth = DateTime(month.year, month.month);
+    return firstOfMonth.subtract(
+      Duration(days: firstOfMonth.weekday % DateTime.daysPerWeek),
+    );
+  }
+
+  void _showCountdownSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => SizedBox(
+        height: MediaQuery.sizeOf(context).height * 0.7,
+        child: _buildCountdownSheet(),
+      ),
+    );
+  }
+
+  Widget _buildCountdownSheet() {
+    return DraggableScrollableSheet(
+      key: const ValueKey('calendar-countdown-sheet'),
+      initialChildSize: 0.14,
+      minChildSize: 0.1,
+      maxChildSize: 0.7,
+      snap: true,
+      snapSizes: const [0.14, 0.42],
+      builder: (context, scrollController) {
+        final theme = Theme.of(context);
+        final localizations = MaterialLocalizations.of(context);
+        return Material(
+          color: theme.colorScheme.surfaceContainerLow,
+          elevation: 3,
+          shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: ListView(
+            key: const ValueKey('calendar-countdown-content'),
+            controller: scrollController,
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+            children: [
+              Center(
+                child: Semantics(
+                  container: true,
+                  label: 'Countdown panel drag handle',
+                  child: Container(
+                    width: 34,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.onSurfaceVariant.withValues(
+                        alpha: 0.4,
+                      ),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Countdown',
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              if (_upcomingOccurrences.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  child: Text(
+                    'No upcoming reminders',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                )
+              else
+                for (final occurrence in _upcomingOccurrences.take(12))
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(
+                      Icons.event_outlined,
+                      color: theme.colorScheme.primary,
+                    ),
+                    title: Text(
+                      occurrence.reminder.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: Text(
+                      '${localizations.formatMediumDate(occurrence.dateTime)} · '
+                      '${TimeOfDay.fromDateTime(occurrence.dateTime).format(context)}',
+                    ),
+                    onTap: () => _openEditReminder(occurrence.reminder),
+                  ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDateCell(
+    BuildContext context,
+    DateTime date, {
+    required bool monthOnly,
+    bool compact = false,
+    DateTime? monthContext,
+    DateTime? selectedDateContext,
+    Map<DateTime, List<CalendarOccurrence>>? occurrencesByDateContext,
+  }) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final occurrences = _occurrencesFor(date, occurrencesByDateContext);
+    final selected = _sameDay(date, selectedDateContext ?? _selectedDate);
+    final today = _isToday(date);
+    final displayedMonth = monthContext ?? _displayedMonth;
+    final inDisplayedMonth =
+        date.month == displayedMonth.month && date.year == displayedMonth.year;
+    final weekend =
+        date.weekday == DateTime.saturday || date.weekday == DateTime.sunday;
+    final dateColor = !inDisplayedMonth
+        ? colors.onSurfaceVariant.withValues(alpha: 0.45)
+        : selected
+        ? colors.onPrimary
+        : today
+        ? colors.onSurface
+        : weekend
+        ? colors.tertiary
+        : colors.onSurface;
+    final eventCount = occurrences.length;
+    final fullDate = MaterialLocalizations.of(context).formatFullDate(date);
+
+    return Semantics(
+      key: ValueKey('calendar-day-${date.year}-${date.month}-${date.day}'),
+      button: true,
+      selected: selected,
+      hint: monthOnly ? 'Double tap to open this week' : null,
+      label: [
+        fullDate,
+        if (today) 'today',
+        if (selected) 'selected',
+        if (eventCount > 0) '$eventCount reminders',
+      ].join(', '),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(28),
+        onTap: () {
+          _selectDate(date);
+        },
+        onDoubleTap: () {
+          if (monthOnly) {
+            _selectDate(date);
+            _selectViewMode(CalendarViewMode.week);
+          }
+        },
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            compact ? 1 : 2,
+            compact ? 0 : 2,
+            compact ? 1 : 2,
+            compact ? 0 : 1,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              AnimatedContainer(
+                key: ValueKey(
+                  'calendar-day-marker-${date.year}-${date.month}-${date.day}',
+                ),
+                duration: const Duration(milliseconds: 210),
+                curve: Curves.easeOutCubic,
+                width: compact ? 11 : 32,
+                height: compact ? 11 : 32,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: selected ? colors.primary : Colors.transparent,
+                  border: today && !selected
+                      ? Border.all(
+                          color: colors.primary.withValues(alpha: 0.7),
+                          width: 1,
+                        )
+                      : null,
+                ),
+                child: AnimatedDefaultTextStyle(
+                  duration: const Duration(milliseconds: 210),
+                  curve: Curves.easeOutCubic,
+                  style:
+                      (compact
+                              ? theme.textTheme.labelSmall
+                              : theme.textTheme.labelMedium ??
+                                    theme.textTheme.bodyMedium ??
+                                    const TextStyle())!
+                          .copyWith(
+                            color: selected ? colors.onPrimary : dateColor,
+                            fontWeight: selected || today
+                                ? FontWeight.w700
+                                : FontWeight.w500,
+                            fontSize: compact ? 7 : null,
+                            height: compact ? 1 : null,
+                          ),
+                  child: Text(
+                    key: ValueKey(
+                      'calendar-day-number-${date.year}-${date.month}-${date.day}',
+                    ),
+                    MaterialLocalizations.of(context).formatDecimal(date.day),
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    softWrap: false,
+                  ),
+                ),
+              ),
+              if (monthOnly)
+                Expanded(
+                  child: _buildMonthCellEvents(context, occurrences, date),
+                )
+              else if (compact)
+                SizedBox(
+                  height: 1,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      for (final occurrence in occurrences.take(3))
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 1),
+                          child: Container(
+                            width: 2,
+                            height: 2,
+                            decoration: BoxDecoration(
+                              color: CalendarColors.forReminder(
+                                occurrence.reminder.id,
+                              ).foreground(theme.brightness == Brightness.dark),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                )
+              else ...[
+                const SizedBox(height: 2),
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 3,
+                  runSpacing: 2,
+                  children: [
+                    for (final occurrence in occurrences.take(4))
+                      Container(
+                        width: 5,
+                        height: 5,
+                        decoration: BoxDecoration(
+                          color: CalendarColors.forReminder(
+                            occurrence.reminder.id,
+                          ).foreground(theme.brightness == Brightness.dark),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMonthCellEvents(
+    BuildContext context,
+    List<CalendarOccurrence> occurrences,
+    DateTime date,
+  ) {
+    final theme = Theme.of(context);
+    final visible = occurrences.take(2).toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final occurrence in visible)
+          Expanded(
+            child: Container(
+              margin: const EdgeInsets.only(top: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              decoration: BoxDecoration(
+                color: CalendarColors.forReminder(occurrence.reminder.id)
+                    .surface(theme.brightness == Brightness.dark),
+                borderRadius: BorderRadius.circular(3),
+              ),
+              alignment: Alignment.centerLeft,
+              child: Text(
+                occurrence.reminder.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  fontSize: 9,
+                  color: CalendarColors.forReminder(occurrence.reminder.id)
+                      .foreground(theme.brightness == Brightness.dark),
+                ),
+              ),
+            ),
+          ),
+        if (occurrences.length > visible.length)
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: InkWell(
+                onTap: () => _openDayDetails(date),
+                child: Text(
+                  '+${occurrences.length - visible.length} more',
+                  maxLines: 1,
+                  overflow: TextOverflow.clip,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  void _openDayDetails(DateTime date) {
+    _selectDate(date);
+    _selectViewMode(CalendarViewMode.day);
+  }
+
+  DateTime _weekStart(DateTime date) =>
+      _dateOnly(date).subtract(Duration(days: date.weekday - DateTime.monday));
+
+  Widget _buildEventRow(
+    BuildContext context,
+    CalendarOccurrence occurrence, {
+    bool dense = false,
+  }) {
+    final theme = Theme.of(context);
+    final dark = theme.brightness == Brightness.dark;
+    final eventColor = CalendarColors.forReminder(occurrence.reminder.id);
+    final recurrence = occurrence.reminder.recurrenceRule.type;
+    final description = occurrence.reminder.description;
+    return Padding(
+      padding: EdgeInsets.only(bottom: dense ? 2 : 5),
+      child: Material(
+        key: ValueKey(
+          'calendar-reminder-${occurrence.reminder.id}-${occurrence.dateTime.day}',
+        ),
+        color: eventColor.surface(dark),
+        borderRadius: BorderRadius.circular(dense ? 4 : 7),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(dense ? 4 : 7),
+          onTap: () => _openEditReminder(occurrence.reminder),
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              dense ? 4 : 7,
+              dense ? 2 : 6,
+              2,
+              dense ? 2 : 6,
+            ),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: dense ? 39 : 63,
+                  child: Text(
+                    dense
+                        ? MaterialLocalizations.of(context).formatTimeOfDay(
+                            TimeOfDay.fromDateTime(occurrence.dateTime),
+                            alwaysUse24HourFormat: true,
+                          )
+                        : TimeOfDay.fromDateTime(occurrence.dateTime)
+                              .format(context),
+                    maxLines: 1,
+                    overflow: TextOverflow.clip,
+                    style:
+                        (dense
+                                ? theme.textTheme.labelSmall
+                                : theme.textTheme.labelSmall)
+                            ?.copyWith(
+                              color: eventColor.foreground(dark),
+                              fontSize: dense ? 9 : null,
+                              fontWeight: FontWeight.w800,
+                            ),
+                  ),
+                ),
+                if (!dense)
+                  Container(
+                    width: 3,
+                    height: 31,
+                    margin: const EdgeInsets.only(right: 8),
+                    decoration: BoxDecoration(
+                      color: eventColor.foreground(dark),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        occurrence.reminder.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style:
+                            (dense
+                                    ? theme.textTheme.labelSmall
+                                    : theme.textTheme.bodyMedium)
+                                ?.copyWith(
+                                  fontSize: dense ? 10 : null,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                      ),
+                      if (!dense &&
+                          description != null &&
+                          description.trim().isNotEmpty)
+                        Text(
+                          description,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                if (recurrence != RecurrenceType.none)
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: dense ? 1 : 3),
+                    child: Icon(
+                      Icons.repeat,
+                      size: dense ? 10 : 15,
+                      color: eventColor.foreground(dark),
+                    ),
+                  ),
+                if (occurrence.reminder.notificationMode ==
+                    ReminderNotificationMode.alarmAndNotification)
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: dense ? 1 : 3),
+                    child: Icon(
+                      Icons.alarm,
+                      size: dense ? 10 : 15,
+                      color: eventColor.foreground(dark),
+                    ),
+                  ),
+                if (!dense)
+                  PopupMenuButton<String>(
+                    tooltip: 'More actions for ${occurrence.reminder.title}',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 34,
+                      minHeight: 34,
+                    ),
+                    iconSize: 17,
+                    onSelected: (action) {
+                      if (action == 'edit') {
+                        _openEditReminder(occurrence.reminder);
+                      } else if (action == 'delete') {
+                        _deleteReminder(occurrence.reminder);
+                      }
+                    },
+                    itemBuilder: (context) => const [
+                      PopupMenuItem<String>(
+                        value: 'edit',
+                        child: ListTile(
+                          leading: Icon(Icons.edit_outlined),
+                          title: Text('Edit'),
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
+                      PopupMenuItem<String>(
+                        value: 'delete',
+                        child: ListTile(
+                          leading: Icon(Icons.delete_outline),
+                          title: Text('Delete'),
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _YearPickerDialog extends StatefulWidget {
+  const _YearPickerDialog({
+    required this.selectedYear,
+    required this.currentYear,
+  });
+
+  final int selectedYear;
+  final int currentYear;
+
+  static const firstYear = 1900;
+  static const lastYear = 2100;
+
+  @override
+  State<_YearPickerDialog> createState() => _YearPickerDialogState();
+}
+
+class _YearPickerDialogState extends State<_YearPickerDialog> {
+  static const _columnCount = 4;
+  static const _rowExtent = 48.0;
+  late final ScrollController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    final selectedIndex = widget.selectedYear - _YearPickerDialog.firstYear;
+    _controller = ScrollController(
+      initialScrollOffset: (selectedIndex ~/ _columnCount) * (_rowExtent + 4),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Dialog(
+      child: SizedBox(
+        width: 340,
+        height: 360,
+        child: GridView.builder(
+          key: const ValueKey('calendar-year-picker'),
+          controller: _controller,
+          padding: const EdgeInsets.all(12),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: _columnCount,
+            mainAxisExtent: _rowExtent,
+            crossAxisSpacing: 4,
+            mainAxisSpacing: 4,
+          ),
+          itemCount:
+              _YearPickerDialog.lastYear - _YearPickerDialog.firstYear + 1,
+          itemBuilder: (context, index) {
+            final year = _YearPickerDialog.firstYear + index;
+            final selected = year == widget.selectedYear;
+            final isCurrent = year == widget.currentYear;
+            return Semantics(
+              key: ValueKey('calendar-year-option-$year'),
+              button: true,
+              selected: selected,
+              label: '$year',
+              child: Material(
+                color: selected ? scheme.primaryContainer : Colors.transparent,
+                borderRadius: BorderRadius.circular(12),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () => Navigator.of(context).pop(year),
+                  child: Center(
+                    child: Text(
+                      '$year',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: selected
+                            ? scheme.onPrimaryContainer
+                            : isCurrent
+                            ? scheme.primary
+                            : scheme.onSurfaceVariant,
+                        fontWeight: selected || isCurrent
+                            ? FontWeight.w700
+                            : FontWeight.w400,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
         ),
       ),
     );
