@@ -131,6 +131,15 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen> {
                         ),
                       ),
                     ],
+                    const SizedBox(height: 14),
+                    Text(
+                      'If unanswered, this alarm snoozes automatically after '
+                      '5 minutes, then rings again in 15 minutes.',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
                     const Spacer(),
                     Row(
                       children: [

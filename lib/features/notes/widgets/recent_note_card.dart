@@ -31,7 +31,7 @@ class RecentNoteCard extends StatelessWidget {
     final colorScheme = theme.colorScheme;
     final cardAccent = noteCardAccentColor(theme, note.note.color);
     final notebookAccent = notebookAccentColor(theme, note.notebookColorValue);
-    final borderRadius = BorderRadius.circular(AppRadius.card);
+    final borderRadius = BorderRadius.circular(AppRadius.compactCard);
 
     return ClipRRect(
       key: ValueKey('recent-note-card-${note.note.id}'),
@@ -46,20 +46,11 @@ class RecentNoteCard extends StatelessWidget {
             borderRadius: borderRadius,
             border: Border.all(
               color: note.note.isPinned
-                  ? colorScheme.primary.withValues(alpha: 0.32)
+                  ? colorScheme.primary.withValues(alpha: 0.42)
                   : note.note.color == NoteCardColor.standard
-                  ? colorScheme.outlineVariant.withValues(alpha: 0.72)
-                  : cardAccent.withValues(alpha: 0.48),
+                  ? colorScheme.outlineVariant.withValues(alpha: 0.5)
+                  : cardAccent.withValues(alpha: 0.38),
             ),
-            boxShadow: [
-              BoxShadow(
-                color: colorScheme.shadow.withValues(
-                  alpha: theme.brightness == Brightness.light ? 0.04 : 0.12,
-                ),
-                blurRadius: 12,
-                offset: const Offset(0, 3),
-              ),
-            ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

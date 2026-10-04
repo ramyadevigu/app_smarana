@@ -369,88 +369,58 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ),
-      bottomNavigationBar: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: colorScheme.surfaceContainerLow,
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(
-              color: colorScheme.outlineVariant.withValues(alpha: 0.75),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: colorScheme.shadow.withValues(
-                  alpha: Theme.of(context).brightness == Brightness.light
-                      ? 0.045
-                      : 0.12,
-                ),
-                blurRadius: 10,
-                offset: const Offset(0, 3),
-              ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(22),
-            child: NavigationBar(
-              selectedIndex: _currentIndex,
-              indicatorColor: colorScheme.primary,
-              onDestinationSelected: (index) {
-                setState(() {
-                  _visitedTabs.add(index);
-                  _currentIndex = index;
-                });
-              },
-              destinations: [
-                NavigationDestination(
-                  key: ValueKey('nav-calendar'),
-                  icon: Icon(Icons.calendar_month_outlined),
-                  selectedIcon: Icon(
-                    Icons.calendar_month,
-                    color: colorScheme.onPrimary,
-                  ),
-                  label: 'Calendar',
-                ),
-                NavigationDestination(
-                  key: ValueKey('nav-notes'),
-                  icon: Icon(Icons.sticky_note_2_outlined),
-                  selectedIcon: Icon(
-                    Icons.sticky_note_2,
-                    color: colorScheme.onPrimary,
-                  ),
-                  label: 'Notes',
-                ),
-                NavigationDestination(
-                  key: ValueKey('nav-alarms'),
-                  icon: Icon(Icons.notifications_none),
-                  selectedIcon: Icon(
-                    Icons.notifications_active,
-                    color: colorScheme.onPrimary,
-                  ),
-                  label: 'Alarms',
-                ),
-                NavigationDestination(
-                  key: ValueKey('nav-stopwatch'),
-                  icon: Icon(Icons.av_timer_outlined),
-                  selectedIcon: Icon(
-                    Icons.av_timer,
-                    color: colorScheme.onPrimary,
-                  ),
-                  label: 'Stopwatch',
-                ),
-                NavigationDestination(
-                  key: ValueKey('nav-timer'),
-                  icon: Icon(Icons.hourglass_bottom_outlined),
-                  selectedIcon: Icon(
-                    Icons.hourglass_bottom,
-                    color: colorScheme.onPrimary,
-                  ),
-                  label: 'Timer',
-                ),
-              ],
-            ),
-          ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _currentIndex,
+        indicatorColor: colorScheme.primary.withValues(
+          alpha: Theme.of(context).brightness == Brightness.light ? 0.12 : 0.2,
         ),
+        onDestinationSelected: (index) {
+          setState(() {
+            _visitedTabs.add(index);
+            _currentIndex = index;
+          });
+        },
+        destinations: [
+          NavigationDestination(
+            key: ValueKey('nav-calendar'),
+            icon: Icon(Icons.calendar_month_outlined),
+            selectedIcon: Icon(
+              Icons.calendar_month,
+              color: colorScheme.primary,
+            ),
+            label: 'Calendar',
+          ),
+          NavigationDestination(
+            key: ValueKey('nav-notes'),
+            icon: Icon(Icons.sticky_note_2_outlined),
+            selectedIcon: Icon(Icons.sticky_note_2, color: colorScheme.primary),
+            label: 'Notes',
+          ),
+          NavigationDestination(
+            key: ValueKey('nav-alarms'),
+            icon: Icon(Icons.notifications_none),
+            selectedIcon: Icon(
+              Icons.notifications_active,
+              color: colorScheme.primary,
+            ),
+            label: 'Alarms',
+          ),
+          NavigationDestination(
+            key: ValueKey('nav-stopwatch'),
+            icon: Icon(Icons.av_timer_outlined),
+            selectedIcon: Icon(Icons.av_timer, color: colorScheme.primary),
+            label: 'Stopwatch',
+          ),
+          NavigationDestination(
+            key: ValueKey('nav-timer'),
+            icon: Icon(Icons.hourglass_bottom_outlined),
+            selectedIcon: Icon(
+              Icons.hourglass_bottom,
+              color: colorScheme.primary,
+            ),
+            label: 'Timer',
+          ),
+        ],
       ),
     );
   }

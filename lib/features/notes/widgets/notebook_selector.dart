@@ -80,10 +80,8 @@ class _NotebookSelectorState extends State<NotebookSelector> {
       openBelow ? availableBelow : availableAbove,
     );
     final menuHeight = math.min(360.0, availableHeight);
-    final menuWidth = math.min(
-      selectorObject.size.width,
-      overlaySize.width - 24,
-    );
+    final availableMenuWidth = math.max(0.0, overlaySize.width - 24);
+    final menuWidth = _menuWidthForContent(context, availableMenuWidth);
     final left = selectorTopLeft.dx
         .clamp(12.0, math.max(12.0, overlaySize.width - menuWidth - 12))
         .toDouble();
@@ -150,6 +148,50 @@ class _NotebookSelectorState extends State<NotebookSelector> {
     }
   }
 
+  double _menuWidthForContent(BuildContext context, double maximumWidth) {
+    final theme = Theme.of(context);
+    final mediaQuery = MediaQuery.of(context);
+    final textDirection = Directionality.of(context);
+
+    double textWidth(String text, TextStyle? style) {
+      final painter = TextPainter(
+        text: TextSpan(text: text, style: style),
+        textDirection: textDirection,
+        textScaler: mediaQuery.textScaler,
+      )..layout();
+      return painter.width;
+    }
+
+    final itemLabelStyle = theme.textTheme.bodyMedium?.copyWith(
+      fontWeight: FontWeight.w700,
+    );
+    final countStyle = theme.textTheme.labelSmall;
+    var requiredWidth =
+        90 +
+        textWidth('All', itemLabelStyle) +
+        textWidth(
+          '${widget.notebooks.fold<int>(0, (total, notebook) => total + notebook.noteCount)}',
+          countStyle,
+        );
+
+    for (final notebook in widget.notebooks) {
+      final notebookWidth =
+          130 +
+          textWidth(notebook.name, itemLabelStyle) +
+          textWidth('${notebook.noteCount}', countStyle);
+      requiredWidth = math.max(requiredWidth, notebookWidth);
+    }
+
+    final createButtonLabelStyle =
+        TextButtonTheme.of(context).style?.textStyle?.resolve({}) ??
+        theme.textTheme.labelLarge;
+    final createButtonWidth =
+        66 + textWidth('New notebook', createButtonLabelStyle);
+    requiredWidth = math.max(requiredWidth, createButtonWidth);
+
+    return math.min(requiredWidth + 2, maximumWidth).toDouble();
+  }
+
   void _closeMenu({VoidCallback? afterClose}) {
     final entry = _menuEntry;
     if (entry == null) {
@@ -204,82 +246,109 @@ class _NotebookSelectorState extends State<NotebookSelector> {
       }
     }
     final label = selectedNotebook?.name ?? 'All';
-    final noteCount =
-        selectedNotebook?.noteCount ??
-        widget.notebooks.fold<int>(
-          0,
-          (total, notebook) => total + notebook.noteCount,
-        );
     final icon = selectedNotebook == null
         ? Icons.folder_copy_outlined
         : notebookIconData(selectedNotebook.icon, selectedNotebook.iconType);
     final iconColor = selectedNotebook == null
         ? colorScheme.primary
         : notebookAccentColor(theme, selectedNotebook.colorValue);
-
+    final noteCount =
+        selectedNotebook?.noteCount ??
+        widget.notebooks.fold<int>(
+          0,
+          (total, notebook) => total + notebook.noteCount,
+        );
     return Semantics(
       button: true,
       expanded: _isOpen,
       label: '$label, ${_noteCountLabel(noteCount)}',
       child: Material(
         key: _selectorKey,
-        color: colorScheme.surfaceContainerLow.withValues(
-          alpha: theme.brightness == Brightness.light ? 0.92 : 0.96,
-        ),
-        elevation: 1,
-        shadowColor: colorScheme.shadow.withValues(
-          alpha: theme.brightness == Brightness.light ? 0.08 : 0.2,
-        ),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadius.control),
-          side: BorderSide(
-            color: colorScheme.outlineVariant.withValues(
-              alpha: theme.brightness == Brightness.light ? 0.65 : 0.5,
-            ),
-          ),
-        ),
-        clipBehavior: Clip.antiAlias,
+        color: Colors.transparent,
+        elevation: 0,
+        shadowColor: Colors.transparent,
         child: InkWell(
           key: const ValueKey('notes-notebook-selector'),
+          borderRadius: BorderRadius.circular(AppRadius.control),
           onTap: _toggleMenu,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-            child: Row(
-              children: [
-                Icon(icon, color: iconColor, size: 22),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: math.max(48.0, MediaQuery.sizeOf(context).width - 32),
+              minHeight: 40,
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final isCompact = constraints.maxWidth < 112;
+                  return Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
+                      if (!isCompact) ...[
+                        Icon(icon, size: 18, color: iconColor),
+                        const SizedBox(width: 6),
+                      ],
+                      Flexible(
+                        child: isCompact
+                            ? Text(
+                                label,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              )
+                            : Column(
+                                mainAxisSize: MainAxisSize.min,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    label,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        _noteCountLabel(noteCount),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: theme.textTheme.labelSmall
+                                            ?.copyWith(
+                                              color:
+                                                  colorScheme.onSurfaceVariant,
+                                            ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Icon(
+                                        _isOpen
+                                            ? Icons.keyboard_arrow_up_rounded
+                                            : Icons.keyboard_arrow_down_rounded,
+                                        color: colorScheme.onSurfaceVariant,
+                                        size: 18,
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
                       ),
-                      Text(
-                        _noteCountLabel(noteCount),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.labelSmall?.copyWith(
+                      if (isCompact)
+                        Icon(
+                          _isOpen
+                              ? Icons.keyboard_arrow_up_rounded
+                              : Icons.keyboard_arrow_down_rounded,
                           color: colorScheme.onSurfaceVariant,
+                          size: 18,
                         ),
-                      ),
                     ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Icon(
-                  _isOpen
-                      ? Icons.keyboard_arrow_up_rounded
-                      : Icons.keyboard_arrow_down_rounded,
-                  color: colorScheme.onSurfaceVariant,
-                ),
-              ],
+                  );
+                },
+              ),
             ),
           ),
         ),
@@ -309,13 +378,9 @@ class _NotebookMenu extends StatelessWidget {
     final colorScheme = theme.colorScheme;
 
     return Material(
-      color: colorScheme.surfaceContainerHigh.withValues(
-        alpha: theme.brightness == Brightness.light ? 0.98 : 0.97,
-      ),
-      elevation: 10,
-      shadowColor: colorScheme.shadow.withValues(
-        alpha: theme.brightness == Brightness.light ? 0.16 : 0.35,
-      ),
+      color: colorScheme.surfaceContainerHigh.withValues(alpha: 1),
+      elevation: 2,
+      shadowColor: colorScheme.shadow.withValues(alpha: 0.12),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.compactCard),
         side: BorderSide(
@@ -429,58 +494,60 @@ class _NotebookMenu extends StatelessWidget {
             onTap: onTap,
             onLongPress: onLongPress,
             child: SizedBox(
-              height: 48,
-              child: Row(
-                children: [
-                  const SizedBox(width: 10),
-                  Icon(icon, size: 20, color: iconColor),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: colorScheme.onSurface,
-                        fontWeight: selected ? FontWeight.w700 : null,
-                      ),
-                    ),
-                  ),
-                  Text(
-                    '$count',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  if (onOptions != null)
-                    IconButton(
-                      key: optionsKey,
-                      tooltip: 'Notebook options for $label',
-                      onPressed: onOptions,
-                      icon: Icon(
-                        Icons.more_horiz_rounded,
-                        color: colorScheme.onSurfaceVariant,
-                        size: 20,
-                      ),
-                      visualDensity: VisualDensity.compact,
-                      constraints: const BoxConstraints.tightFor(
-                        width: 40,
-                        height: 44,
-                      ),
-                      padding: EdgeInsets.zero,
-                    ),
-                  if (selected)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                      child: Icon(
-                        Icons.check_rounded,
-                        color: colorScheme.primary,
-                        size: 20,
-                      ),
-                    )
-                  else
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 48),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
                     const SizedBox(width: 10),
-                ],
+                    Icon(icon, size: 20, color: iconColor),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        label,
+                        softWrap: true,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onSurface,
+                          fontWeight: selected ? FontWeight.w700 : null,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      '$count',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    if (onOptions != null)
+                      IconButton(
+                        key: optionsKey,
+                        tooltip: 'Notebook options for $label',
+                        onPressed: onOptions,
+                        icon: Icon(
+                          Icons.more_horiz_rounded,
+                          color: colorScheme.onSurfaceVariant,
+                          size: 20,
+                        ),
+                        visualDensity: VisualDensity.compact,
+                        constraints: const BoxConstraints.tightFor(
+                          width: 40,
+                          height: 44,
+                        ),
+                        padding: EdgeInsets.zero,
+                      ),
+                    if (selected)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        child: Icon(
+                          Icons.check_rounded,
+                          color: colorScheme.primary,
+                          size: 20,
+                        ),
+                      )
+                    else
+                      const SizedBox(width: 10),
+                  ],
+                ),
               ),
             ),
           ),

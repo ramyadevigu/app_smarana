@@ -12,7 +12,7 @@ class AppBackdrop extends StatelessWidget {
     final isLight = Theme.of(context).brightness == Brightness.light;
 
     return ColoredBox(
-      color: isLight ? AppColors.lightBackground : AppColors.deepBlack,
+      color: isLight ? AppColors.lightBackground : AppColors.darkBackground,
       child: child,
     );
   }

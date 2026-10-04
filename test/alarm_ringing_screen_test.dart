@@ -63,6 +63,13 @@ void main() {
     expect(find.text('7:30 AM'), findsOneWidget);
     expect(find.text('Wake up'), findsOneWidget);
     expect(find.text('Good Morning'), findsOneWidget);
+    expect(
+      find.text(
+        'If unanswered, this alarm snoozes automatically after '
+        '5 minutes, then rings again in 15 minutes.',
+      ),
+      findsOneWidget,
+    );
     expect(find.text('Stop'), findsOneWidget);
     expect(find.text('Snooze · 15 min'), findsOneWidget);
 

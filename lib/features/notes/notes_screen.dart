@@ -6,11 +6,8 @@ import '../reminders/models/reminder.dart';
 import '../reminders/services/reminder_storage.dart';
 import '../../../theme/app_design_tokens.dart';
 import 'models/note_workspace_models.dart';
-import 'screens/all_notes_screen.dart';
 import 'screens/notebook_detail_screen.dart';
 import '../../../theme/app_colors.dart';
-import '../../../theme/premium_surface.dart';
-import 'theme/note_card_colors.dart';
 import 'theme/notebook_colors.dart';
 import 'services/note_workspace_storage.dart';
 import 'widgets/notebook_selector.dart';
@@ -44,7 +41,6 @@ class _NotesScreenState extends State<NotesScreen> {
   Map<String, NoteCardColor> _tagColors = const {};
   bool _isLoading = true;
   String? _storageError;
-  NotebookIconType? _selectedCategory;
   String? _selectedNotebookId;
   bool _isSearchExpanded = false;
   List<RecentNoteView>? _recentNotesCache;
@@ -55,7 +51,6 @@ class _NotesScreenState extends State<NotesScreen> {
   List<RecentNoteView>? _filteredRecentNotesCache;
   List<RecentNoteView>? _filteredRecentNotesSource;
   String? _filteredNotebookId;
-  NotebookIconType? _filteredCategory;
   String? _filteredQuery;
 
   static const Duration _recentUpdateWindow = Duration(days: 7);
@@ -167,7 +162,6 @@ class _NotesScreenState extends State<NotesScreen> {
     if (cachedNotes != null &&
         identical(_filteredRecentNotesSource, recentNotes) &&
         _filteredNotebookId == _selectedNotebookId &&
-        _filteredCategory == _selectedCategory &&
         _filteredQuery == query) {
       return cachedNotes;
     }
@@ -175,10 +169,6 @@ class _NotesScreenState extends State<NotesScreen> {
     final filteredNotes = recentNotes.where((note) {
       if (_selectedNotebookId != null &&
           note.notebookId != _selectedNotebookId) {
-        return false;
-      }
-      if (_selectedCategory != null &&
-          note.notebookIconType != _selectedCategory) {
         return false;
       }
       if (query.isEmpty) {
@@ -192,7 +182,6 @@ class _NotesScreenState extends State<NotesScreen> {
     _filteredRecentNotesCache = filteredNotes;
     _filteredRecentNotesSource = recentNotes;
     _filteredNotebookId = _selectedNotebookId;
-    _filteredCategory = _selectedCategory;
     _filteredQuery = query;
     return filteredNotes;
   }
@@ -354,11 +343,8 @@ class _NotesScreenState extends State<NotesScreen> {
     bool createNoteOnOpen = false,
     String? initialNoteId,
   }) async {
-    if (_selectedNotebookId != notebook.id || _selectedCategory != null) {
-      setState(() {
-        _selectedNotebookId = notebook.id;
-        _selectedCategory = null;
-      });
+    if (_selectedNotebookId != notebook.id) {
+      setState(() => _selectedNotebookId = notebook.id);
     }
     final result = await Navigator.of(context).push<NotebookDetailResult>(
       MaterialPageRoute<NotebookDetailResult>(
@@ -380,10 +366,6 @@ class _NotesScreenState extends State<NotesScreen> {
         _notebooks = _notebooks
             .where((item) => item.id != notebook.id)
             .toList();
-        _selectedCategory =
-            _notebooks.any((item) => item.iconType == _selectedCategory)
-            ? _selectedCategory
-            : null;
         if (_selectedNotebookId == notebook.id) {
           _selectedNotebookId = null;
         }
@@ -866,9 +848,6 @@ class _NotesScreenState extends State<NotesScreen> {
       if (_selectedNotebookId == notebook.id) {
         _selectedNotebookId = null;
       }
-      if (!_notebooks.any((item) => item.iconType == _selectedCategory)) {
-        _selectedCategory = null;
-      }
     });
     if (widget.initialNotebooks == null) {
       await _persistWorkspace();
@@ -886,23 +865,6 @@ class _NotesScreenState extends State<NotesScreen> {
       matchingNotebook.first,
       initialNoteId: recentNote.note.id,
     );
-  }
-
-  Future<void> _showAllNotes() async {
-    final selectedNote = await Navigator.of(context).push<RecentNoteView>(
-      MaterialPageRoute<RecentNoteView>(
-        builder: (_) => AllNotesScreen(
-          notes: _recentNotes(),
-          onTogglePinned: _togglePinnedNote,
-          onColorChanged: _changeNoteColor,
-          onTagColorChanged: _changeTagColor,
-        ),
-      ),
-    );
-    if (!mounted || selectedNote == null) {
-      return;
-    }
-    await _openRecentNote(selectedNote);
   }
 
   Future<void> _togglePinnedNote(RecentNoteView recentNote) async {
@@ -980,11 +942,7 @@ class _NotesScreenState extends State<NotesScreen> {
       await _openNotebook(selectedNotebook.first, createNoteOnOpen: true);
       return;
     }
-    final matching = _selectedCategory == null
-        ? _notebooks
-        : _notebooks.where((book) => book.iconType == _selectedCategory);
-    final notebook = matching.isEmpty ? _notebooks.first : matching.first;
-    await _openNotebook(notebook, createNoteOnOpen: true);
+    await _openNotebook(_notebooks.first, createNoteOnOpen: true);
   }
 
   Future<String?> _showNotebookNameDialog({
@@ -1039,14 +997,24 @@ class _NotesScreenState extends State<NotesScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        automaticallyImplyLeading: false,
         elevation: 0,
         scrolledUnderElevation: 0,
         backgroundColor: theme.colorScheme.surface,
-        title: Text(
-          'Notes',
-          style: theme.textTheme.headlineSmall?.copyWith(
-            fontWeight: FontWeight.w700,
-          ),
+        title: Row(
+          children: [
+            Text(
+              'Notes',
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Flexible(
+              fit: FlexFit.tight,
+              child: _buildNotebookPanel(context),
+            ),
+          ],
         ),
         actions: [
           IconButton(
@@ -1106,7 +1074,6 @@ class _NotesScreenState extends State<NotesScreen> {
                                   )
                                 : const SizedBox(width: double.infinity),
                           ),
-                          _buildNotebookPanel(context),
                           const SizedBox(height: 16),
                           _buildRecentNotesSection(context, isWide: isWide),
                         ],
@@ -1140,215 +1107,15 @@ class _NotesScreenState extends State<NotesScreen> {
   }
 
   Widget _buildNotebookPanel(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return PremiumSurface(
-      key: const ValueKey('notes-notebook-panel'),
-      padding: const EdgeInsets.all(10),
-      radius: AppRadius.section,
-      elevation: AppElevation.subtle,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: NotebookSelector(
-                  notebooks: _notebooks,
-                  selectedNotebookId: _selectedNotebookId,
-                  onSelected: (notebookId) {
-                    setState(() {
-                      _selectedNotebookId = notebookId;
-                      _selectedCategory = null;
-                    });
-                  },
-                  onCreateNotebook: _createNotebook,
-                  onNotebookOptions: _showNotebookOptions,
-                ),
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                key: const ValueKey('notes-new-notebook-button'),
-                tooltip: 'New notebook',
-                onPressed: _createNotebook,
-                style: IconButton.styleFrom(
-                  backgroundColor: colorScheme.surfaceContainerHighest,
-                  foregroundColor: colorScheme.primary,
-                  minimumSize: const Size(48, 48),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppRadius.control),
-                  ),
-                ),
-                icon: const Icon(Icons.create_new_folder_outlined),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Divider(height: 1, color: colorScheme.outlineVariant),
-          const SizedBox(height: 8),
-          _buildCategoryStrip(context),
-        ],
-      ),
+    return NotebookSelector(
+      notebooks: _notebooks,
+      selectedNotebookId: _selectedNotebookId,
+      onSelected: (notebookId) {
+        setState(() => _selectedNotebookId = notebookId);
+      },
+      onCreateNotebook: _createNotebook,
+      onNotebookOptions: _showNotebookOptions,
     );
-  }
-
-  Widget _buildCategoryStrip(BuildContext context) {
-    final categories = NotebookIconType.values
-        .where(
-          (type) =>
-              type != NotebookIconType.general &&
-              _notebooks.any((book) => book.iconType == type),
-        )
-        .toList();
-
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          _buildCategoryTile(
-            context,
-            label: 'All',
-            icon: Icons.folder_copy_outlined,
-            noteColor: NoteCardColor.blue,
-            count: _notebooks.fold<int>(
-              0,
-              (total, notebook) => total + notebook.noteCount,
-            ),
-            selected: _selectedCategory == null,
-            onTap: () => setState(() {
-              _selectedCategory = null;
-              _selectedNotebookId = null;
-            }),
-          ),
-          for (final type in categories)
-            _buildCategoryTile(
-              context,
-              label: _categoryLabel(type),
-              icon: _categoryIcon(type),
-              noteColor: _categoryColor(type),
-              count: _notebooks
-                  .where((notebook) => notebook.iconType == type)
-                  .fold<int>(
-                    0,
-                    (total, notebook) => total + notebook.noteCount,
-                  ),
-              selected: _selectedCategory == type,
-              onTap: () => setState(() {
-                _selectedCategory = type;
-                _selectedNotebookId = null;
-              }),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCategoryTile(
-    BuildContext context, {
-    required String label,
-    required IconData icon,
-    required NoteCardColor noteColor,
-    required int count,
-    required bool selected,
-    required VoidCallback onTap,
-  }) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final iconColor = colorScheme.onSurface;
-    final tileColor = Color.lerp(
-      colorScheme.surface,
-      noteCardSwatchColor(theme, noteColor),
-      selected ? 0.26 : 0.13,
-    )!;
-
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: Semantics(
-        button: true,
-        selected: selected,
-        label: '$label, $count notes',
-        child: Material(
-          color: tileColor,
-          borderRadius: BorderRadius.circular(13),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(13),
-            onTap: onTap,
-            child: Ink(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(13),
-                border: Border.all(
-                  color: selected
-                      ? colorScheme.onSurface
-                      : colorScheme.outlineVariant,
-                ),
-              ),
-              child: SizedBox(
-                width: 76,
-                height: 64,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(icon, size: 18, color: iconColor),
-                    const SizedBox(height: 2),
-                    Text(
-                      label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: colorScheme.onSurface,
-                      ),
-                    ),
-                    Text(
-                      '$count',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        fontSize: 10,
-                        color: colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  String _categoryLabel(NotebookIconType type) {
-    return switch (type) {
-      NotebookIconType.work => 'Work',
-      NotebookIconType.goals => 'Goals',
-      NotebookIconType.journal => 'Journal',
-      NotebookIconType.health => 'Health',
-      NotebookIconType.ideas => 'Ideas',
-      NotebookIconType.general => 'General',
-    };
-  }
-
-  IconData _categoryIcon(NotebookIconType type) {
-    return switch (type) {
-      NotebookIconType.work => Icons.work_outline_rounded,
-      NotebookIconType.goals => Icons.flag_outlined,
-      NotebookIconType.journal => Icons.auto_stories_outlined,
-      NotebookIconType.health => Icons.favorite_border_rounded,
-      NotebookIconType.ideas => Icons.lightbulb_outline_rounded,
-      NotebookIconType.general => Icons.menu_book_outlined,
-    };
-  }
-
-  NoteCardColor _categoryColor(NotebookIconType type) {
-    return switch (type) {
-      NotebookIconType.work => NoteCardColor.pink,
-      NotebookIconType.goals => NoteCardColor.mint,
-      NotebookIconType.journal => NoteCardColor.lavender,
-      NotebookIconType.health => NoteCardColor.green,
-      NotebookIconType.ideas => NoteCardColor.orange,
-      NotebookIconType.general => NoteCardColor.cyan,
-    };
   }
 
   Widget _buildSearchBar(BuildContext context) {
@@ -1391,48 +1158,6 @@ class _NotesScreenState extends State<NotesScreen> {
     );
   }
 
-  Widget _buildRecentNotesHeading(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return Row(
-      children: [
-        Expanded(
-          child: Text(
-            'Recent Notes',
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
-        TextButton(
-          key: const ValueKey('notes-see-all-button'),
-          onPressed: _showAllNotes,
-          style: TextButton.styleFrom(
-            visualDensity: VisualDensity.compact,
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'See all',
-                style: theme.textTheme.labelLarge?.copyWith(
-                  color: colorScheme.primary,
-                ),
-              ),
-              Icon(
-                Icons.chevron_right_rounded,
-                size: 20,
-                color: colorScheme.primary,
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildRecentNotesSection(
     BuildContext context, {
     required bool isWide,
@@ -1443,8 +1168,6 @@ class _NotesScreenState extends State<NotesScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _buildRecentNotesHeading(context),
-        const SizedBox(height: 8),
         if (visibleNotes.isEmpty)
           _buildRecentNotesContent(
             context,
@@ -1526,17 +1249,15 @@ class _SectionEmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: colorScheme.outlineVariant),
-      ),
-      child: Text(
-        message,
-        style: Theme.of(context).textTheme.bodyMedium
-            ?.copyWith(color: colorScheme.onSurfaceVariant),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 24),
+      child: Center(
+        child: Text(
+          message,
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.bodyMedium
+              ?.copyWith(color: colorScheme.onSurfaceVariant),
+        ),
       ),
     );
   }

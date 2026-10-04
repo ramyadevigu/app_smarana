@@ -20,6 +20,11 @@ void main() {
   testWidgets('shows a compact All selector without notebook cards', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     final now = DateTime.now();
     final notebook = Notebook(
       id: 'folder-notebook',
@@ -38,16 +43,120 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(find.text('Notes'), findsOneWidget);
+    expect(find.text('Notes >'), findsNothing);
+    expect(find.byIcon(Icons.arrow_back), findsNothing);
+    expect(find.byKey(const ValueKey('notes-search-button')), findsOneWidget);
     expect(
       find.byKey(const ValueKey('notes-notebook-selector')),
       findsOneWidget,
     );
+    expect(find.text('All'), findsOneWidget);
+    expect(find.text('0 notes'), findsOneWidget);
+    expect(find.byIcon(Icons.folder_copy_outlined), findsOneWidget);
     expect(find.text('General'), findsNothing);
     expect(find.text('Notebooks'), findsNothing);
     expect(find.text('app'), findsNothing);
     expect(find.byType(NotebookSelector), findsOneWidget);
     expect(find.byType(NotebookListTile), findsNothing);
+    expect(
+      find.byKey(const ValueKey('notes-new-notebook-button')),
+      findsNothing,
+    );
     expect(find.byKey(const ValueKey('notes-add-note-fab')), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('notes-notebook-selector')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('notebook-selector-option-all')),
+      findsOneWidget,
+    );
+    expect(find.byIcon(Icons.folder_copy_outlined), findsNWidgets(2));
+    expect(find.text('app'), findsOneWidget);
+    expect(find.byIcon(Icons.check_rounded), findsOneWidget);
+    expect(
+      tester
+          .getSize(find.byKey(const ValueKey('notebook-selector-option-all')))
+          .width,
+      lessThan(280),
+    );
+    expect(
+      tester
+          .getRect(find.byKey(const ValueKey('notebook-selector-option-all')))
+          .right,
+      lessThanOrEqualTo(360),
+    );
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('notebook menu adapts to names and keeps its surface opaque', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final now = DateTime.now();
+    Notebook createNotebook(String id, String name) => Notebook(
+      id: id,
+      name: name,
+      iconType: NotebookIconType.general,
+      sections: [
+        NoteSection(id: '$id-section', name: 'General', createdAt: now),
+      ],
+      notes: const [],
+      createdAt: now,
+      updatedAt: now,
+    );
+
+    const shortName = 'Personal';
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NotesScreen(
+          initialNotebooks: [createNotebook('short-notebook', shortName)],
+        ),
+      ),
+    );
+    await tester.tap(find.byKey(const ValueKey('notes-notebook-selector')));
+    await tester.pumpAndSettle();
+
+    final shortMenuWidth = tester
+        .getSize(
+          find.byKey(const ValueKey('notebook-selector-option-short-notebook')),
+        )
+        .width;
+    final menuSurface = tester.widget<Material>(
+      find
+          .byWidgetPredicate(
+            (widget) => widget is Material && widget.elevation == 2,
+          )
+          .first,
+    );
+    expect(menuSurface.color?.a, 1);
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pumpAndSettle();
+
+    const longName =
+        'Important project notes for planning and work across the whole team';
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NotesScreen(
+          key: const ValueKey('long-notes-screen'),
+          initialNotebooks: [createNotebook('long-notebook', longName)],
+        ),
+      ),
+    );
+    await tester.tap(find.byKey(const ValueKey('notes-notebook-selector')));
+    await tester.pumpAndSettle();
+
+    final longOption = find.byKey(
+      const ValueKey('notebook-selector-option-long-notebook'),
+    );
+    expect(tester.getSize(longOption).width, greaterThan(shortMenuWidth));
+    expect(tester.getSize(find.text(longName)).height, greaterThan(24));
+    expect(tester.getRect(longOption).right, lessThanOrEqualTo(360));
   });
 
   testWidgets('selecting a notebook filters notes and keeps open action', (
@@ -106,6 +215,7 @@ void main() {
 
     expect(find.text('Only in this notebook'), findsOneWidget);
     expect(find.text('Note from another notebook'), findsOneWidget);
+    expect(find.text('2 notes'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('notes-notebook-selector')));
     await tester.pumpAndSettle();
     await tester.tap(
@@ -121,6 +231,7 @@ void main() {
           .selectedNotebookId,
       'open-notebook',
     );
+    expect(find.text('1 note'), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('notes-notebook-selector')));
     await tester.pumpAndSettle();
@@ -130,6 +241,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Only in this notebook'), findsOneWidget);
     expect(find.text('Note from another notebook'), findsOneWidget);
+    expect(find.text('2 notes'), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('notes-notebook-selector')));
     await tester.pumpAndSettle();
@@ -373,9 +485,18 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
     await tester.pump();
 
+    final emptyState = find.text(
+      'No recent notes yet. Open a notebook and start writing.',
+    );
+    expect(emptyState, findsOneWidget);
+    expect(tester.widget<Text>(emptyState).textAlign, TextAlign.center);
     expect(
-      find.text('No recent notes yet. Open a notebook and start writing.'),
-      findsOneWidget,
+      find.ancestor(of: emptyState, matching: find.byType(Container)),
+      findsNothing,
+    );
+    expect(
+      find.ancestor(of: emptyState, matching: find.byType(Card)),
+      findsNothing,
     );
     expect(find.text('Notebooks'), findsNothing);
     expect(find.byType(NotebookListTile), findsNothing);
@@ -699,7 +820,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('See all opens every note with the requested card styling', (
+  testWidgets('recent notes remain without a heading or See all action', (
     tester,
   ) async {
     final now = DateTime.now();
@@ -740,56 +861,12 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Recent Notes'), findsOneWidget);
+    expect(find.text('Recent Notes'), findsNothing);
+    expect(find.text('See all'), findsNothing);
+    expect(find.byIcon(Icons.chevron_right_rounded), findsNothing);
+    expect(find.text('Recent planning note 0'), findsOneWidget);
     expect(find.text('Older planning note'), findsNothing);
-    final seeAllButton = find.byKey(const ValueKey('notes-see-all-button'));
-    await tester.ensureVisible(seeAllButton);
-    await tester.tap(seeAllButton);
-    await tester.pumpAndSettle();
-
-    expect(find.text('All Notes'), findsOneWidget);
-    final olderNoteCard = find.byKey(
-      const ValueKey('recent-note-card-older-note'),
-    );
-    await tester.scrollUntilVisible(
-      olderNoteCard,
-      300,
-      scrollable: find.byType(Scrollable).last,
-    );
-    final titleFinder = find.descendant(
-      of: olderNoteCard,
-      matching: find.text('Older planning note'),
-    );
-    final title = tester.widget<Text>(titleFinder);
-    expect(title.style?.fontWeight, FontWeight.w700);
-    expect(title.style?.decoration, isNot(TextDecoration.underline));
-
-    final notebookName = tester.widget<Text>(
-      find.descendant(
-        of: olderNoteCard,
-        matching: find.text('Planning Notebook'),
-      ),
-    );
-    expect(
-      find.descendant(
-        of: olderNoteCard,
-        matching: find.byKey(const ValueKey('recent-note-notebook-older-note')),
-      ),
-      findsOneWidget,
-    );
-    expect(notebookName.style?.decoration, isNot(TextDecoration.underline));
-
-    await tester.tap(find.byTooltip('Note actions for Older planning note'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Pin note'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Note actions for Older planning note'));
-    await tester.pumpAndSettle();
-    expect(find.text('Unpin note'), findsOneWidget);
-    await tester.tap(find.text('Unpin note'));
-    await tester.pumpAndSettle();
-
-    await tester.tap(titleFinder);
+    await tester.tap(find.text('Recent planning note 0'));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('rich-note-title-field')), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -924,7 +1001,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('add note button opens the existing rich note editor', (
+  testWidgets('note count updates when a note is added and deleted', (
     tester,
   ) async {
     final notebook = Notebook(
@@ -946,6 +1023,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(home: NotesScreen(initialNotebooks: [notebook])),
     );
+    expect(find.text('0 notes'), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('notes-add-note-fab')));
     await tester.pumpAndSettle();
@@ -959,6 +1037,22 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Campaign draft'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('notebook-save-and-close')));
+    await tester.pumpAndSettle();
+    expect(find.text('1 note'), findsOneWidget);
+
+    await tester.tap(find.text('Campaign draft'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('note-editor-more-menu')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Delete'));
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('notebook-save-and-close')));
+    await tester.pumpAndSettle();
+    expect(find.text('0 notes'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

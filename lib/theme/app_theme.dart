@@ -19,7 +19,9 @@ ThemeData _buildTheme(Color accentColor, {required Brightness brightness}) {
   final isLight = brightness == Brightness.light;
   final primary = accentColor;
   final onPrimary = AppColors.highContrastForeground(primary);
-  final background = isLight ? AppColors.lightBackground : AppColors.deepBlack;
+  final background = isLight
+      ? AppColors.lightBackground
+      : AppColors.darkBackground;
   final surface = isLight ? AppColors.lightSurface : AppColors.darkSurface;
   final surfaceLow = isLight
       ? AppColors.lightSurfaceLow
@@ -98,8 +100,8 @@ ThemeData _buildTheme(Color accentColor, {required Brightness brightness}) {
     borderRadius: BorderRadius.circular(AppRadius.control),
   );
   final cardShape = RoundedRectangleBorder(
-    borderRadius: BorderRadius.circular(AppRadius.card),
-    side: BorderSide(color: outlineVariant.withValues(alpha: 0.72)),
+    borderRadius: BorderRadius.circular(AppRadius.compactCard),
+    side: BorderSide(color: outlineVariant.withValues(alpha: 0.48)),
   );
 
   return ThemeData(
@@ -121,33 +123,33 @@ ThemeData _buildTheme(Color accentColor, {required Brightness brightness}) {
     ),
     scaffoldBackgroundColor: background,
     appBarTheme: AppBarTheme(
-      backgroundColor: surface,
+      backgroundColor: background,
       foregroundColor: onSurface,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
       scrolledUnderElevation: 0,
       centerTitle: false,
       toolbarHeight: 64,
-      titleTextStyle: textTheme.titleLarge?.copyWith(
+      titleTextStyle: textTheme.headlineSmall?.copyWith(
         color: onSurface,
-        fontWeight: FontWeight.w600,
+        fontWeight: FontWeight.w500,
       ),
       actionsIconTheme: IconThemeData(color: onSurfaceVariant),
     ),
     cardTheme: CardThemeData(
       color: surfaceLow,
       elevation: 0,
-      shadowColor: colorScheme.shadow.withValues(alpha: isLight ? 0.06 : 0.16),
+      shadowColor: Colors.transparent,
       surfaceTintColor: Colors.transparent,
       margin: EdgeInsets.zero,
       shape: cardShape,
     ),
     navigationBarTheme: NavigationBarThemeData(
-      backgroundColor: surfaceLow,
+      backgroundColor: background,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
-      height: 68,
-      indicatorColor: primary,
+      height: 76,
+      indicatorColor: primary.withValues(alpha: isLight ? 0.12 : 0.2),
       indicatorShape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.compactCard),
       ),
@@ -158,6 +160,7 @@ ThemeData _buildTheme(Color accentColor, {required Brightness brightness}) {
           fontSize: 11,
           fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
           letterSpacing: 0.1,
+          color: selected ? primary : onSurfaceVariant,
         );
       }),
     ),
@@ -176,11 +179,11 @@ ThemeData _buildTheme(Color accentColor, {required Brightness brightness}) {
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(AppRadius.control),
-        borderSide: BorderSide(color: outlineVariant),
+        borderSide: BorderSide.none,
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(AppRadius.control),
-        borderSide: BorderSide(color: outlineVariant.withValues(alpha: 0.85)),
+        borderSide: BorderSide.none,
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(AppRadius.control),
@@ -244,7 +247,7 @@ ThemeData _buildTheme(Color accentColor, {required Brightness brightness}) {
       elevation: 4,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.modal),
-        side: BorderSide(color: outlineVariant.withValues(alpha: 0.78)),
+        side: BorderSide(color: outlineVariant.withValues(alpha: 0.5)),
       ),
       titleTextStyle: textTheme.titleLarge?.copyWith(
         color: onSurface,

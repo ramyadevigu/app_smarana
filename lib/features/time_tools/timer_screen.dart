@@ -211,17 +211,12 @@ class _TimerScreenState extends State<TimerScreen> {
             ? const _EmptyTimersState()
             : LayoutBuilder(
                 builder: (context, constraints) {
-                  final columns = constraints.maxWidth >= 600 ? 3 : 2;
-                  return GridView.builder(
+                  return ListView.separated(
                     key: const ValueKey('saved-timer-grid'),
-                    padding: const EdgeInsets.fromLTRB(8, 16, 8, 96),
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: columns,
-                      childAspectRatio: 0.82,
-                      crossAxisSpacing: 8,
-                      mainAxisSpacing: 8,
-                    ),
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
                     itemCount: _savedTimers.length,
+                    separatorBuilder: (context, index) =>
+                        const Divider(height: 1, indent: 4, endIndent: 4),
                     itemBuilder: (context, index) {
                       final timer = _savedTimers[index];
                       return _SavedTimerCard(
@@ -308,112 +303,78 @@ class _SavedTimerCard extends StatelessWidget {
             : (state.remaining.inMilliseconds / timer.duration.inMilliseconds)
                   .clamp(0.0, 1.0);
 
-        return Card(
-          color: colorScheme.surfaceContainerLow,
-          margin: EdgeInsets.zero,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppRadius.card),
-            side: BorderSide(
-              color: colorScheme.outlineVariant.withValues(alpha: 0.72),
-            ),
-          ),
-          elevation: 0,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 8, 12),
-            child: Column(
-              children: [
-                Row(
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: Text(
-                        title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleSmall,
-                      ),
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleSmall,
                     ),
-                    IconButton(
-                      key: ValueKey('timer-card-delete-${timer.id}'),
-                      tooltip: 'Delete $title',
-                      visualDensity: VisualDensity.compact,
-                      onPressed: onDelete,
-                      icon: const Icon(Icons.close),
+                    const SizedBox(height: 4),
+                    Text(
+                      _formatTimerDuration(state.remaining),
+                      key: ValueKey('timer-card-time-${timer.id}'),
+                      style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                        fontWeight: FontWeight.w300,
+                        color: state.isFinished
+                            ? colorScheme.error
+                            : colorScheme.onSurface,
+                      ),
                     ),
                   ],
                 ),
-                Expanded(
-                  child: Center(
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        final diameter =
-                            constraints.maxWidth < constraints.maxHeight
-                            ? constraints.maxWidth
-                            : constraints.maxHeight;
-                        return SizedBox.square(
-                          dimension: diameter,
-                          child: Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              SizedBox.square(
-                                dimension: diameter,
-                                child: CircularProgressIndicator(
-                                  value: progress,
-                                  strokeWidth: 5,
-                                  color: state.isFinished
-                                      ? colorScheme.error
-                                      : colorScheme.primary,
-                                  backgroundColor:
-                                      colorScheme.surfaceContainerHighest,
-                                ),
-                              ),
-                              Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  FittedBox(
-                                    fit: BoxFit.scaleDown,
-                                    child: Text(
-                                      _formatTimerDuration(state.remaining),
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .headlineSmall
-                                          ?.copyWith(
-                                            fontFeatures: const [
-                                              FontFeature.tabularFigures(),
-                                            ],
-                                            fontWeight: FontWeight.w300,
-                                          ),
-                                    ),
-                                  ),
-                                  IconButton(
-                                    key: ValueKey(
-                                      'timer-card-action-${timer.id}',
-                                    ),
-                                    tooltip: state.isRunning
-                                        ? 'Pause $title'
-                                        : state.isFinished
-                                        ? 'Restart $title'
-                                        : 'Start $title',
-                                    onPressed: onToggle,
-                                    icon: Icon(
-                                      state.isRunning
-                                          ? Icons.pause
-                                          : state.isFinished
-                                          ? Icons.replay
-                                          : Icons.play_arrow,
-                                      size: 30,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        );
-                      },
+              ),
+              SizedBox.square(
+                dimension: 64,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    SizedBox.square(
+                      dimension: 64,
+                      child: CircularProgressIndicator(
+                        value: progress,
+                        strokeWidth: 3,
+                        color: state.isFinished
+                            ? colorScheme.error
+                            : colorScheme.primary,
+                        backgroundColor: colorScheme.surfaceContainerHighest,
+                      ),
                     ),
-                  ),
+                    IconButton(
+                      key: ValueKey('timer-card-action-${timer.id}'),
+                      tooltip: state.isRunning
+                          ? 'Pause $title'
+                          : state.isFinished
+                          ? 'Restart $title'
+                          : 'Start $title',
+                      onPressed: onToggle,
+                      icon: Icon(
+                        state.isRunning
+                            ? Icons.pause
+                            : state.isFinished
+                            ? Icons.replay
+                            : Icons.play_arrow,
+                        size: 28,
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+              IconButton(
+                key: ValueKey('timer-card-delete-${timer.id}'),
+                tooltip: 'Delete $title',
+                onPressed: onDelete,
+                icon: const Icon(Icons.close),
+              ),
+            ],
           ),
         );
       },

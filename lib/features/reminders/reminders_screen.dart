@@ -337,7 +337,7 @@ class _RemindersScreenState extends State<RemindersScreen> {
 
     return Card(
       margin: EdgeInsets.zero,
-      elevation: 1,
+      elevation: 0,
       color: reminder.enabled
           ? Color.alphaBlend(
               colorScheme.primary.withValues(alpha: 0.06),
@@ -348,8 +348,8 @@ class _RemindersScreenState extends State<RemindersScreen> {
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
           color: reminder.enabled
-              ? colorScheme.primary.withValues(alpha: 0.35)
-              : colorScheme.outlineVariant,
+              ? colorScheme.primary.withValues(alpha: 0.22)
+              : colorScheme.outlineVariant.withValues(alpha: 0.42),
         ),
       ),
       child: InkWell(

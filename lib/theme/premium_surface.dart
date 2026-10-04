@@ -28,19 +28,22 @@ class PremiumSurface extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final isLight = theme.brightness == Brightness.light;
     final baseColor = color ?? colorScheme.surfaceContainerLow;
     final surfaceColor = selected
         ? Color.alphaBlend(
-            colorScheme.primary.withValues(alpha: isLight ? 0.08 : 0.16),
+            colorScheme.primary.withValues(
+              alpha: theme.brightness == Brightness.light ? 0.08 : 0.16,
+            ),
             baseColor,
           )
         : baseColor;
     final resolvedBorderColor =
         borderColor ??
         (selected
-            ? colorScheme.primary.withValues(alpha: isLight ? 0.38 : 0.48)
-            : colorScheme.outlineVariant.withValues(alpha: 0.72));
+            ? colorScheme.primary.withValues(
+                alpha: theme.brightness == Brightness.light ? 0.38 : 0.48,
+              )
+            : colorScheme.outlineVariant.withValues(alpha: 0.48));
 
     return Container(
       margin: margin,
@@ -49,17 +52,6 @@ class PremiumSurface extends StatelessWidget {
         color: surfaceColor,
         borderRadius: BorderRadius.circular(radius),
         border: Border.all(color: resolvedBorderColor),
-        boxShadow: elevation <= 0
-            ? null
-            : [
-                BoxShadow(
-                  color: colorScheme.shadow.withValues(
-                    alpha: isLight ? 0.055 : 0.14,
-                  ),
-                  blurRadius: elevation * 8,
-                  offset: Offset(0, elevation * 2),
-                ),
-              ],
       ),
       child: child,
     );

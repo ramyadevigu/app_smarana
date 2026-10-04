@@ -56,10 +56,13 @@ void main() {
     );
     final colorScheme = Theme.of(tester.element(find.byType(NavigationBar)))
         .colorScheme;
-    expect(navigationBar.indicatorColor, colorScheme.primary);
+    expect(
+      navigationBar.indicatorColor,
+      colorScheme.primary.withValues(alpha: 0.12),
+    );
     expect(
       tester.widget<Icon>(find.byIcon(Icons.calendar_month)).color,
-      colorScheme.onPrimary,
+      colorScheme.primary,
     );
     for (final key in [
       'nav-calendar',
