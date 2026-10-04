@@ -54,6 +54,8 @@ void main() {
               status: NoteProjectStatus.inProgress,
               relatedCalendarEventId: 'event-42',
             ),
+            isPinned: true,
+            color: NoteCardColor.pink,
             createdAt: createdAt,
             updatedAt: updatedAt,
           ),
@@ -94,6 +96,8 @@ void main() {
         restored.notes.single.projectMetadata?.relatedCalendarEventId,
         'event-42',
       );
+      expect(restored.notes.single.isPinned, isTrue);
+      expect(restored.notes.single.color, NoteCardColor.pink);
       expect(restored.notes.single.content, 'Review agenda');
       expect(restored.notes.single.createdAt, createdAt);
       expect(restored.notes.single.updatedAt, updatedAt);

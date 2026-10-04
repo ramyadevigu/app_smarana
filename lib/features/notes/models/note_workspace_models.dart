@@ -4,6 +4,8 @@ enum NotebookIconType { work, goals, journal, health, ideas, general }
 
 enum NoteAttachmentType { image, file }
 
+enum NoteCardColor { standard, blue, cyan, mint, lightGreen, peach, pink, lavender }
+
 enum NoteProjectPriority { low, medium, high }
 
 enum NoteProjectStatus { toDo, inProgress, done }
@@ -253,6 +255,8 @@ class NoteEntry {
     required this.createdAt,
     required this.updatedAt,
     this.reminderId,
+    this.isPinned = false,
+    this.color = NoteCardColor.standard,
   });
 
   final String id;
@@ -266,6 +270,8 @@ class NoteEntry {
   final DateTime createdAt;
   final DateTime updatedAt;
   final String? reminderId;
+  final bool isPinned;
+  final NoteCardColor color;
 
   Map<String, Object?> toJson() => {
     'id': id,
@@ -281,6 +287,8 @@ class NoteEntry {
     'createdAt': createdAt.toIso8601String(),
     'updatedAt': updatedAt.toIso8601String(),
     'reminderId': reminderId,
+    'isPinned': isPinned,
+    'color': color.name,
   };
 
   factory NoteEntry.fromJson(Map<String, Object?> json) {
@@ -305,6 +313,8 @@ class NoteEntry {
       reminderId: json['reminderId'] is String
           ? json['reminderId']! as String
           : null,
+      isPinned: json['isPinned'] is bool ? json['isPinned']! as bool : false,
+      color: _readNoteCardColor(json['color']),
     );
   }
 
@@ -359,6 +369,8 @@ class NoteEntry {
     DateTime? updatedAt,
     String? reminderId,
     bool clearReminderId = false,
+    bool? isPinned,
+    NoteCardColor? color,
   }) {
     return NoteEntry(
       id: id,
@@ -374,6 +386,8 @@ class NoteEntry {
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       reminderId: clearReminderId ? null : reminderId ?? this.reminderId,
+      isPinned: isPinned ?? this.isPinned,
+      color: color ?? this.color,
     );
   }
 }
@@ -409,14 +423,29 @@ NoteProjectStatus _readProjectStatus(Object? value) {
   return NoteProjectStatus.toDo;
 }
 
+NoteCardColor _readNoteCardColor(Object? value) {
+  if (value is String) {
+    for (final color in NoteCardColor.values) {
+      if (color.name == value) {
+        return color;
+      }
+    }
+  }
+  return NoteCardColor.standard;
+}
+
 class RecentNoteView {
   const RecentNoteView({
     required this.note,
+    required this.notebookId,
+    required this.notebookIconType,
     required this.notebookName,
     required this.sectionName,
   });
 
   final NoteEntry note;
+  final String notebookId;
+  final NotebookIconType notebookIconType;
   final String notebookName;
   final String sectionName;
 }

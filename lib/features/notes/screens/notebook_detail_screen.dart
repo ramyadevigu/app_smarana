@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../reminders/services/reminder_storage.dart';
@@ -21,11 +23,15 @@ class NotebookDetailScreen extends StatefulWidget {
     required this.notebook,
     this.onNotebookChanged,
     this.reminderStorage,
+    this.createNoteOnOpen = false,
+    this.initialNoteId,
   });
 
   final Notebook notebook;
   final Future<void> Function(Notebook notebook)? onNotebookChanged;
   final ReminderStorage? reminderStorage;
+  final bool createNoteOnOpen;
+  final String? initialNoteId;
 
   @override
   State<NotebookDetailScreen> createState() => _NotebookDetailScreenState();
@@ -45,6 +51,25 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
     _selectedSectionId = _notebook.sections.first.id;
     _reminderStorage = widget.reminderStorage ?? ReminderStorage();
     _attachmentStorage = NoteAttachmentStorage();
+    if (widget.createNoteOnOpen) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          unawaited(_createNote());
+        }
+      });
+    } else if (widget.initialNoteId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+        final matches = _notebook.notes.where(
+          (note) => note.id == widget.initialNoteId,
+        );
+        if (matches.isNotEmpty) {
+          unawaited(_editNote(matches.first));
+        }
+      });
+    }
   }
 
   List<NoteEntry> get _sectionNotes {
@@ -318,6 +343,7 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
       projectMetadata: draft.projectMetadata,
       createdAt: now,
       updatedAt: now,
+      color: draft.color,
     );
     await _publishNotebook(
       _notebook.copyWith(
@@ -349,6 +375,7 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
       updatedAt: draft.updatedAt,
       reminderId: draft.reminderId,
       clearReminderId: draft.reminderId == null,
+      color: draft.color,
     );
   }
 

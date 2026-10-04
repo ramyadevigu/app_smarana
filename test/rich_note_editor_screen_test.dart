@@ -106,4 +106,41 @@ void main() {
     expect(find.text('Share'), findsOneWidget);
     expect(find.text('Delete'), findsOneWidget);
   });
+
+  testWidgets('note color picker uses the approved theme palette', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RichNoteEditorScreen(
+          sections: [
+            NoteSection(
+              id: 'section-color',
+              name: 'General',
+              createdAt: DateTime(2026, 10, 1),
+            ),
+          ],
+          initialSectionId: 'section-color',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('note-editor-more-menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Note color'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Note colors'), findsOneWidget);
+    await tester.tap(find.byTooltip('Pink'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('note-editor-more-menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Note color'));
+    await tester.pumpAndSettle();
+
+    expect(find.bySemanticsLabel('Pink note color, selected'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }

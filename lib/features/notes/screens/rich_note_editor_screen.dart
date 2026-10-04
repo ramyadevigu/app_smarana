@@ -10,15 +10,17 @@ import 'package:uuid/uuid.dart';
 
 import '../../reminders/models/reminder.dart';
 import '../../reminders/services/reminder_storage.dart';
+import '../../../services/notification_service.dart';
 import '../models/note_repeat_option.dart';
 import '../models/note_workspace_models.dart';
 import '../models/rich_note_draft.dart';
 import '../services/note_attachment_storage.dart';
 import '../services/note_editor_autosave_service.dart';
+import '../theme/note_card_colors.dart';
 import '../widgets/note_table_embed_builder.dart';
-import '../../../services/notification_service.dart';
 
 enum _NoteEditorAction {
+  noteColor,
   addToNotebook,
   addTags,
   addAttachment,
@@ -67,6 +69,7 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
   late final quill.QuillController _quillController;
   late final ReminderStorage _reminderStorage;
   late String _selectedSectionId;
+  late NoteCardColor _selectedNoteColor;
   late List<NoteAttachment> _attachments;
   bool _toolbarExpanded = true;
   bool _isExiting = false;
@@ -99,6 +102,7 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
       _titleController.text = 'Untitled';
     }
     _selectedSectionId = note?.sectionId ?? widget.initialSectionId;
+    _selectedNoteColor = note?.color ?? NoteCardColor.standard;
     _attachments = List<NoteAttachment>.of(note?.attachments ?? const []);
     _reminderStorage = widget.reminderStorage ?? ReminderStorage();
     final metadata = note?.projectMetadata;
@@ -321,14 +325,10 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
     ];
     if (!sounds.any(
       (sound) =>
-          sound.uri == _reminderSoundUri &&
-          sound.name == _reminderSoundName,
+          sound.uri == _reminderSoundUri && sound.name == _reminderSoundName,
     )) {
       sounds.add(
-        ReminderSoundOption(
-          name: _reminderSoundName,
-          uri: _reminderSoundUri,
-        ),
+        ReminderSoundOption(name: _reminderSoundName, uri: _reminderSoundUri),
       );
     }
 
@@ -465,6 +465,7 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
       projectMetadata: projectMetadata,
       updatedAt: now,
       reminderId: _reminderId,
+      color: _selectedNoteColor,
     );
   }
 
@@ -795,9 +796,8 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
                 children: [
                   Text(
                     'Reminder',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
+                    style: Theme.of(context).textTheme.titleLarge
+                        ?.copyWith(fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(height: 10),
                   _buildReminderSection(() => refreshSheet(() {})),
@@ -1059,9 +1059,7 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
   }
 
   Future<void> _showTagsDialog() async {
-    final controller = TextEditingController(
-      text: _projectTagsController.text,
-    );
+    final controller = TextEditingController(text: _projectTagsController.text);
     final tags = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
@@ -1140,9 +1138,8 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
       await _flushAutosave();
       await onDuplicate(_buildDraft());
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Note duplicated.')),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Note duplicated.')));
       }
     } on Exception catch (error) {
       _showAttachmentError('Could not duplicate note: $error');
@@ -1204,6 +1201,9 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
 
   void _handleMoreAction(_NoteEditorAction action) {
     switch (action) {
+      case _NoteEditorAction.noteColor:
+        unawaited(_showNoteColorPicker());
+        break;
       case _NoteEditorAction.addToNotebook:
         unawaited(_openSectionPicker());
         break;
@@ -1223,6 +1223,83 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
         unawaited(_deleteCurrentNote());
         break;
     }
+  }
+
+  Future<void> _showNoteColorPicker() async {
+    final selectedColor = await showModalBottomSheet<NoteCardColor>(
+      context: context,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (context) {
+        final theme = Theme.of(context);
+        final colorScheme = theme.colorScheme;
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Note colors',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Wrap(
+                spacing: 14,
+                runSpacing: 14,
+                children: [
+                  for (final noteColor in NoteCardColor.values)
+                    Semantics(
+                      button: true,
+                      selected: _selectedNoteColor == noteColor,
+                      label:
+                          '${noteCardColorLabel(noteColor)} note color'
+                          '${_selectedNoteColor == noteColor ? ', selected' : ''}',
+                      child: Tooltip(
+                        message: noteCardColorLabel(noteColor),
+                        child: InkWell(
+                          customBorder: const CircleBorder(),
+                          onTap: () => Navigator.of(context).pop(noteColor),
+                          child: Container(
+                            width: 42,
+                            height: 42,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: noteCardSwatchColor(theme, noteColor),
+                              border: Border.all(
+                                color: _selectedNoteColor == noteColor
+                                    ? colorScheme.primary
+                                    : colorScheme.outlineVariant,
+                                width: _selectedNoteColor == noteColor
+                                    ? 2.5
+                                    : 1,
+                              ),
+                            ),
+                            child: _selectedNoteColor == noteColor
+                                ? Icon(
+                                    Icons.check_rounded,
+                                    size: 19,
+                                    color: colorScheme.onSurface,
+                                  )
+                                : null,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    if (selectedColor == null || !mounted) {
+      return;
+    }
+    setState(() => _selectedNoteColor = selectedColor);
+    _queueAutosave();
   }
 
   Future<void> _showProjectDetails() async {
@@ -1560,9 +1637,8 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
                   child: Text(
                     widget.notebookName!,
                     overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                    ),
+                    style: Theme.of(context).textTheme.labelSmall
+                        ?.copyWith(color: colorScheme.onSurfaceVariant),
                   ),
                 ),
               ],
@@ -1575,9 +1651,8 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
                   }
                   return Text(
                     value,
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                    ),
+                    style: Theme.of(context).textTheme.labelSmall
+                        ?.copyWith(color: colorScheme.onSurfaceVariant),
                   );
                 },
               ),
@@ -1641,9 +1716,8 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
               isDense: true,
               contentPadding: EdgeInsets.zero,
             ),
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
+            style: Theme.of(context).textTheme.titleLarge
+                ?.copyWith(fontWeight: FontWeight.w700),
           ),
           actions: [
             IconButton(
@@ -1662,6 +1736,14 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
               icon: const Icon(Icons.more_vert_rounded),
               onSelected: _handleMoreAction,
               itemBuilder: (context) => const [
+                PopupMenuItem<_NoteEditorAction>(
+                  value: _NoteEditorAction.noteColor,
+                  child: ListTile(
+                    dense: true,
+                    leading: Icon(Icons.palette_outlined),
+                    title: Text('Note color'),
+                  ),
+                ),
                 PopupMenuItem<_NoteEditorAction>(
                   value: _NoteEditorAction.addToNotebook,
                   child: ListTile(
@@ -1730,12 +1812,7 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
                           controller: _quillController,
                           config: quill.QuillEditorConfig(
                             autoFocus: true,
-                            padding: const EdgeInsets.fromLTRB(
-                              60,
-                              16,
-                              18,
-                              24,
-                            ),
+                            padding: const EdgeInsets.fromLTRB(60, 16, 18, 24),
                             embedBuilders: const [NoteTableEmbedBuilder()],
                           ),
                         ),

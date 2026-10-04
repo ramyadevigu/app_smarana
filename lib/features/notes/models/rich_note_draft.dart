@@ -10,6 +10,7 @@ class RichNoteDraft {
     this.projectMetadata,
     required this.updatedAt,
     this.reminderId,
+    this.color = NoteCardColor.standard,
   });
 
   final String title;
@@ -20,4 +21,5 @@ class RichNoteDraft {
   final NoteProjectMetadata? projectMetadata;
   final DateTime updatedAt;
   final String? reminderId;
+  final NoteCardColor color;
 }
