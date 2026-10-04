@@ -2,6 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../theme/app_design_tokens.dart';
+import '../../theme/premium_surface.dart';
+
 class StopwatchScreen extends StatefulWidget {
   const StopwatchScreen({super.key, required this.appMenu});
 
@@ -113,22 +116,36 @@ class _StopwatchScreenState extends State<StopwatchScreen> {
                   children: [
                     Expanded(
                       child: Center(
-                        child: ValueListenableBuilder<Duration>(
-                          valueListenable: _elapsed,
-                          builder: (context, elapsed, _) => Semantics(
-                            label: 'Elapsed time ${_formatDuration(elapsed)}',
-                            liveRegion: true,
-                            child: FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: Text(
-                                _formatDuration(elapsed),
-                                key: const ValueKey('stopwatch-display'),
-                                style: theme.textTheme.displayMedium?.copyWith(
-                                  fontFeatures: const [
-                                    FontFeature.tabularFigures(),
-                                  ],
-                                  fontWeight: FontWeight.w300,
-                                  color: colorScheme.onSurface,
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 760),
+                          child: PremiumSurface(
+                            padding: const EdgeInsets.all(24),
+                            radius: AppRadius.section,
+                            elevation: AppElevation.subtle,
+                            glass: true,
+                            child: SizedBox(
+                              width: double.infinity,
+                              child: ValueListenableBuilder<Duration>(
+                                valueListenable: _elapsed,
+                                builder: (context, elapsed, _) => Semantics(
+                                  label:
+                                      'Elapsed time ${_formatDuration(elapsed)}',
+                                  liveRegion: true,
+                                  child: FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    child: Text(
+                                      _formatDuration(elapsed),
+                                      key: const ValueKey('stopwatch-display'),
+                                      style: theme.textTheme.displayMedium
+                                          ?.copyWith(
+                                            fontFeatures: const [
+                                              FontFeature.tabularFigures(),
+                                            ],
+                                            fontWeight: FontWeight.w300,
+                                            color: colorScheme.onSurface,
+                                          ),
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),
@@ -144,11 +161,9 @@ class _StopwatchScreenState extends State<StopwatchScreen> {
                       const SizedBox(height: 8),
                       SizedBox(
                         height: 180,
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            color: colorScheme.surfaceContainerHighest,
-                            borderRadius: BorderRadius.circular(16),
-                          ),
+                        child: PremiumSurface(
+                          radius: AppRadius.compactCard,
+                          glass: true,
                           child: ListView.separated(
                             key: const ValueKey('stopwatch-laps'),
                             padding: const EdgeInsets.symmetric(vertical: 4),

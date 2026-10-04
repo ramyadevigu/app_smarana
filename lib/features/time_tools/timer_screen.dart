@@ -4,6 +4,9 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../theme/app_design_tokens.dart';
+import '../../theme/premium_surface.dart';
+
 class TimerScreen extends StatefulWidget {
   const TimerScreen({super.key, required this.appMenu});
 
@@ -175,6 +178,7 @@ class _TimerScreenState extends State<TimerScreen> {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
+      showDragHandle: false,
       backgroundColor: Theme.of(context).colorScheme.surface,
       builder: (context) => _TimerSetupSheet(onSave: _addTimer),
     );
@@ -308,8 +312,12 @@ class _SavedTimerCard extends StatelessWidget {
           color: colorScheme.surfaceContainerLow,
           margin: EdgeInsets.zero,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(AppRadius.card),
+            side: BorderSide(
+              color: colorScheme.outlineVariant.withValues(alpha: 0.72),
+            ),
           ),
+          elevation: 0,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(12, 8, 8, 12),
             child: Column(
@@ -433,22 +441,46 @@ class _EmptyTimersState extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.hourglass_empty, size: 40, color: colorScheme.primary),
-          const SizedBox(height: 12),
-          Text(
-            'No saved timers',
-            style: Theme.of(context).textTheme.titleMedium,
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: PremiumSurface(
+            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 36),
+            radius: AppRadius.section,
+            glass: true,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 68,
+                  height: 68,
+                  decoration: BoxDecoration(
+                    color: colorScheme.primary.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.hourglass_empty,
+                    size: 32,
+                    color: colorScheme.primary,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'No saved timers',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Add a timer to keep it here for later.',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodyMedium
+                      ?.copyWith(color: colorScheme.onSurfaceVariant),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 4),
-          Text(
-            'Add a timer to keep it here for later.',
-            style: Theme.of(context).textTheme.bodyMedium
-                ?.copyWith(color: colorScheme.onSurfaceVariant),
-          ),
-        ],
+        ),
       ),
     );
   }

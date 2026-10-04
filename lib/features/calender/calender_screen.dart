@@ -7,6 +7,8 @@ import '../reminders/screens/add_reminder_screen.dart';
 import '../reminders/services/reminder_storage.dart';
 import 'services/calendar_service.dart';
 import 'theme/calendar_colors.dart';
+import '../../theme/app_design_tokens.dart';
+import '../../theme/premium_surface.dart';
 
 const _calendarMonthNames = [
   'January',
@@ -439,9 +441,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
           const SizedBox(height: 8),
           Expanded(
             child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 260),
-              switchInCurve: Curves.easeInOutCubic,
-              switchOutCurve: Curves.easeInOutCubic,
+              duration: AppMotion.resolve(context, AppMotion.component),
+              switchInCurve: AppMotion.standard,
+              switchOutCurve: AppMotion.standard,
               transitionBuilder: (child, animation) => FadeTransition(
                 opacity: animation,
                 child: SlideTransition(
@@ -527,7 +529,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
                         },
                         onPointerCancel: (_) => _monthPointerStart = null,
                         child: AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 300),
+                          duration: AppMotion.resolve(
+                            context,
+                            AppMotion.screen,
+                          ),
                           switchInCurve: Curves.easeOutCubic,
                           switchOutCurve: Curves.easeInCubic,
                           transitionBuilder: _buildMonthTransition,
@@ -608,7 +613,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
             },
             onPointerCancel: (_) => _monthPointerStart = null,
             child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 300),
+              duration: AppMotion.resolve(context, AppMotion.screen),
               switchInCurve: Curves.easeOutCubic,
               switchOutCurve: Curves.easeInCubic,
               transitionBuilder: _buildMonthTransition,
@@ -650,7 +655,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     final direction = _monthTransitionDirection;
     return AnimatedSwitcher(
       key: key,
-      duration: const Duration(milliseconds: 280),
+      duration: AppMotion.resolve(context, AppMotion.component),
       switchInCurve: Curves.easeOutCubic,
       switchOutCurve: Curves.easeInCubic,
       transitionBuilder: (child, animation) {
@@ -1081,7 +1086,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
                       onTap: () => onDateSelected(date),
                       borderRadius: BorderRadius.circular(10),
                       child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 180),
+                        duration: AppMotion.resolve(
+                          context,
+                          AppMotion.interaction,
+                        ),
                         margin: const EdgeInsets.symmetric(horizontal: 2),
                         decoration: BoxDecoration(
                           color: _sameDay(date, _selectedDate)
@@ -1270,81 +1278,92 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
   Widget _buildCalendarHeader(BuildContext context) {
     final localizations = MaterialLocalizations.of(context);
-    return SizedBox(
-      height: 48,
-      child: Row(
-        children: [
-          if (_activeViewMode == CalendarViewMode.week ||
-              _activeViewMode == CalendarViewMode.day)
-            IconButton(
-              key: const ValueKey('calendar-hierarchy-back'),
-              tooltip: _activeViewMode == CalendarViewMode.day
-                  ? 'Back to Week'
-                  : 'Back to Month',
-              visualDensity: VisualDensity.compact,
-              onPressed: () => _selectViewMode(
-                _activeViewMode == CalendarViewMode.day
-                    ? CalendarViewMode.week
-                    : CalendarViewMode.month,
+    return PremiumSurface(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      radius: AppRadius.compactCard,
+      elevation: AppElevation.subtle,
+      glass: true,
+      child: SizedBox(
+        height: 48,
+        child: Row(
+          children: [
+            if (_activeViewMode == CalendarViewMode.week ||
+                _activeViewMode == CalendarViewMode.day)
+              IconButton(
+                key: const ValueKey('calendar-hierarchy-back'),
+                tooltip: _activeViewMode == CalendarViewMode.day
+                    ? 'Back to Week'
+                    : 'Back to Month',
+                visualDensity: VisualDensity.compact,
+                onPressed: () => _selectViewMode(
+                  _activeViewMode == CalendarViewMode.day
+                      ? CalendarViewMode.week
+                      : CalendarViewMode.month,
+                ),
+                icon: const Icon(Icons.chevron_left),
               ),
-              icon: const Icon(Icons.chevron_left),
-            ),
-          Expanded(
-            child: Semantics(
-              button: true,
-              label: _activeViewMode == CalendarViewMode.year
-                  ? 'Choose year ${_displayedMonth.year}'
-                  : 'Choose ${localizations.formatMonthYear(_displayedMonth)}',
-              child: InkWell(
-                key: const ValueKey('calendar-select-date'),
-                borderRadius: BorderRadius.circular(8),
-                onTap: _pickDate,
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 180),
-                    child: Text.rich(
-                      TextSpan(
-                        children: _activeViewMode == CalendarViewMode.year
-                            ? [TextSpan(text: '${_displayedMonth.year}')]
-                            : [
-                                TextSpan(
-                                  text:
-                                      _calendarMonthNames[_displayedMonth
-                                              .month -
-                                          1],
-                                ),
-                                TextSpan(
-                                  text: ' ${_displayedMonth.year}',
-                                  style: Theme.of(context).textTheme.labelMedium
-                                      ?.copyWith(
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .onSurfaceVariant,
-                                      ),
-                                ),
-                              ],
+            Expanded(
+              child: Semantics(
+                button: true,
+                label: _activeViewMode == CalendarViewMode.year
+                    ? 'Choose year ${_displayedMonth.year}'
+                    : 'Choose ${localizations.formatMonthYear(_displayedMonth)}',
+                child: InkWell(
+                  key: const ValueKey('calendar-select-date'),
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: _pickDate,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: AnimatedSwitcher(
+                      duration: AppMotion.resolve(
+                        context,
+                        AppMotion.interaction,
                       ),
-                      key: ValueKey(
-                        'calendar-month-title-${_displayedMonth.year}-'
-                        '${_displayedMonth.month}',
+                      child: Text.rich(
+                        TextSpan(
+                          children: _activeViewMode == CalendarViewMode.year
+                              ? [TextSpan(text: '${_displayedMonth.year}')]
+                              : [
+                                  TextSpan(
+                                    text:
+                                        _calendarMonthNames[_displayedMonth
+                                                .month -
+                                            1],
+                                  ),
+                                  TextSpan(
+                                    text: ' ${_displayedMonth.year}',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelMedium
+                                        ?.copyWith(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurfaceVariant,
+                                        ),
+                                  ),
+                                ],
+                        ),
+                        key: ValueKey(
+                          'calendar-month-title-${_displayedMonth.year}-'
+                          '${_displayedMonth.month}',
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleLarge
+                            ?.copyWith(fontWeight: FontWeight.w700),
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleLarge
-                          ?.copyWith(fontWeight: FontWeight.w700),
                     ),
                   ),
                 ),
               ),
             ),
-          ),
-          CalendarViewSelector(
-            selectedMode: _activeViewMode,
-            onSelected: _selectViewMode,
-          ),
-          _buildMoreMenu(),
-        ],
+            CalendarViewSelector(
+              selectedMode: _activeViewMode,
+              onSelected: _selectViewMode,
+            ),
+            _buildMoreMenu(),
+          ],
+        ),
       ),
     );
   }
@@ -1453,33 +1472,41 @@ class _CalendarScreenState extends State<CalendarScreen> {
       builder: (context, constraints) {
         final cellCount = twoWeekPreview ? 14 : _monthGridCellCount();
         final rowCount = cellCount ~/ 7;
-        final cellExtent = constraints.maxHeight / rowCount;
+        final surfacePadding = compact ? 2.0 : 4.0;
+        final cellExtent =
+            (constraints.maxHeight - surfacePadding * 2) / rowCount;
         final firstGridDate = twoWeekPreview
             ? _weekStart(_selectedDate).subtract(const Duration(days: 7))
             : _monthGridStartDate(monthContext ?? _displayedMonth);
-        return GridView.builder(
-          key: ValueKey(
-            twoWeekPreview ? 'calendar-week-preview' : 'calendar-month-grid',
+        return PremiumSurface(
+          padding: EdgeInsets.all(surfacePadding),
+          radius: AppRadius.section,
+          elevation: AppElevation.subtle,
+          glass: true,
+          child: GridView.builder(
+            key: ValueKey(
+              twoWeekPreview ? 'calendar-week-preview' : 'calendar-month-grid',
+            ),
+            padding: EdgeInsets.zero,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: cellCount,
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 7,
+              mainAxisExtent: cellExtent,
+            ),
+            itemBuilder: (context, index) {
+              final date = firstGridDate.add(Duration(days: index));
+              return _buildDateCell(
+                context,
+                date,
+                monthOnly: monthOnly,
+                compact: compact,
+                monthContext: monthContext,
+                selectedDateContext: selectedDateContext,
+                occurrencesByDateContext: occurrencesByDateContext,
+              );
+            },
           ),
-          padding: EdgeInsets.zero,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: cellCount,
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 7,
-            mainAxisExtent: cellExtent,
-          ),
-          itemBuilder: (context, index) {
-            final date = firstGridDate.add(Duration(days: index));
-            return _buildDateCell(
-              context,
-              date,
-              monthOnly: monthOnly,
-              compact: compact,
-              monthContext: monthContext,
-              selectedDateContext: selectedDateContext,
-              occurrencesByDateContext: occurrencesByDateContext,
-            );
-          },
         );
       },
     );
@@ -1659,7 +1686,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 key: ValueKey(
                   'calendar-day-marker-${date.year}-${date.month}-${date.day}',
                 ),
-                duration: const Duration(milliseconds: 210),
+                duration: AppMotion.resolve(context, AppMotion.interaction),
                 curve: Curves.easeOutCubic,
                 width: compact ? 11 : 32,
                 height: compact ? 11 : 32,
@@ -1675,7 +1702,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                       : null,
                 ),
                 child: AnimatedDefaultTextStyle(
-                  duration: const Duration(milliseconds: 210),
+                  duration: AppMotion.resolve(context, AppMotion.interaction),
                   curve: Curves.easeOutCubic,
                   style:
                       (compact

@@ -4,7 +4,9 @@ import '../calender/models/calendar_view_mode.dart';
 import '../../services/notification_service.dart';
 import '../../theme/app_colors.dart';
 import '../reminders/models/reminder.dart';
+import '../../theme/app_design_tokens.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/premium_surface.dart';
 import 'services/reminder_preferences_store.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -226,73 +228,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
         children: [
-          _sectionHeading(
-            context,
-            Icons.notifications_active_outlined,
-            'Notifications',
-          ),
-          const SizedBox(height: 12),
-          _settingsGroup(
-            colorScheme,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                child: Text(
-                  'Default notification',
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
-              ),
-              RadioGroup<ReminderNotificationMode>(
-                groupValue: _defaults.notificationMode,
-                onChanged: (mode) {
-                  if (mode != null) {
-                    _updateDefaults(_defaults.copyWith(notificationMode: mode));
-                  }
-                },
-                child: const Column(
-                  children: [
-                    RadioListTile<ReminderNotificationMode>(
-                      dense: true,
-                      value: ReminderNotificationMode.alarmAndNotification,
-                      title: Text('Alarm + Notification'),
-                    ),
-                    RadioListTile<ReminderNotificationMode>(
-                      dense: true,
-                      value: ReminderNotificationMode.notificationOnly,
-                      title: Text('Notification only'),
-                    ),
-                  ],
-                ),
-              ),
-              const Divider(height: 1),
-              ListTile(
-                key: const ValueKey('settings-default-ringtone'),
-                leading: const Icon(Icons.music_note_outlined),
-                title: const Text('Default ringtone'),
-                subtitle: Text(_defaults.soundName),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: _selectSound,
-              ),
-              const Divider(height: 1),
-              ListTile(
-                key: const ValueKey('settings-default-snooze'),
-                leading: const Icon(Icons.snooze_outlined),
-                title: const Text('Alarm snooze duration'),
-                subtitle: const Text('15 minutes'),
-              ),
-              const Divider(height: 1),
-              SwitchListTile(
-                key: const ValueKey('settings-default-vibration'),
-                secondary: const Icon(Icons.vibration_outlined),
-                title: const Text('Vibration'),
-                subtitle: Text(_defaults.vibrate ? 'On' : 'Off'),
-                value: _defaults.vibrate,
-                onChanged: (value) =>
-                    _updateDefaults(_defaults.copyWith(vibrate: value)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 28),
           _sectionHeading(context, Icons.palette_outlined, 'Appearance'),
           const SizedBox(height: 12),
           _settingsGroup(
@@ -379,6 +314,73 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ],
           ),
+          const SizedBox(height: 28),
+          _sectionHeading(
+            context,
+            Icons.notifications_active_outlined,
+            'Notifications',
+          ),
+          const SizedBox(height: 12),
+          _settingsGroup(
+            colorScheme,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                child: Text(
+                  'Default notification',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+              ),
+              RadioGroup<ReminderNotificationMode>(
+                groupValue: _defaults.notificationMode,
+                onChanged: (mode) {
+                  if (mode != null) {
+                    _updateDefaults(_defaults.copyWith(notificationMode: mode));
+                  }
+                },
+                child: const Column(
+                  children: [
+                    RadioListTile<ReminderNotificationMode>(
+                      dense: true,
+                      value: ReminderNotificationMode.alarmAndNotification,
+                      title: Text('Alarm + Notification'),
+                    ),
+                    RadioListTile<ReminderNotificationMode>(
+                      dense: true,
+                      value: ReminderNotificationMode.notificationOnly,
+                      title: Text('Notification only'),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                key: const ValueKey('settings-default-ringtone'),
+                leading: const Icon(Icons.music_note_outlined),
+                title: const Text('Default ringtone'),
+                subtitle: Text(_defaults.soundName),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: _selectSound,
+              ),
+              const Divider(height: 1),
+              ListTile(
+                key: const ValueKey('settings-default-snooze'),
+                leading: const Icon(Icons.snooze_outlined),
+                title: const Text('Alarm snooze duration'),
+                subtitle: const Text('15 minutes'),
+              ),
+              const Divider(height: 1),
+              SwitchListTile(
+                key: const ValueKey('settings-default-vibration'),
+                secondary: const Icon(Icons.vibration_outlined),
+                title: const Text('Vibration'),
+                subtitle: Text(_defaults.vibrate ? 'On' : 'Off'),
+                value: _defaults.vibrate,
+                onChanged: (value) =>
+                    _updateDefaults(_defaults.copyWith(vibrate: value)),
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -399,14 +401,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ColorScheme colorScheme, {
     required List<Widget> children,
   }) {
-    return Material(
+    return PremiumSurface(
       color: colorScheme.surfaceContainerLow,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: colorScheme.outlineVariant),
+      radius: AppRadius.card,
+      glass: true,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        child: Material(
+          color: Colors.transparent,
+          child: Column(mainAxisSize: MainAxisSize.min, children: children),
+        ),
       ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(mainAxisSize: MainAxisSize.min, children: children),
     );
   }
 }

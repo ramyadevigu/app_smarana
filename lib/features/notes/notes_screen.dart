@@ -4,10 +4,12 @@ import 'package:flutter/material.dart';
 
 import '../reminders/models/reminder.dart';
 import '../reminders/services/reminder_storage.dart';
+import '../../../theme/app_design_tokens.dart';
 import 'models/note_workspace_models.dart';
 import 'screens/all_notes_screen.dart';
 import 'screens/notebook_detail_screen.dart';
 import '../../../theme/app_colors.dart';
+import '../../../theme/premium_surface.dart';
 import 'theme/note_card_colors.dart';
 import 'theme/notebook_colors.dart';
 import 'services/note_workspace_storage.dart';
@@ -1036,77 +1038,62 @@ class _NotesScreenState extends State<NotesScreen> {
           if (widget.appMenu != null) widget.appMenu!,
         ],
       ),
-      body: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              theme.colorScheme.surface,
-              Color.lerp(
-                theme.colorScheme.surface,
-                theme.colorScheme.primaryContainer,
-                theme.brightness == Brightness.light ? 0.12 : 0.08,
-              )!,
-            ],
-          ),
-        ),
-        child: _isLoading
-            ? _buildLoadingState(context)
-            : SafeArea(
-                top: false,
-                child: GestureDetector(
-                  onTap: () => FocusScope.of(context).unfocus(),
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      final isWide = constraints.maxWidth >= 720;
-                      return SingleChildScrollView(
-                        keyboardDismissBehavior:
-                            ScrollViewKeyboardDismissBehavior.onDrag,
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            if (_storageError != null)
-                              Padding(
-                                padding: const EdgeInsets.only(bottom: 12),
-                                child: MaterialBanner(
-                                  content: Text(_storageError!),
-                                  leading: const Icon(
-                                    Icons.warning_amber_rounded,
-                                  ),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: _loadWorkspace,
-                                      child: const Text('Retry'),
-                                    ),
-                                  ],
+      body: _isLoading
+          ? _buildLoadingState(context)
+          : SafeArea(
+              top: false,
+              child: GestureDetector(
+                onTap: () => FocusScope.of(context).unfocus(),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isWide = constraints.maxWidth >= 720;
+                    return SingleChildScrollView(
+                      keyboardDismissBehavior:
+                          ScrollViewKeyboardDismissBehavior.onDrag,
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (_storageError != null)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: MaterialBanner(
+                                content: Text(_storageError!),
+                                leading: const Icon(
+                                  Icons.warning_amber_rounded,
                                 ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: _loadWorkspace,
+                                    child: const Text('Retry'),
+                                  ),
+                                ],
                               ),
-                            AnimatedSize(
-                              duration: const Duration(milliseconds: 220),
-                              curve: Curves.easeInOut,
-                              alignment: Alignment.topCenter,
-                              child: _isSearchExpanded
-                                  ? Padding(
-                                      padding: const EdgeInsets.only(
-                                        bottom: 14,
-                                      ),
-                                      child: _buildSearchBar(context),
-                                    )
-                                  : const SizedBox(width: double.infinity),
                             ),
-                            _buildNotebookPanel(context),
-                            const SizedBox(height: 16),
-                            _buildRecentNotesSection(context, isWide: isWide),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
+                          AnimatedSize(
+                            duration: AppMotion.resolve(
+                              context,
+                              AppMotion.interaction,
+                            ),
+                            curve: AppMotion.standard,
+                            alignment: Alignment.topCenter,
+                            child: _isSearchExpanded
+                                ? Padding(
+                                    padding: const EdgeInsets.only(bottom: 14),
+                                    child: _buildSearchBar(context),
+                                  )
+                                : const SizedBox(width: double.infinity),
+                          ),
+                          _buildNotebookPanel(context),
+                          const SizedBox(height: 16),
+                          _buildRecentNotesSection(context, isWide: isWide),
+                        ],
+                      ),
+                    );
+                  },
                 ),
               ),
-      ),
+            ),
       floatingActionButton: FloatingActionButton(
         key: const ValueKey('notes-add-note-fab'),
         tooltip: 'Create note',
@@ -1134,14 +1121,12 @@ class _NotesScreenState extends State<NotesScreen> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    return Container(
+    return PremiumSurface(
       key: const ValueKey('notes-notebook-panel'),
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: colorScheme.outlineVariant),
-      ),
+      radius: AppRadius.section,
+      elevation: AppElevation.subtle,
+      glass: true,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

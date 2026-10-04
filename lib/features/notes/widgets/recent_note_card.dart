@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../theme/app_design_tokens.dart';
 import '../models/note_workspace_models.dart';
 import '../theme/note_card_colors.dart';
 import '../theme/notebook_colors.dart';
@@ -30,7 +31,7 @@ class RecentNoteCard extends StatelessWidget {
     final colorScheme = theme.colorScheme;
     final cardAccent = noteCardAccentColor(theme, note.note.color);
     final notebookAccent = notebookAccentColor(theme, note.notebookColorValue);
-    final borderRadius = BorderRadius.circular(18);
+    final borderRadius = BorderRadius.circular(AppRadius.card);
 
     return ClipRRect(
       key: ValueKey('recent-note-card-${note.note.id}'),
@@ -52,9 +53,11 @@ class RecentNoteCard extends StatelessWidget {
             ),
             boxShadow: [
               BoxShadow(
-                color: colorScheme.shadow.withValues(alpha: 0.06),
-                blurRadius: 18,
-                offset: const Offset(0, 8),
+                color: colorScheme.shadow.withValues(
+                  alpha: theme.brightness == Brightness.light ? 0.04 : 0.12,
+                ),
+                blurRadius: 12,
+                offset: const Offset(0, 3),
               ),
             ],
           ),

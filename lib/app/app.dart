@@ -15,6 +15,8 @@ import '../features/settings/settings_screen.dart';
 import '../features/time_tools/stopwatch_screen.dart';
 import '../features/time_tools/timer_screen.dart';
 import '../services/notification_service.dart';
+import '../theme/app_backdrop.dart';
+import '../theme/app_design_tokens.dart';
 import '../theme/app_theme.dart';
 import '../theme/theme_preference_store.dart';
 
@@ -220,9 +222,13 @@ class _AppSmaranaState extends State<AppSmarana> {
       navigatorKey: _navigatorKey,
       title: 'Total Reminders',
       debugShowCheckedModeBanner: false,
+      builder: (context, child) =>
+          AppBackdrop(child: child ?? const SizedBox.shrink()),
       theme: buildLightTheme(_accentColor),
       darkTheme: buildDarkTheme(_accentColor),
       themeMode: _themeMode,
+      themeAnimationDuration: AppMotion.theme,
+      themeAnimationCurve: AppMotion.standard,
       home: HomeScreen(
         selectedThemeMode: _themeMode,
         onThemeModeChanged: _changeThemeMode,
@@ -280,67 +286,100 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isLight = Theme.of(context).brightness == Brightness.light;
     return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: List<Widget>.generate(5, _buildTab),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1280),
+          child: IndexedStack(
+            index: _currentIndex,
+            children: List<Widget>.generate(5, _buildTab),
+          ),
+        ),
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _currentIndex,
-        indicatorColor: Theme.of(context).colorScheme.primary,
-        onDestinationSelected: (index) {
-          setState(() {
-            _visitedTabs.add(index);
-            _currentIndex = index;
-          });
-        },
-        destinations: [
-          NavigationDestination(
-            key: ValueKey('nav-calendar'),
-            icon: Icon(Icons.calendar_month_outlined),
-            selectedIcon: Icon(
-              Icons.calendar_month,
-              color: Theme.of(context).colorScheme.onPrimary,
+      bottomNavigationBar: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: colorScheme.surfaceContainerLow.withValues(
+              alpha: isLight ? 0.94 : 0.92,
             ),
-            label: 'Calendar',
-          ),
-          NavigationDestination(
-            key: ValueKey('nav-notes'),
-            icon: Icon(Icons.sticky_note_2_outlined),
-            selectedIcon: Icon(
-              Icons.sticky_note_2,
-              color: Theme.of(context).colorScheme.onPrimary,
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: colorScheme.outlineVariant.withValues(alpha: 0.75),
             ),
-            label: 'Notes',
+            boxShadow: [
+              BoxShadow(
+                color: colorScheme.shadow.withValues(
+                  alpha: isLight ? 0.07 : 0.2,
+                ),
+                blurRadius: 20,
+                offset: const Offset(0, 6),
+              ),
+            ],
           ),
-          NavigationDestination(
-            key: ValueKey('nav-alarms'),
-            icon: Icon(Icons.notifications_none),
-            selectedIcon: Icon(
-              Icons.notifications_active,
-              color: Theme.of(context).colorScheme.onPrimary,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(22),
+            child: NavigationBar(
+              selectedIndex: _currentIndex,
+              indicatorColor: colorScheme.primary,
+              onDestinationSelected: (index) {
+                setState(() {
+                  _visitedTabs.add(index);
+                  _currentIndex = index;
+                });
+              },
+              destinations: [
+                NavigationDestination(
+                  key: ValueKey('nav-calendar'),
+                  icon: Icon(Icons.calendar_month_outlined),
+                  selectedIcon: Icon(
+                    Icons.calendar_month,
+                    color: colorScheme.onPrimary,
+                  ),
+                  label: 'Calendar',
+                ),
+                NavigationDestination(
+                  key: ValueKey('nav-notes'),
+                  icon: Icon(Icons.sticky_note_2_outlined),
+                  selectedIcon: Icon(
+                    Icons.sticky_note_2,
+                    color: colorScheme.onPrimary,
+                  ),
+                  label: 'Notes',
+                ),
+                NavigationDestination(
+                  key: ValueKey('nav-alarms'),
+                  icon: Icon(Icons.notifications_none),
+                  selectedIcon: Icon(
+                    Icons.notifications_active,
+                    color: colorScheme.onPrimary,
+                  ),
+                  label: 'Alarms',
+                ),
+                NavigationDestination(
+                  key: ValueKey('nav-stopwatch'),
+                  icon: Icon(Icons.av_timer_outlined),
+                  selectedIcon: Icon(
+                    Icons.av_timer,
+                    color: colorScheme.onPrimary,
+                  ),
+                  label: 'Stopwatch',
+                ),
+                NavigationDestination(
+                  key: ValueKey('nav-timer'),
+                  icon: Icon(Icons.hourglass_bottom_outlined),
+                  selectedIcon: Icon(
+                    Icons.hourglass_bottom,
+                    color: colorScheme.onPrimary,
+                  ),
+                  label: 'Timer',
+                ),
+              ],
             ),
-            label: 'Alarms',
           ),
-          NavigationDestination(
-            key: ValueKey('nav-stopwatch'),
-            icon: Icon(Icons.av_timer_outlined),
-            selectedIcon: Icon(
-              Icons.av_timer,
-              color: Theme.of(context).colorScheme.onPrimary,
-            ),
-            label: 'Stopwatch',
-          ),
-          NavigationDestination(
-            key: ValueKey('nav-timer'),
-            icon: Icon(Icons.hourglass_bottom_outlined),
-            selectedIcon: Icon(
-              Icons.hourglass_bottom,
-              color: Theme.of(context).colorScheme.onPrimary,
-            ),
-            label: 'Timer',
-          ),
-        ],
+        ),
       ),
     );
   }

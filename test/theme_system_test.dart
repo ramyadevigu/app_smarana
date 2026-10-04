@@ -1,4 +1,5 @@
 import 'package:app_smarana/app/app.dart';
+import 'package:app_smarana/theme/app_design_tokens.dart';
 import 'package:app_smarana/theme/app_theme.dart';
 import 'package:app_smarana/theme/theme_preference_store.dart';
 import 'package:flutter/material.dart';
@@ -15,6 +16,28 @@ void main() {
       buildLightTheme().pageTransitionsTheme.builders[TargetPlatform.android],
       isA<ZoomPageTransitionsBuilder>(),
     );
+  });
+
+  testWidgets('component motion respects reduced-motion preferences', (
+    tester,
+  ) async {
+    late Duration resolvedDuration;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(disableAnimations: true),
+          child: Builder(
+            builder: (context) {
+              resolvedDuration = AppMotion.resolve(context, AppMotion.screen);
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+      ),
+    );
+
+    expect(resolvedDuration, Duration.zero);
   });
 
   testWidgets('theme selection switches immediately and persists', (

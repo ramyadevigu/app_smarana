@@ -8,6 +8,7 @@ import 'package:flutter_quill/flutter_quill.dart' as quill;
 import 'package:share_plus/share_plus.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../theme/app_design_tokens.dart';
 import '../../reminders/models/reminder.dart';
 import '../../reminders/services/reminder_storage.dart';
 import '../../../services/notification_service.dart';
@@ -1313,7 +1314,7 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
           customBorder: const CircleBorder(),
           onTap: onTap,
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 160),
+            duration: AppMotion.resolve(context, AppMotion.micro),
             width: 42,
             height: 42,
             decoration: BoxDecoration(
@@ -1927,7 +1928,7 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
                         Navigator.of(context)
                             .pop(_FormattingColorChoice(colors[index], target)),
                     child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 150),
+                      duration: AppMotion.resolve(context, AppMotion.micro),
                       width: 38,
                       height: 38,
                       decoration: BoxDecoration(
@@ -2066,7 +2067,7 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
     ];
 
     return AnimatedSize(
-      duration: const Duration(milliseconds: 220),
+      duration: AppMotion.resolve(context, AppMotion.interaction),
       curve: Curves.easeOutCubic,
       alignment: Alignment.topLeft,
       child: Material(
