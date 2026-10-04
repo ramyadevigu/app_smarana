@@ -144,6 +144,7 @@ class NotificationService implements ReminderNotificationScheduler {
   final bool _isAndroid;
   final DateTime Function() _now;
   final Future<String> Function() _localTimezone;
+  Future<void>? _initialization;
   bool _exactAlarmAllowed = true;
   bool _alarmRuntimeAvailable = false;
 
@@ -183,6 +184,24 @@ class NotificationService implements ReminderNotificationScheduler {
   }
 
   Future<void> initialize() async {
+    final currentInitialization = _initialization;
+    if (currentInitialization != null) {
+      return currentInitialization;
+    }
+
+    final initialization = _initialize();
+    _initialization = initialization;
+    try {
+      await initialization;
+    } on Object {
+      if (identical(_initialization, initialization)) {
+        _initialization = null;
+      }
+      rethrow;
+    }
+  }
+
+  Future<void> _initialize() async {
     await _initializeTimezone();
     _exactAlarmAllowed = await _notificationPlatform.initialize(
       requestPermissions: true,
@@ -244,6 +263,11 @@ class NotificationService implements ReminderNotificationScheduler {
   /// reconciliation rebuilds these schedules from persisted reminders.
   @override
   Future<void> scheduleReminder(Reminder reminder) async {
+    final initialization = _initialization;
+    if (initialization != null) {
+      await initialization;
+    }
+
     final id = await _notificationIdFor(reminder.id);
     if (_isAndroid) {
       await _recurrenceAlarmPlatform.cancel(id);
@@ -325,6 +349,11 @@ class NotificationService implements ReminderNotificationScheduler {
 
   @override
   Future<void> cancelReminder(String reminderId) async {
+    final initialization = _initialization;
+    if (initialization != null) {
+      await initialization;
+    }
+
     final id =
         await _storedNotificationIdFor(reminderId) ??
         _notificationIdHash(reminderId);

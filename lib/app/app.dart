@@ -28,11 +28,13 @@ class AppSmarana extends StatefulWidget {
     this.initialThemeMode = ThemeMode.system,
     this.initialAccentColor = defaultAccentColor,
     this.themePreferenceStore = const ThemePreferenceStore(),
+    this.initializeServicesAfterFirstFrame,
   });
 
   final ThemeMode initialThemeMode;
   final Color initialAccentColor;
   final ThemePreferenceStore themePreferenceStore;
+  final Future<void> Function()? initializeServicesAfterFirstFrame;
 
   @override
   State<AppSmarana> createState() => _AppSmaranaState();
@@ -64,13 +66,13 @@ class _AppSmaranaState extends State<AppSmarana> {
     _alarmStoppedSubscription = notifications.stoppedReminderIds.listen(
       _closeRingingAlarm,
     );
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _restoreRingingAlarm();
-    });
-    final launchReminderId = notifications.takeInitialReminderId();
-    if (launchReminderId != null) {
+    final initializeServicesAfterFirstFrame =
+        widget.initializeServicesAfterFirstFrame;
+    if (initializeServicesAfterFirstFrame != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _openReminderFromNotification(launchReminderId);
+        unawaited(
+          _initializeAfterFirstFrame(initializeServicesAfterFirstFrame),
+        );
       });
     }
   }
@@ -90,6 +92,76 @@ class _AppSmaranaState extends State<AppSmarana> {
       unawaited(alarmStoppedSubscription.cancel());
     }
     super.dispose();
+  }
+
+  Future<void> _initializeAfterFirstFrame(
+    Future<void> Function() initializeServices,
+  ) async {
+    try {
+      await initializeServices();
+    } on Object catch (error, stackTrace) {
+      _reportStartupError(error, stackTrace);
+      return;
+    }
+
+    final launchReminderId = NotificationService.instance
+        .takeInitialReminderId();
+    try {
+      await ReminderStorage().rescheduleAllReminders();
+    } on Object catch (error, stackTrace) {
+      _reportStartupError(error, stackTrace);
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    unawaited(_restoreRingingAlarmWithErrorReporting());
+    if (launchReminderId != null) {
+      unawaited(_openReminderFromNotification(launchReminderId));
+    }
+  }
+
+  Future<void> _restoreRingingAlarmWithErrorReporting() async {
+    try {
+      await _restoreRingingAlarm();
+    } on Object catch (error, stackTrace) {
+      _reportStartupError(error, stackTrace);
+    }
+  }
+
+  void _reportStartupError(Object error, StackTrace stackTrace) {
+    FlutterError.reportError(
+      FlutterErrorDetails(
+        exception: error,
+        stack: stackTrace,
+        library: 'app startup',
+      ),
+    );
+    if (!mounted) {
+      return;
+    }
+    final context = _navigatorKey.currentContext;
+    if (context != null) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        SnackBar(
+          content: const Text(
+            'Some reminders could not be restored or scheduled.',
+          ),
+          action: SnackBarAction(
+            label: 'Retry',
+            onPressed: _retryAfterStartupError,
+          ),
+        ),
+      );
+    }
+  }
+
+  void _retryAfterStartupError() {
+    final initializeServices = widget.initializeServicesAfterFirstFrame;
+    if (initializeServices != null) {
+      unawaited(_initializeAfterFirstFrame(initializeServices));
+    }
   }
 
   Future<void> _restoreRingingAlarm() async {

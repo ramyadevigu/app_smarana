@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../features/reminders/services/reminder_storage.dart';
 import '../services/notification_service.dart';
 import '../theme/theme_preference_store.dart';
 import 'app.dart';
@@ -38,6 +37,8 @@ class _AppStartupState extends State<AppStartup> {
             initialThemeMode: configuration.themeMode,
             initialAccentColor: configuration.accentColor,
             themePreferenceStore: configuration.themePreferenceStore,
+            initializeServicesAfterFirstFrame:
+                NotificationService.instance.initialize,
           );
         }
 
@@ -105,14 +106,11 @@ class _StartupErrorScreen extends StatelessWidget {
 
 Future<_AppStartupConfiguration> _initializeApplication() async {
   try {
-    final reminderStorage = ReminderStorage();
     const themePreferenceStore = ThemePreferenceStore();
     late final ThemeMode themeMode;
     late final Color accentColor;
 
     await Future.wait<void>([
-      reminderStorage.initialize(),
-      NotificationService.instance.initialize(),
       themePreferenceStore.loadThemeMode().then<void>((value) {
         themeMode = value;
       }),
@@ -120,8 +118,6 @@ Future<_AppStartupConfiguration> _initializeApplication() async {
         accentColor = value;
       }),
     ]);
-    await reminderStorage.rescheduleAllReminders();
-
     return _AppStartupConfiguration(
       themeMode: themeMode,
       accentColor: accentColor,
