@@ -367,8 +367,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
     return DateTime(localDate.year, localDate.month, localDate.day);
   }
 
-  List<CalendarOccurrence> _occurrencesFor(DateTime date) =>
-      _occurrencesByDate[_dateOnly(date)] ?? const [];
+  List<CalendarOccurrence> _occurrencesFor(
+    DateTime date, [
+    Map<DateTime, List<CalendarOccurrence>>? occurrencesByDate,
+  ]) => (occurrencesByDate ?? _occurrencesByDate)[_dateOnly(date)] ?? const [];
 
   @override
   Widget build(BuildContext context) {
@@ -478,6 +480,16 @@ class _CalendarScreenState extends State<CalendarScreen> {
   Widget _buildListView(BuildContext context, Key key) {
     return LayoutBuilder(
       builder: (context, constraints) {
+        final displayedMonth = DateTime(
+          _displayedMonth.year,
+          _displayedMonth.month,
+        );
+        final selectedDate = _selectedDate;
+        final occurrencesByDate = _occurrencesByDate;
+        final monthKey = ValueKey(
+          'calendar-list-month-${displayedMonth.year}-'
+          '${displayedMonth.month}',
+        );
         return Column(
           key: key,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -488,10 +500,38 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 children: [
                   _buildWeekdayHeader(context),
                   Expanded(
-                    child: _buildMonthGridCard(
-                      context,
-                      key: const ValueKey('calendar-list-month-grid'),
-                      monthOnly: true,
+                    child: ClipRect(
+                      child: Listener(
+                        onPointerDown: (event) =>
+                            _monthPointerStart = event.position,
+                        onPointerUp: (event) {
+                          final start = _monthPointerStart;
+                          _monthPointerStart = null;
+                          if (start == null) {
+                            return;
+                          }
+                          final delta = event.position - start;
+                          if (delta.dx.abs() > 48 &&
+                              delta.dx.abs() > delta.dy.abs()) {
+                            _changeMonth(delta.dx < 0 ? 1 : -1);
+                          }
+                        },
+                        onPointerCancel: (_) => _monthPointerStart = null,
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 300),
+                          switchInCurve: Curves.easeOutCubic,
+                          switchOutCurve: Curves.easeInCubic,
+                          transitionBuilder: _buildMonthTransition,
+                          child: _buildMonthGridCard(
+                            context,
+                            key: monthKey,
+                            monthOnly: true,
+                            monthContext: displayedMonth,
+                            selectedDateContext: selectedDate,
+                            occurrencesByDateContext: occurrencesByDate,
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -559,19 +599,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
             },
             onPointerCancel: (_) => _monthPointerStart = null,
             child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 250),
+              duration: const Duration(milliseconds: 300),
               switchInCurve: Curves.easeOutCubic,
               switchOutCurve: Curves.easeInCubic,
-              transitionBuilder: (child, animation) {
-                final offset = Tween<Offset>(
-                  begin: Offset(_monthTransitionDirection * 0.12, 0),
-                  end: Offset.zero,
-                ).animate(animation);
-                return FadeTransition(
-                  opacity: animation,
-                  child: SlideTransition(position: offset, child: child),
-                );
-              },
+              transitionBuilder: _buildMonthTransition,
               child: _buildMonthGridCard(
                 context,
                 monthOnly: true,
@@ -584,6 +615,24 @@ class _CalendarScreenState extends State<CalendarScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildMonthTransition(Widget child, Animation<double> animation) {
+    return ClipRect(
+      child: AnimatedBuilder(
+        animation: animation,
+        child: child,
+        builder: (context, child) {
+          final direction = animation.status == AnimationStatus.reverse
+              ? -_monthTransitionDirection
+              : _monthTransitionDirection;
+          final position = AlwaysStoppedAnimation(
+            Offset(direction * (1 - animation.value), 0),
+          );
+          return SlideTransition(position: position, child: child);
+        },
+      ),
     );
   }
 
@@ -1386,6 +1435,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
     bool monthOnly = false,
     bool compact = false,
     bool twoWeekPreview = false,
+    DateTime? monthContext,
+    DateTime? selectedDateContext,
+    Map<DateTime, List<CalendarOccurrence>>? occurrencesByDateContext,
   }) {
     return LayoutBuilder(
       key: key ?? ValueKey('calendar-month-grid-$monthOnly-$twoWeekPreview'),
@@ -1393,6 +1445,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
         final cellCount = twoWeekPreview ? 14 : _monthGridCellCount();
         final rowCount = cellCount ~/ 7;
         final cellExtent = constraints.maxHeight / rowCount;
+        final firstGridDate = twoWeekPreview
+            ? _weekStart(_selectedDate).subtract(const Duration(days: 7))
+            : _monthGridStartDate(monthContext ?? _displayedMonth);
         return GridView.builder(
           key: ValueKey(
             twoWeekPreview ? 'calendar-week-preview' : 'calendar-month-grid',
@@ -1405,17 +1460,15 @@ class _CalendarScreenState extends State<CalendarScreen> {
             mainAxisExtent: cellExtent,
           ),
           itemBuilder: (context, index) {
-            final date =
-                (twoWeekPreview
-                        ? _weekStart(_selectedDate)
-                              .subtract(const Duration(days: 7))
-                        : _monthGridStartDate())
-                    .add(Duration(days: index));
+            final date = firstGridDate.add(Duration(days: index));
             return _buildDateCell(
               context,
               date,
               monthOnly: monthOnly,
               compact: compact,
+              monthContext: monthContext,
+              selectedDateContext: selectedDateContext,
+              occurrencesByDateContext: occurrencesByDateContext,
             );
           },
         );
@@ -1427,8 +1480,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
     return 42;
   }
 
-  DateTime _monthGridStartDate() {
-    final firstOfMonth = DateTime(_displayedMonth.year, _displayedMonth.month);
+  DateTime _monthGridStartDate(DateTime month) {
+    final firstOfMonth = DateTime(month.year, month.month);
     return firstOfMonth.subtract(
       Duration(days: firstOfMonth.weekday % DateTime.daysPerWeek),
     );
@@ -1535,11 +1588,13 @@ class _CalendarScreenState extends State<CalendarScreen> {
     required bool monthOnly,
     bool compact = false,
     DateTime? monthContext,
+    DateTime? selectedDateContext,
+    Map<DateTime, List<CalendarOccurrence>>? occurrencesByDateContext,
   }) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
-    final occurrences = _occurrencesFor(date);
-    final selected = _sameDay(date, _selectedDate);
+    final occurrences = _occurrencesFor(date, occurrencesByDateContext);
+    final selected = _sameDay(date, selectedDateContext ?? _selectedDate);
     final today = _isToday(date);
     final displayedMonth = monthContext ?? _displayedMonth;
     final inDisplayedMonth =
@@ -1562,6 +1617,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
       key: ValueKey('calendar-day-${date.year}-${date.month}-${date.day}'),
       button: true,
       selected: selected,
+      hint: monthOnly ? 'Double tap to open this week' : null,
       label: [
         fullDate,
         if (today) 'today',
@@ -1572,7 +1628,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
         borderRadius: BorderRadius.circular(28),
         onTap: () {
           _selectDate(date);
+        },
+        onDoubleTap: () {
           if (monthOnly) {
+            _selectDate(date);
             _selectViewMode(CalendarViewMode.week);
           }
         },

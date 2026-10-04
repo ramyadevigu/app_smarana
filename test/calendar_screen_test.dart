@@ -124,7 +124,10 @@ void main() {
   ) async {
     await _pumpCalendar(tester, () => now, storage);
 
-    await tester.tap(find.byKey(const ValueKey('calendar-day-2026-10-1')));
+    await _doubleTap(
+      tester,
+      find.byKey(const ValueKey('calendar-day-2026-10-1')),
+    );
     await _pumpFrames(tester);
     expect(find.byKey(const ValueKey('calendar-view-week')), findsOneWidget);
 
@@ -243,6 +246,53 @@ void main() {
       greaterThan(0),
     );
     expect(tester.getTopLeft(grid).dy, closeTo(gridTop, 0.1));
+  });
+
+  testWidgets('list slides months in the navigation direction', (tester) async {
+    await _pumpCalendar(tester, () => now, storage);
+    await tester.tap(find.byKey(const ValueKey('calendar-view-selector')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('List'));
+    await tester.pumpAndSettle();
+
+    const septemberKey = ValueKey('calendar-list-month-2026-9');
+    const octoberKey = ValueKey('calendar-list-month-2026-10');
+    final september = find.byKey(septemberKey);
+    Offset slideOffset(Finder month) {
+      final positions = tester
+          .widgetList<SlideTransition>(
+            find.ancestor(of: month, matching: find.byType(SlideTransition)),
+          )
+          .map((transition) => transition.position.value);
+      return positions.firstWhere(
+        (position) => position.dx != 0,
+        orElse: () => Offset.zero,
+      );
+    }
+
+    await tester.tap(find.byTooltip('More calendar views'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Next month'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 120));
+
+    final october = find.byKey(octoberKey);
+    expect(september, findsOneWidget);
+    expect(october, findsOneWidget);
+    expect(slideOffset(september).dx, lessThan(0));
+    expect(slideOffset(october).dx, greaterThan(0));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('More calendar views'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Previous month'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 120));
+
+    expect(october, findsOneWidget);
+    expect(september, findsOneWidget);
+    expect(slideOffset(october).dx, greaterThan(0));
+    expect(slideOffset(september).dx, lessThan(0));
   });
 
   testWidgets('year view selects a date and opens its detailed month', (
@@ -483,6 +533,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('calendar-day-2026-9-30')));
     await _pumpFrames(tester);
 
+    expect(find.byKey(const ValueKey('calendar-view-month')), findsOneWidget);
     final selectedDays = tester
         .widgetList<Semantics>(find.byType(Semantics))
         .where((semantics) => semantics.properties.selected == true)
@@ -491,7 +542,7 @@ void main() {
     expect(
       tester
           .widget<Semantics>(
-            find.byKey(const ValueKey('calendar-timeline-date-2026-9-30')),
+            find.byKey(const ValueKey('calendar-day-2026-9-30')),
           )
           .properties
           .selected,
@@ -512,6 +563,62 @@ void main() {
 
     expect(find.text('October 2026'), findsOneWidget);
   });
+
+  for (final viewMode in [CalendarViewMode.month, CalendarViewMode.list]) {
+    testWidgets('${viewMode.name} swipe slides months in the swipe direction', (
+      tester,
+    ) async {
+      await _pumpCalendar(tester, () => now, storage, viewMode: viewMode);
+
+      final grid = find.byKey(const ValueKey('calendar-month-grid'));
+      final septemberKey = viewMode == CalendarViewMode.list
+          ? const ValueKey('calendar-list-month-2026-9')
+          : const ValueKey('calendar-month-2026-9');
+      final octoberKey = viewMode == CalendarViewMode.list
+          ? const ValueKey('calendar-list-month-2026-10')
+          : const ValueKey('calendar-month-2026-10');
+      final september = find.byKey(septemberKey);
+      final october = find.byKey(octoberKey);
+
+      Offset slideOffset(Finder month) {
+        final positions = tester
+            .widgetList<SlideTransition>(
+              find.ancestor(of: month, matching: find.byType(SlideTransition)),
+            )
+            .map((transition) => transition.position.value);
+        return positions.firstWhere(
+          (position) => position.dx != 0,
+          orElse: () => Offset.zero,
+        );
+      }
+
+      await tester.timedDrag(
+        grid,
+        const Offset(-260, 0),
+        const Duration(milliseconds: 100),
+      );
+      await tester.pump(const Duration(milliseconds: 120));
+
+      expect(september, findsOneWidget);
+      expect(october, findsOneWidget);
+      expect(slideOffset(september).dx, lessThan(0));
+      expect(slideOffset(october).dx, greaterThan(0));
+      await tester.pumpAndSettle();
+
+      await tester.timedDrag(
+        grid,
+        const Offset(260, 0),
+        const Duration(milliseconds: 100),
+      );
+      await tester.pump(const Duration(milliseconds: 120));
+
+      expect(september, findsOneWidget);
+      expect(october, findsOneWidget);
+      expect(slideOffset(october).dx, greaterThan(0));
+      expect(slideOffset(september).dx, lessThan(0));
+      await tester.pumpAndSettle();
+    });
+  }
 
   testWidgets('List Countdown opens a draggable, scrollable sheet', (
     tester,
@@ -575,10 +682,13 @@ void main() {
     );
   });
 
-  testWidgets('selecting an adjacent date opens its week', (tester) async {
+  testWidgets('double tapping an adjacent date opens its week', (tester) async {
     await _pumpCalendar(tester, () => now, storage);
 
-    await tester.tap(find.byKey(const ValueKey('calendar-day-2026-9-30')));
+    await _doubleTap(
+      tester,
+      find.byKey(const ValueKey('calendar-day-2026-9-30')),
+    );
     await _pumpFrames(tester);
 
     expect(find.byKey(const ValueKey('calendar-view-week')), findsOneWidget);
@@ -593,12 +703,48 @@ void main() {
     );
   });
 
+  testWidgets('month and list dates open week only after a double tap', (
+    tester,
+  ) async {
+    await _pumpCalendar(tester, () => now, storage);
+
+    final monthDate = find.byKey(const ValueKey('calendar-day-2026-9-30'));
+    await tester.tap(monthDate);
+    await _pumpFrames(tester);
+    expect(find.byKey(const ValueKey('calendar-view-month')), findsOneWidget);
+    expect(tester.widget<Semantics>(monthDate).properties.selected, isTrue);
+
+    await _doubleTap(tester, monthDate);
+    await _pumpFrames(tester);
+    expect(find.byKey(const ValueKey('calendar-view-week')), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Back to Month'));
+    await _pumpFrames(tester);
+    await tester.tap(find.byKey(const ValueKey('calendar-view-selector')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('List'));
+    await tester.pumpAndSettle();
+
+    final listDate = find.byKey(const ValueKey('calendar-day-2026-9-30'));
+    await tester.tap(listDate);
+    await _pumpFrames(tester);
+    expect(find.byKey(const ValueKey('calendar-view-list')), findsOneWidget);
+    expect(tester.widget<Semantics>(listDate).properties.selected, isTrue);
+
+    await _doubleTap(tester, listDate);
+    await _pumpFrames(tester);
+    expect(find.byKey(const ValueKey('calendar-view-week')), findsOneWidget);
+  });
+
   testWidgets('selects dates from previous and next month grid cells', (
     tester,
   ) async {
     await _pumpCalendar(tester, () => now, storage);
 
-    await tester.tap(find.byKey(const ValueKey('calendar-day-2026-10-1')));
+    await _doubleTap(
+      tester,
+      find.byKey(const ValueKey('calendar-day-2026-10-1')),
+    );
     await _pumpFrames(tester);
     expect(find.byKey(const ValueKey('calendar-view-week')), findsOneWidget);
     expect(find.text('October 2026'), findsOneWidget);
@@ -609,7 +755,10 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Previous month'));
     await _pumpFrames(tester);
-    await tester.tap(find.byKey(const ValueKey('calendar-day-2026-8-31')));
+    await _doubleTap(
+      tester,
+      find.byKey(const ValueKey('calendar-day-2026-8-31')),
+    );
     await _pumpFrames(tester);
     expect(find.byKey(const ValueKey('calendar-view-week')), findsOneWidget);
     expect(find.text('August 2026'), findsOneWidget);
@@ -721,6 +870,12 @@ Future<void> _pumpCalendar(
 Future<void> _pumpFrames(WidgetTester tester) async {
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 350));
+}
+
+Future<void> _doubleTap(WidgetTester tester, Finder finder) async {
+  await tester.tap(finder);
+  await tester.pump(const Duration(milliseconds: 100));
+  await tester.tap(finder);
 }
 
 Reminder _reminder({

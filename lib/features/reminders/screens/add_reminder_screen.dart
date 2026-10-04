@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:uuid/uuid.dart';
 
 import '../models/reminder.dart';
@@ -44,6 +45,8 @@ class AddReminderScreen extends StatefulWidget {
 class _AddReminderScreenState extends State<AddReminderScreen> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
+  final _descriptionController = TextEditingController();
+  final _repeatIntervalController = TextEditingController(text: '1');
   final _uuid = const Uuid();
   late final ReminderStorage _storage;
   late final ReminderPreferencesStore _preferencesStore;
@@ -61,6 +64,14 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
   bool _isSaving = false;
   bool _defaultsReady = false;
   bool _textFieldsCanRequestFocus = true;
+  bool _repeatExpanded = false;
+  bool _alertExpanded = false;
+  bool _moreOptionsExpanded = false;
+  String _repeatPreset = 'none';
+  String _repeatUnit = 'weeks';
+  int _repeatInterval = 1;
+  DateTime? _repeatEndDate;
+  Set<int> _repeatWeekdays = {DateTime.monday};
 
   @override
   void initState() {
@@ -73,6 +84,7 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
     _recurrenceRule =
         reminder?.recurrenceRule ??
         const RecurrenceRule(type: RecurrenceType.none);
+    _descriptionController.text = reminder?.description ?? '';
     _soundUri = reminder?.soundUri;
     _soundName = reminder?.soundName ?? 'Default';
     _notificationMode =
@@ -90,6 +102,7 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
         reminder.dateTime.day,
       );
       _selectedTime = TimeOfDay.fromDateTime(reminder.dateTime);
+      _loadRepeatSettings(reminder.recurrenceRule, reminder.dateTime);
       return;
     }
 
@@ -104,6 +117,7 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
       initialDate.day,
     );
     _selectedTime = TimeOfDay.fromDateTime(initialDateTime);
+    _loadRepeatSettings(_recurrenceRule, initialDate);
     _loadReminderDefaults();
   }
 
@@ -131,6 +145,8 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
   @override
   void dispose() {
     _titleController.dispose();
+    _descriptionController.dispose();
+    _repeatIntervalController.dispose();
     super.dispose();
   }
 
@@ -200,6 +216,9 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
   }
 
   Future<void> _saveReminder() async {
+    if (_repeatPreset == 'custom') {
+      _commitRepeatInterval();
+    }
     _dismissKeyboard();
     if (!(_formKey.currentState?.validate() ?? false)) {
       return;
@@ -222,7 +241,9 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
     final reminder = Reminder(
       id: existing?.id ?? _uuid.v4(),
       title: title,
-      description: existing?.description,
+      description: _descriptionController.text.trim().isEmpty
+          ? null
+          : _descriptionController.text.trim(),
       dateTime: DateTime(
         date.year,
         date.month,
@@ -285,28 +306,116 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
     ReminderNotificationMode.notificationOnly => 'Notification only',
   };
 
-  Future<void> _selectRecurrence() async {
-    final selection = await _showOptionOverlay(
-      () => showModalBottomSheet<_RecurrenceSelection>(
-        context: context,
-        isScrollControlled: true,
-        useSafeArea: true,
-        showDragHandle: true,
-        builder: (_) => _RecurrenceSheet(
-          initialRule: _recurrenceRule,
-          initialDate: _selectedDate ?? DateTime.now(),
-        ),
-      ),
-    );
+  void _loadRepeatSettings(RecurrenceRule rule, DateTime date) {
+    _repeatPreset = _presetFor(rule);
+    _repeatEndDate = rule.endDate;
+    _repeatInterval = rule.interval;
+    _repeatIntervalController.text = rule.interval.toString();
+    _repeatUnit = switch (rule.type) {
+      RecurrenceType.daily => 'days',
+      RecurrenceType.weekly => 'weeks',
+      RecurrenceType.monthly => 'months',
+      RecurrenceType.yearly => 'years',
+      RecurrenceType.none => 'weeks',
+    };
+    _repeatWeekdays =
+        (rule.weekdays.isNotEmpty
+                ? rule.weekdays
+                : [rule.dayOfWeek ?? date.weekday])
+            .toSet();
+  }
 
-    if (selection == null || !mounted) {
+  String _presetFor(RecurrenceRule rule) {
+    return switch (rule.type) {
+      RecurrenceType.none => 'none',
+      RecurrenceType.daily when rule.interval == 1 => 'daily',
+      _ => 'custom',
+    };
+  }
+
+  void _selectRepeatPreset(String preset) {
+    setState(() {
+      final wasCustom = _repeatPreset == 'custom';
+      _repeatPreset = preset;
+      switch (preset) {
+        case 'none':
+          _recurrenceRule = const RecurrenceRule(type: RecurrenceType.none);
+        case 'daily':
+          _recurrenceRule = const RecurrenceRule(type: RecurrenceType.daily);
+        case 'custom':
+          if (!wasCustom) {
+            _repeatUnit = 'weeks';
+            _repeatInterval = 1;
+            _repeatIntervalController.text = '1';
+            _repeatWeekdays = {_selectedDate?.weekday ?? DateTime.monday};
+          }
+          _updateRecurrenceRule();
+      }
+    });
+  }
+
+  void _updateRecurrenceRule() {
+    final date = _selectedDate ?? DateTime.now();
+    final type = switch (_repeatUnit) {
+      'days' => RecurrenceType.daily,
+      'weeks' => RecurrenceType.weekly,
+      'months' => RecurrenceType.monthly,
+      'years' => RecurrenceType.yearly,
+      _ => RecurrenceType.weekly,
+    };
+    final weekdays = _repeatWeekdays.toList()..sort();
+    _recurrenceRule = RecurrenceRule(
+      type: type,
+      interval: _repeatInterval,
+      weekdays: type == RecurrenceType.weekly
+          ? weekdays
+          : const [],
+      dayOfWeek: type == RecurrenceType.weekly && weekdays.length == 1
+          ? weekdays.single
+          : null,
+      dayOfMonth: type == RecurrenceType.monthly || type == RecurrenceType.yearly
+          ? date.day
+          : null,
+      monthOfYear: type == RecurrenceType.yearly ? date.month : null,
+      endDate: _repeatEndDate,
+    );
+  }
+
+  void _setRepeatInterval(String value) {
+    final parsed = int.tryParse(value);
+    if (parsed == null || parsed < 1) {
       return;
     }
 
     setState(() {
-      _recurrenceRule = selection.rule;
-      _selectedDate = selection.startDate;
+      _repeatInterval = parsed.clamp(1, 999).toInt();
+      _updateRecurrenceRule();
     });
+  }
+
+  void _commitRepeatInterval() {
+    final parsed = int.tryParse(_repeatIntervalController.text);
+    _repeatInterval = (parsed ?? 1).clamp(1, 999).toInt();
+    _repeatIntervalController.text = _repeatInterval.toString();
+    _updateRecurrenceRule();
+  }
+
+  Future<void> _selectRepeatEndDate() async {
+    final startDate = _selectedDate ?? DateTime.now();
+    final date = await _showOptionOverlay(
+      () => showDatePicker(
+        context: context,
+        initialDate: _repeatEndDate ?? startDate,
+        firstDate: DateUtils.dateOnly(startDate),
+        lastDate: DateTime(2100),
+      ),
+    );
+    if (date != null && mounted) {
+      setState(() {
+        _repeatEndDate = DateUtils.dateOnly(date);
+        _updateRecurrenceRule();
+      });
+    }
   }
 
   Future<void> _loadAvailableAlarmSounds() async {
@@ -530,39 +639,14 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
       key: _formKey,
       child: Scaffold(
         appBar: AppBar(
-          toolbarHeight: 68,
+          toolbarHeight: 56,
           leading: IconButton(
             tooltip: 'Back',
             onPressed: () => Navigator.of(context).maybePop(),
             icon: const Icon(Icons.arrow_back_rounded),
           ),
-          titleSpacing: 0,
-          title: Semantics(
-            label: 'Reminder title',
-            textField: true,
-            child: TextField(
-              key: const ValueKey('title-field'),
-              controller: _titleController,
-              canRequestFocus: _textFieldsCanRequestFocus,
-              textInputAction: TextInputAction.done,
-              maxLines: 1,
-              onSubmitted: (_) => _saveReminder(),
-              onTapOutside: (_) => FocusScope.of(context).unfocus(),
-              style: Theme.of(context).textTheme.titleLarge
-                  ?.copyWith(fontWeight: FontWeight.w600, letterSpacing: -0.3),
-              decoration: InputDecoration(
-                hintText: 'Untitled Reminder',
-                hintStyle: TextStyle(color: colorScheme.onSurfaceVariant),
-                border: InputBorder.none,
-                enabledBorder: InputBorder.none,
-                focusedBorder: InputBorder.none,
-                filled: false,
-                fillColor: Colors.transparent,
-                contentPadding: EdgeInsets.zero,
-                isDense: true,
-              ),
-            ),
-          ),
+          title: const SizedBox.shrink(),
+          leadingWidth: 52,
           actions: [
             IconButton(
               key: const ValueKey('save-reminder'),
@@ -588,135 +672,195 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _sectionHeading(context, 'WHEN'),
-                const SizedBox(height: 4),
-                FormField<DateTime>(
-                  initialValue: _selectedDate,
-                  validator: (value) => value == null ? 'Choose a date.' : null,
-                  builder: (field) => Column(
-                    children: [
-                      _scheduleRow(
-                        key: const ValueKey('date-field'),
-                        icon: Icons.calendar_today_outlined,
-                        label: 'Date',
-                        value: _formatDate(context, _selectedDate),
-                        onTap: () => _selectDate(field),
-                      ),
-                      _fieldError(field.errorText),
-                    ],
-                  ),
-                ),
-                _rowDivider(context),
-                FormField<TimeOfDay>(
-                  initialValue: _selectedTime,
-                  validator: (value) => value == null ? 'Choose a time.' : null,
-                  builder: (field) => Column(
-                    children: [
-                      _scheduleRow(
-                        key: const ValueKey('time-field'),
-                        icon: Icons.access_time_rounded,
-                        label: 'Time',
-                        value: _formatTime(context, field.value),
-                        onTap: () => _selectTime(field),
-                      ),
-                      _fieldError(field.errorText),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 20),
-                _sectionHeading(context, 'REPEAT'),
-                const SizedBox(height: 4),
-                Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    key: const ValueKey('repeat-field'),
-                    borderRadius: BorderRadius.circular(12),
-                    onTap: _selectRecurrence,
-                    child: SizedBox(
-                      height: 64,
-                      child: Row(
-                        children: [
-                          _rowIcon(context, Icons.repeat_rounded),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Repeat',
-                                  style: Theme.of(context).textTheme.bodyLarge,
-                                ),
-                                const SizedBox(height: 2),
-                                AnimatedSwitcher(
-                                  duration: const Duration(milliseconds: 180),
-                                  child: Text(
-                                    _recurrenceLabel(
-                                      _recurrenceRule,
-                                      _selectedDate,
-                                    ),
-                                    key: ValueKey(
-                                      'repeat-${_recurrenceLabel(_recurrenceRule, _selectedDate)}',
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: Theme.of(context).textTheme.bodySmall
-                                        ?.copyWith(
-                                          color: colorScheme.onSurfaceVariant,
-                                        ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Icon(
-                            Icons.chevron_right_rounded,
-                            color: colorScheme.onSurfaceVariant,
-                          ),
-                        ],
-                      ),
+                Semantics(
+                  label: 'Reminder title',
+                  textField: true,
+                  child: TextField(
+                    key: const ValueKey('title-field'),
+                    controller: _titleController,
+                    canRequestFocus: _textFieldsCanRequestFocus,
+                    textInputAction: TextInputAction.done,
+                    maxLines: 2,
+                    minLines: 1,
+                    onSubmitted: (_) => _saveReminder(),
+                    onTapOutside: (_) => FocusScope.of(context).unfocus(),
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: -0.4,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: 'Untitled Reminder',
+                      hintStyle: TextStyle(color: colorScheme.onSurfaceVariant),
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      filled: false,
+                      contentPadding: EdgeInsets.zero,
+                      isDense: true,
                     ),
                   ),
                 ),
-                const SizedBox(height: 20),
-                _sectionHeading(context, 'ALERTS'),
-                const SizedBox(height: 4),
-                _preferenceRow(
-                  key: const ValueKey('sound-option'),
-                  icon: Icons.music_note_outlined,
-                  title: 'Sound',
-                  value: _soundName,
-                  onTap: _selectSound,
-                ),
-                _rowDivider(context),
-                _preferenceRow(
-                  key: const ValueKey('vibrate-option'),
-                  icon: Icons.vibration_outlined,
-                  title: 'Vibrate',
-                  value: _vibrate ? 'On' : 'Off',
-                  trailing: Switch.adaptive(
-                    value: _vibrate,
-                    onChanged: (value) {
-                      _dismissKeyboard();
-                      setState(() => _vibrate = value);
-                    },
+                const SizedBox(height: 22),
+                _sectionHeading(context, 'When'),
+                const SizedBox(height: 6),
+                Container(
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Column(
+                    children: [
+                      FormField<DateTime>(
+                        initialValue: _selectedDate,
+                        validator: (value) =>
+                            value == null ? 'Choose a date.' : null,
+                        builder: (field) => Column(
+                          children: [
+                            _scheduleRow(
+                              key: const ValueKey('date-field'),
+                              icon: Icons.calendar_today_outlined,
+                              label: 'Date',
+                              value: _formatDate(context, _selectedDate),
+                              onTap: () => _selectDate(field),
+                            ),
+                            _fieldError(field.errorText),
+                          ],
+                        ),
+                      ),
+                      _rowDivider(context),
+                      FormField<TimeOfDay>(
+                        initialValue: _selectedTime,
+                        validator: (value) =>
+                            value == null ? 'Choose a time.' : null,
+                        builder: (field) => Column(
+                          children: [
+                            _scheduleRow(
+                              key: const ValueKey('time-field'),
+                              icon: Icons.access_time_rounded,
+                              label: 'Time',
+                              value: _formatTime(context, field.value),
+                              onTap: () => _selectTime(field),
+                            ),
+                            _fieldError(field.errorText),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                _rowDivider(context),
-                _preferenceRow(
-                  key: const ValueKey('notification-mode-option'),
-                  icon: Icons.notifications_active_outlined,
-                  title: 'Alert style',
-                  value: _notificationModeLabel,
-                  onTap: _selectNotificationMode,
+                const SizedBox(height: 18),
+                _expandableSection(
+                  key: const ValueKey('repeat-field'),
+                  title: 'Repeat',
+                  subtitle: _repeatSummary(),
+                  expanded: _repeatExpanded,
+                  icon: Icons.repeat_rounded,
+                  onTap: () {
+                    _dismissKeyboard();
+                    setState(() {
+                      _repeatExpanded = !_repeatExpanded;
+                      _alertExpanded = false;
+                      _moreOptionsExpanded = false;
+                    });
+                  },
+                  child: _buildRepeatEditor(),
                 ),
-                _rowDivider(context),
-                _preferenceRow(
-                  key: const ValueKey('snooze-option'),
-                  icon: Icons.snooze_outlined,
-                  title: 'Snooze',
-                  value: _snoozeLabel(_snoozeDurationMinutes),
-                  onTap: _selectSnoozeDuration,
+                const SizedBox(height: 18),
+                _expandableSection(
+                  key: const ValueKey('alert-section'),
+                  title: 'Alert',
+                  subtitle: _notificationModeLabel,
+                  expanded: _alertExpanded,
+                  icon: Icons.notifications_none_rounded,
+                  onTap: () {
+                    _dismissKeyboard();
+                    setState(() {
+                      _alertExpanded = !_alertExpanded;
+                      _repeatExpanded = false;
+                      _moreOptionsExpanded = false;
+                    });
+                  },
+                  child: Column(
+                    children: [
+                      _preferenceRow(
+                        key: const ValueKey('notification-mode-option'),
+                        icon: Icons.notifications_active_outlined,
+                        title: 'Alert style',
+                        value: _notificationModeLabel,
+                        onTap: _selectNotificationMode,
+                      ),
+                      _rowDivider(context),
+                      _preferenceRow(
+                        key: const ValueKey('sound-option'),
+                        icon: Icons.music_note_outlined,
+                        title: 'Sound',
+                        value: _soundName,
+                        onTap: _selectSound,
+                      ),
+                      _rowDivider(context),
+                      _preferenceRow(
+                        key: const ValueKey('vibrate-option'),
+                        icon: Icons.vibration_outlined,
+                        title: 'Vibration',
+                        value: _vibrate ? 'On' : 'Off',
+                        trailing: Switch.adaptive(
+                          value: _vibrate,
+                          onChanged: (value) {
+                            _dismissKeyboard();
+                            setState(() => _vibrate = value);
+                          },
+                        ),
+                      ),
+                      _rowDivider(context),
+                      _preferenceRow(
+                        key: const ValueKey('snooze-option'),
+                        icon: Icons.snooze_outlined,
+                        title: 'Snooze',
+                        value: _snoozeLabel(_snoozeDurationMinutes),
+                        onTap: _selectSnoozeDuration,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 18),
+                _expandableSection(
+                  key: const ValueKey('more-options-section'),
+                  title: 'More Options',
+                  subtitle: _descriptionController.text.trim().isEmpty
+                      ? 'Add notes'
+                      : 'Notes added',
+                  expanded: _moreOptionsExpanded,
+                  icon: Icons.tune_rounded,
+                  onTap: () {
+                    _dismissKeyboard();
+                    setState(() {
+                      _moreOptionsExpanded = !_moreOptionsExpanded;
+                      _repeatExpanded = false;
+                      _alertExpanded = false;
+                    });
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                    child: TextField(
+                      key: const ValueKey('description-field'),
+                      controller: _descriptionController,
+                      canRequestFocus: _textFieldsCanRequestFocus,
+                      minLines: 3,
+                      maxLines: 6,
+                      textCapitalization: TextCapitalization.sentences,
+                      onChanged: (_) => setState(() {}),
+                      onTapOutside: (_) => FocusScope.of(context).unfocus(),
+                      decoration: InputDecoration(
+                        hintText: 'Add notes',
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        filled: false,
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -726,15 +870,301 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
     );
   }
 
+  Widget _expandableSection({
+    required Key key,
+    required String title,
+    required String subtitle,
+    required bool expanded,
+    required IconData icon,
+    required VoidCallback onTap,
+    required Widget child,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        children: [
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              key: key,
+              borderRadius: BorderRadius.circular(18),
+              onTap: onTap,
+              child: SizedBox(
+                height: 68,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    children: [
+                      _rowIcon(context, icon),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              title,
+                              style: Theme.of(context).textTheme.bodyLarge,
+                            ),
+                            const SizedBox(height: 2),
+                            AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 180),
+                              child: Text(
+                                subtitle,
+                                key: ValueKey('$title-$subtitle'),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(
+                                      color: colorScheme.onSurfaceVariant,
+                                    ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      AnimatedRotation(
+                        turns: expanded ? 0.25 : 0,
+                        duration: const Duration(milliseconds: 180),
+                        child: Icon(
+                          Icons.chevron_right_rounded,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeInOutCubic,
+            alignment: Alignment.topCenter,
+            child: expanded
+                ? SizedBox(width: double.infinity, child: child)
+                : const SizedBox(width: double.infinity),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRepeatEditor() {
+    final colorScheme = Theme.of(context).colorScheme;
+    const options = [
+      ('none', 'Do not repeat'),
+      ('daily', 'Daily'),
+      ('custom', 'Custom'),
+    ];
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final (value, label) in options)
+            Semantics(
+              label: label,
+              selected: _repeatPreset == value,
+              button: true,
+              child: InkWell(
+                key: ValueKey('repeat-option-$value'),
+                borderRadius: BorderRadius.circular(12),
+                onTap: () => _selectRepeatPreset(value),
+                child: SizedBox(
+                  height: 48,
+                  child: Row(
+                    children: [
+                      Icon(
+                        _repeatPreset == value
+                            ? Icons.radio_button_checked_rounded
+                            : Icons.radio_button_unchecked_rounded,
+                        size: 21,
+                        color: _repeatPreset == value
+                            ? colorScheme.primary
+                            : colorScheme.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        label,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeInOutCubic,
+            child: _repeatPreset == 'custom'
+                ? _buildCustomRepeatControls()
+                : const SizedBox(width: double.infinity),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCustomRepeatControls() {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text('Every', style: Theme.of(context).textTheme.bodyLarge),
+              const SizedBox(width: 10),
+              SizedBox(
+                width: 78,
+                child: TextField(
+                  key: const ValueKey('repeat-interval-custom'),
+                  controller: _repeatIntervalController,
+                  textAlign: TextAlign.center,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(3),
+                  ],
+                  decoration: const InputDecoration(
+                    labelText: 'Interval',
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: _setRepeatInterval,
+                  onEditingComplete: () {
+                    setState(_commitRepeatInterval);
+                    FocusScope.of(context).unfocus();
+                  },
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  key: const ValueKey('repeat-unit-custom'),
+                  initialValue: _repeatUnit,
+                  decoration: const InputDecoration(
+                    labelText: 'Unit',
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'days', child: Text('Days')),
+                    DropdownMenuItem(value: 'weeks', child: Text('Weeks')),
+                    DropdownMenuItem(value: 'months', child: Text('Months')),
+                    DropdownMenuItem(value: 'years', child: Text('Years')),
+                  ],
+                  onChanged: (unit) {
+                    if (unit == null) {
+                      return;
+                    }
+                    setState(() {
+                      _repeatUnit = unit;
+                      _updateRecurrenceRule();
+                    });
+                  },
+                ),
+              ),
+            ],
+          ),
+          if (_repeatUnit == 'weeks') ...[
+            const SizedBox(height: 18),
+            Text('On', style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: [
+                for (final (label, weekday) in const [
+                  ('Mon', DateTime.monday),
+                  ('Tue', DateTime.tuesday),
+                  ('Wed', DateTime.wednesday),
+                  ('Thu', DateTime.thursday),
+                  ('Fri', DateTime.friday),
+                  ('Sat', DateTime.saturday),
+                  ('Sun', DateTime.sunday),
+                ])
+                  FilterChip(
+                    key: ValueKey('weekday-$weekday'),
+                    label: Text(label),
+                    selected: _repeatWeekdays.contains(weekday),
+                    onSelected: (selected) {
+                      setState(() {
+                        if (selected) {
+                          _repeatWeekdays.add(weekday);
+                        } else if (_repeatWeekdays.length > 1) {
+                          _repeatWeekdays.remove(weekday);
+                        }
+                        _updateRecurrenceRule();
+                      });
+                    },
+                  ),
+              ],
+            ),
+          ],
+          const SizedBox(height: 18),
+          Text('Ends', style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            children: [
+              ChoiceChip(
+                label: const Text('Never'),
+                selected: _repeatEndDate == null,
+                onSelected: (_) => setState(() {
+                  _repeatEndDate = null;
+                  _updateRecurrenceRule();
+                }),
+              ),
+              ChoiceChip(
+                label: const Text('On date'),
+                selected: _repeatEndDate != null,
+                onSelected: (_) {
+                  if (_repeatEndDate != null) return;
+                  _selectRepeatEndDate();
+                },
+              ),
+            ],
+          ),
+          if (_repeatEndDate != null)
+            TextButton.icon(
+              key: const ValueKey('repeat-end-date'),
+              onPressed: _selectRepeatEndDate,
+              icon: const Icon(Icons.calendar_today_outlined, size: 18),
+              label: Text(_formatDate(context, _repeatEndDate)),
+            ),
+          const SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceContainer,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              _repeatSummary(),
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _sectionHeading(BuildContext context, String text) {
     return Padding(
-      padding: const EdgeInsets.only(left: 4, top: 4, bottom: 4),
+      padding: const EdgeInsets.only(left: 4, top: 2, bottom: 7),
       child: Text(
         text,
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+        style: Theme.of(context).textTheme.titleSmall?.copyWith(
           color: Theme.of(context).colorScheme.onSurfaceVariant,
-          letterSpacing: 1.2,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w600,
         ),
       ),
     );
@@ -861,6 +1291,41 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
 
   String _snoozeLabel(int minutes) {
     return minutes == 60 ? '1 hour' : '$minutes minutes';
+  }
+
+  String _repeatSummary() {
+    if (_repeatPreset != 'custom') {
+      return _recurrenceLabel(_recurrenceRule, _selectedDate);
+    }
+
+    final unit = switch (_repeatUnit) {
+      'days' => 'day',
+      'weeks' => 'week',
+      'months' => 'month',
+      'years' => 'year',
+      _ => 'week',
+    };
+    var summary = 'Every $_repeatInterval $unit'
+        '${_repeatInterval == 1 ? '' : 's'}';
+    if (_repeatUnit == 'weeks') {
+      final weekdays = _repeatWeekdays.toList()..sort();
+      final names = weekdays.map(_weekdayName).toList();
+      summary += ' on ${_joinWeekdayNames(names)}';
+    }
+
+    final endDate = _repeatEndDate;
+    if (endDate != null) {
+      summary +=
+          ' until ${MaterialLocalizations.of(context).formatMediumDate(endDate)}';
+    }
+    return summary;
+  }
+
+  String _joinWeekdayNames(List<String> names) {
+    if (names.length < 3) {
+      return names.join(' and ');
+    }
+    return '${names.take(names.length - 1).join(', ')} and ${names.last}';
   }
 
   String _recurrenceLabel(RecurrenceRule rule, DateTime? startDate) {
@@ -1337,27 +1802,28 @@ class _RecurrenceSheetState extends State<_RecurrenceSheet> {
                                   const SizedBox(height: 8),
                                   Divider(
                                     height: 1,
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.outlineVariant,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .outlineVariant,
                                   ),
                                   const SizedBox(height: 12),
                                   Text(
                                     'Preview',
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.labelMedium?.copyWith(
-                                      color: Theme.of(
-                                        context,
-                                      ).colorScheme.onSurfaceVariant,
-                                    ),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelMedium
+                                        ?.copyWith(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurfaceVariant,
+                                        ),
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
                                     _previewLabel(),
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.bodyMedium,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodyMedium,
                                   ),
                                 ],
                               ],
@@ -1399,11 +1865,10 @@ class _RecurrenceSheetState extends State<_RecurrenceSheet> {
       'weekdays' => 'Every weekday',
       'daily' => 'Every day',
       'weekly' => 'Every week on $weekdays',
-      'biweekly' || 'alternateWeeks' =>
-        'Every 2 weeks on $weekdays',
+      'biweekly' || 'alternateWeeks' => 'Every 2 weeks on $weekdays',
       'monthly' => 'Every month on ${_ordinal(_dayOfMonth)}',
-      'bimonthly' || 'alternateMonths' =>
-        'Every 2 months on ${_ordinal(_dayOfMonth)}',
+      'bimonthly' ||
+      'alternateMonths' => 'Every 2 months on ${_ordinal(_dayOfMonth)}',
       'yearly' =>
         'Every year on ${_monthLabels[_monthOfYear - 1]} '
             '${_ordinal(_dayOfMonth)}',

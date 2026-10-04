@@ -1,30 +1,28 @@
 import 'package:flutter/material.dart';
 
+import '../../../theme/app_theme.dart';
+
 class CalendarEventColor {
-  const CalendarEventColor({required this.light, required this.dark});
+  const CalendarEventColor(this.baseColor);
 
-  final Color light;
-  final Color dark;
+  final Color baseColor;
 
-  Color foreground(bool isDark) => isDark ? dark : light;
+  Color foreground(bool isDark) {
+    return HSLColor.fromColor(baseColor)
+        .withLightness(isDark ? 0.78 : 0.3)
+        .toColor();
+  }
 
   Color surface(bool isDark) =>
-      foreground(isDark).withValues(alpha: isDark ? 0.22 : 0.12);
+      baseColor.withValues(alpha: isDark ? 0.22 : 0.14);
 }
 
 abstract final class CalendarColors {
-  static const events = <CalendarEventColor>[
-    CalendarEventColor(light: Color(0xFF1769AA), dark: Color(0xFF8CC8FF)),
-    CalendarEventColor(light: Color(0xFF7950A1), dark: Color(0xFFC9A5F2)),
-    CalendarEventColor(light: Color(0xFF287A49), dark: Color(0xFF8AD6A4)),
-    CalendarEventColor(light: Color(0xFF087E83), dark: Color(0xFF72D4D1)),
-    CalendarEventColor(light: Color(0xFFB65C16), dark: Color(0xFFFFB879)),
-    CalendarEventColor(light: Color(0xFFB33A45), dark: Color(0xFFFF9BA4)),
-    CalendarEventColor(light: Color(0xFFAD4679), dark: Color(0xFFF2A3C9)),
-    CalendarEventColor(light: Color(0xFF927000), dark: Color(0xFFE9CD70)),
-    CalendarEventColor(light: Color(0xFF4059A8), dark: Color(0xFFAAB9FF)),
-    CalendarEventColor(light: Color(0xFF59636E), dark: Color(0xFFBBC5CF)),
-  ];
+  static final List<CalendarEventColor> events =
+      List<CalendarEventColor>.unmodifiable([
+        for (final theme in SmaranaColorTheme.values)
+          CalendarEventColor(theme.color),
+      ]);
 
   static CalendarEventColor forReminder(String id) {
     var hash = 0;

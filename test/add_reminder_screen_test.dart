@@ -9,6 +9,36 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'helpers/fake_reminder_notification_scheduler.dart';
 
 void main() {
+  testWidgets('keeps advanced reminder controls collapsed initially', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final storage = ReminderStorage(
+      notificationScheduler: FakeReminderNotificationScheduler(),
+    );
+
+    await _openForm(tester, storage: storage);
+
+    expect(find.byKey(const ValueKey('date-field')), findsOneWidget);
+    expect(find.byKey(const ValueKey('time-field')), findsOneWidget);
+    expect(find.byKey(const ValueKey('repeat-option-daily')), findsNothing);
+    expect(find.byKey(const ValueKey('sound-option')), findsNothing);
+    expect(find.byKey(const ValueKey('description-field')), findsNothing);
+    expect(find.text('WHEN'), findsNothing);
+    expect(find.text('ALERTS'), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('repeat-field')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('repeat-option-daily')), findsOneWidget);
+
+    final alertSection = find.byKey(const ValueKey('alert-section'));
+    await tester.ensureVisible(alertSection);
+    await tester.tap(alertSection);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('repeat-option-daily')), findsNothing);
+    expect(find.byKey(const ValueKey('sound-option')), findsOneWidget);
+  });
+
   testWidgets('dismisses keyboard on outside tap and when scrolling form', (
     tester,
   ) async {
@@ -72,12 +102,15 @@ void main() {
       find.byKey(const ValueKey('title-field')),
       'Reminder title',
     );
+    await tester.ensureVisible(find.byKey(const ValueKey('alert-section')));
+    await tester.tap(find.byKey(const ValueKey('alert-section')));
+    await tester.pumpAndSettle();
     final vibrateSwitch = find.descendant(
       of: find.byKey(const ValueKey('vibrate-option')),
       matching: find.byType(Switch),
     );
     await tester.ensureVisible(vibrateSwitch);
-    expect(tester.testTextInput.isVisible, isTrue);
+    expect(tester.testTextInput.isVisible, isFalse);
     await tester.tap(vibrateSwitch);
     await tester.pumpAndSettle();
     expect(tester.testTextInput.isVisible, isFalse);
@@ -114,6 +147,18 @@ void main() {
       find.byKey(const ValueKey('title-field')),
       'Dentist appointment',
     );
+    final moreOptions = find.byKey(const ValueKey('more-options-section'));
+    await tester.ensureVisible(moreOptions);
+    await tester.tap(moreOptions);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('description-field')),
+      'Bring the insurance card.',
+    );
+    final alertSection = find.byKey(const ValueKey('alert-section'));
+    await tester.ensureVisible(alertSection);
+    await tester.tap(alertSection);
+    await tester.pumpAndSettle();
     final soundOption = find.byKey(const ValueKey('sound-option'));
     await tester.ensureVisible(soundOption);
     await tester.tap(soundOption);
@@ -179,7 +224,7 @@ void main() {
 
     final saved = (await storage.getReminders()).single;
     expect(saved.title, 'Dentist appointment');
-    expect(saved.description, isNull);
+    expect(saved.description, 'Bring the insurance card.');
     expect(saved.dateTime.year, selectedDate.year);
     expect(saved.dateTime.month, selectedDate.month);
     expect(saved.dateTime.day, selectedDate.day);
@@ -224,7 +269,7 @@ void main() {
     expect(updated.snoozeDurationMinutes, 15);
   });
 
-  testWidgets('selects recurrence options and updates custom summary', (
+  testWidgets('offers only the repeat presets and custom weekdays', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
@@ -246,25 +291,40 @@ void main() {
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.tap(find.byKey(const ValueKey('repeat-field')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('repeat-frequency')));
-    await tester.pumpAndSettle();
-    for (final label in [
-      'Does not repeat',
-      'Every day',
-      'Every week',
-      'Every 2 weeks',
-      'Alternate weeks',
-      'Every month',
-      'Every 2 months',
-      'Alternate months',
-      'Every year',
-      'Custom',
-    ]) {
+    for (final label in ['Do not repeat', 'Daily', 'Custom']) {
       expect(find.text(label), findsAtLeastNWidgets(1));
     }
+    for (final label in [
+      'Weekdays',
+      'Weekly',
+      'Biweekly',
+      'Monthly',
+      'Yearly',
+    ]) {
+      expect(find.text(label), findsNothing);
+    }
 
-    await tester.tap(find.text('Every week').last);
+    final customOption = find.byKey(const ValueKey('repeat-option-custom'));
+    await tester.ensureVisible(customOption);
+    await tester.tap(customOption);
     await tester.pumpAndSettle();
+    expect(find.text('On'), findsOneWidget);
+    final intervalField = find.byKey(const ValueKey('repeat-interval-custom'));
+    expect(intervalField, findsOneWidget);
+    expect(find.byKey(const ValueKey('repeat-frequency-custom')), findsNothing);
+    await tester.ensureVisible(intervalField);
+    await tester.enterText(intervalField, '2');
+    for (final weekday in [
+      DateTime.monday,
+      DateTime.tuesday,
+      DateTime.wednesday,
+      DateTime.thursday,
+      DateTime.friday,
+      DateTime.saturday,
+      DateTime.sunday,
+    ]) {
+      expect(find.byKey(ValueKey('weekday-$weekday')), findsOneWidget);
+    }
     for (final weekday in [
       DateTime.monday,
       DateTime.wednesday,
@@ -277,58 +337,91 @@ void main() {
     final tuesdayChip = find.byKey(const ValueKey('weekday-2'));
     await tester.ensureVisible(tuesdayChip);
     await tester.tap(tuesdayChip);
-    final weeklyDoneButton = find.text('Done');
-    await tester.ensureVisible(weeklyDoneButton);
-    await tester.tap(weeklyDoneButton);
     await tester.pumpAndSettle();
-    expect(find.text('Every Monday, Wednesday, Friday'), findsOneWidget);
-
-    await tester.tap(find.byKey(const ValueKey('repeat-field')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('repeat-frequency')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Custom').last);
-    await tester.pumpAndSettle();
-    final intervalField = find.byKey(const ValueKey('repeat-interval-custom'));
-    await tester.ensureVisible(intervalField);
-    await tester.enterText(intervalField, '2');
-    final startDateOption = find.text('Starts');
-    await tester.ensureVisible(startDateOption);
-    await tester.tap(startDateOption);
+    final onDateChip = find.text('On date');
+    await tester.ensureVisible(onDateChip);
+    await tester.tap(onDateChip);
     await tester.pumpAndSettle();
     await tester.tap(find.text('18').last);
     await tester.tap(find.text('OK'));
     await tester.pumpAndSettle();
-    final endDateButton = find.byTooltip('Choose end date');
+    final endDateButton = find.byKey(const ValueKey('repeat-end-date'));
     await tester.ensureVisible(endDateButton);
-    await tester.tap(endDateButton);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('OK'));
-    await tester.pumpAndSettle();
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pump();
-    final customDoneButton = find.text('Done');
-    await tester.ensureVisible(customDoneButton);
-    await tester.tap(customDoneButton);
+    expect(
+      find.textContaining(
+        'Every 2 weeks on Monday, Wednesday and Friday',
+      ),
+      findsAtLeastNWidgets(1),
+    );
+    expect(find.textContaining('until'), findsAtLeastNWidgets(1));
+    await _saveForm(tester);
+    final saved = (await storage.getReminders()).single;
+    expect(saved.recurrenceRule.type, RecurrenceType.weekly);
+    expect(saved.recurrenceRule.interval, 2);
+    expect(saved.recurrenceRule.weekdays, [
+      DateTime.monday,
+      DateTime.wednesday,
+      DateTime.friday,
+    ]);
+    expect(saved.recurrenceRule.endDate, DateTime(2030, 1, 18));
+  });
+
+  testWidgets('custom repeat supports month intervals', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final storage = ReminderStorage(
+      notificationScheduler: FakeReminderNotificationScheduler(),
+    );
+
+    await _openForm(
+      tester,
+      storage: storage,
+      initialDate: DateTime(2030, 1, 15),
+    );
+    await tester.tap(find.byKey(const ValueKey('repeat-field')));
     await tester.pumpAndSettle();
-    expect(
-      find.textContaining('Every 2 weeks on Monday, Wednesday, Friday'),
-      findsOneWidget,
-    );
-    expect(find.textContaining('until'), findsOneWidget);
-    expect(
-      tester
-          .widget<Text>(
-            find
-                .descendant(
-                  of: find.byKey(const ValueKey('date-field')),
-                  matching: find.byType(Text),
-                )
-                .last,
-          )
-          .data,
-      contains('18'),
-    );
+    final customOption = find.byKey(const ValueKey('repeat-option-custom'));
+    await tester.ensureVisible(customOption);
+    await tester.tap(customOption);
+    await tester.pumpAndSettle();
+
+    final intervalField = find.byKey(const ValueKey('repeat-interval-custom'));
+    await tester.ensureVisible(intervalField);
+    await tester.enterText(intervalField, '3');
+    final unitDropdown = find.byKey(const ValueKey('repeat-unit-custom'));
+    await tester.ensureVisible(unitDropdown);
+    await tester.tap(unitDropdown);
+    await tester.pumpAndSettle();
+    for (final unit in ['Days', 'Weeks', 'Months', 'Years']) {
+      expect(find.text(unit), findsAtLeastNWidgets(1));
+    }
+    await tester.tap(find.text('Days').last);
+    await tester.pumpAndSettle();
+    expect(find.text('Every 3 days'), findsAtLeastNWidgets(1));
+
+    await tester.ensureVisible(unitDropdown);
+    await tester.tap(unitDropdown);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Years').last);
+    await tester.pumpAndSettle();
+    expect(find.text('Every 3 years'), findsAtLeastNWidgets(1));
+
+    await tester.ensureVisible(unitDropdown);
+    await tester.tap(unitDropdown);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Months').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Every 3 months'), findsAtLeastNWidgets(1));
+    expect(find.byKey(const ValueKey('weekday-1')), findsNothing);
+
+    await _saveForm(tester);
+    final saved = (await storage.getReminders()).single;
+    expect(saved.recurrenceRule.type, RecurrenceType.monthly);
+    expect(saved.recurrenceRule.interval, 3);
+    expect(saved.recurrenceRule.dayOfMonth, 15);
+    expect(saved.recurrenceRule.endDate, isNull);
   });
 }
 
