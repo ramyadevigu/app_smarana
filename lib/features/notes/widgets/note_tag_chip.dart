@@ -7,6 +7,32 @@ Future<NoteCardColor?> showNoteTagColorPicker(
   BuildContext context, {
   required NoteCardColor current,
 }) {
+  return _showNoteColorPicker(
+    context,
+    current: current,
+    title: 'Tag Color',
+    colorKind: 'tag',
+  );
+}
+
+Future<NoteCardColor?> showNoteCardColorPicker(
+  BuildContext context, {
+  required NoteCardColor current,
+}) {
+  return _showNoteColorPicker(
+    context,
+    current: current,
+    title: 'Note Color',
+    colorKind: 'note',
+  );
+}
+
+Future<NoteCardColor?> _showNoteColorPicker(
+  BuildContext context, {
+  required NoteCardColor current,
+  required String title,
+  required String colorKind,
+}) {
   return showModalBottomSheet<NoteCardColor>(
     context: context,
     useSafeArea: true,
@@ -20,7 +46,7 @@ Future<NoteCardColor?> showNoteTagColorPicker(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Tag Color',
+              title,
               style: theme.textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.w700,
               ),
@@ -34,6 +60,7 @@ Future<NoteCardColor?> showNoteTagColorPicker(
                   _TagColorSwatch(
                     color: color,
                     selected: color == current,
+                    colorKind: colorKind,
                     onTap: () => Navigator.of(context).pop(color),
                   ),
               ],
@@ -198,11 +225,13 @@ class _TagColorSwatch extends StatelessWidget {
   const _TagColorSwatch({
     required this.color,
     required this.selected,
+    required this.colorKind,
     required this.onTap,
   });
 
   final NoteCardColor color;
   final bool selected;
+  final String colorKind;
   final VoidCallback onTap;
 
   @override
@@ -212,11 +241,11 @@ class _TagColorSwatch extends StatelessWidget {
     return Semantics(
       button: true,
       selected: selected,
-      label: '$label tag color${selected ? ', selected' : ''}',
+      label: '$label $colorKind color${selected ? ', selected' : ''}',
       child: Tooltip(
         message: label,
         child: InkWell(
-          key: ValueKey('tag-color-${color.name}'),
+          key: ValueKey('$colorKind-color-${color.name}'),
           customBorder: const CircleBorder(),
           onTap: onTap,
           child: AnimatedContainer(

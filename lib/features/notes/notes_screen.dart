@@ -2,12 +2,13 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../reminders/models/reminder.dart';
 import '../reminders/services/reminder_storage.dart';
 import 'models/note_workspace_models.dart';
+import 'screens/all_notes_screen.dart';
 import 'screens/notebook_detail_screen.dart';
 import 'theme/note_card_colors.dart';
 import 'services/note_workspace_storage.dart';
-import 'widgets/notebook_list_tile.dart';
 import 'widgets/recent_note_card.dart';
 
 class NotesScreen extends StatefulWidget {
@@ -32,14 +33,16 @@ class _NotesScreenState extends State<NotesScreen> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   late final NoteWorkspaceStorage _workspaceStorage;
+  late final ReminderStorage _reminderStorage;
   late List<Notebook> _notebooks;
+  Map<String, Reminder> _remindersById = const {};
   Map<String, NoteCardColor> _tagColors = const {};
   bool _isLoading = true;
   String? _storageError;
   NotebookIconType? _selectedCategory;
-  bool _showAllPinned = false;
-  bool _showAllRecent = false;
-  bool _oldestFirst = false;
+  bool _isSearchExpanded = false;
+
+  static const Duration _recentUpdateWindow = Duration(days: 7);
 
   static const List<Notebook> _emptyNotebookList = [];
 
@@ -47,9 +50,11 @@ class _NotesScreenState extends State<NotesScreen> {
   void initState() {
     super.initState();
     _workspaceStorage = widget.workspaceStorage ?? NoteWorkspaceStorage();
+    _reminderStorage = ReminderStorage();
     _notebooks = List<Notebook>.of(
       widget.initialNotebooks ?? _emptyNotebookList,
     );
+    unawaited(_loadReminderIndex());
     if (widget.initialNotebooks != null) {
       _isLoading = false;
     } else {
@@ -139,56 +144,11 @@ class _NotesScreenState extends State<NotesScreen> {
     }
   }
 
-  List<Notebook> get _filteredNotebooks {
-    final query = _query;
-    return _notebooks.where((notebook) {
-      if (_selectedCategory != null && notebook.iconType != _selectedCategory) {
-        return false;
-      }
-      if (query.isEmpty) {
-        return true;
-      }
-      if (notebook.name.toLowerCase().contains(query)) {
-        return true;
-      }
-      if (notebook.sections.any(
-        (section) => section.name.toLowerCase().contains(query),
-      )) {
-        return true;
-      }
-      return notebook.notes.any(
-        (note) =>
-            note.title.toLowerCase().contains(query) ||
-            note.content.toLowerCase().contains(query),
-      );
-    }).toList();
-  }
-
   List<RecentNoteView> get _filteredRecentNotes {
-    final notes = _recentNotes();
-    final query = _query;
-    return notes.where((note) {
-      if (note.note.isPinned ||
-          (_selectedCategory != null &&
-              note.notebookIconType != _selectedCategory)) {
-        return false;
-      }
-      if (query.isEmpty) {
-        return true;
-      }
-      return note.note.title.toLowerCase().contains(query) ||
-          note.notebookName.toLowerCase().contains(query) ||
-          note.sectionName.toLowerCase().contains(query) ||
-          note.note.preview.toLowerCase().contains(query);
-    }).toList();
-  }
-
-  List<RecentNoteView> get _filteredPinnedNotes {
     final query = _query;
     return _recentNotes().where((note) {
-      if (!note.note.isPinned ||
-          (_selectedCategory != null &&
-              note.notebookIconType != _selectedCategory)) {
+      if (_selectedCategory != null &&
+          note.notebookIconType != _selectedCategory) {
         return false;
       }
       if (query.isEmpty) {
@@ -221,12 +181,80 @@ class _NotesScreenState extends State<NotesScreen> {
         );
       }
     }
-    views.sort(
-      (a, b) => _oldestFirst
-          ? a.note.updatedAt.compareTo(b.note.updatedAt)
-          : b.note.updatedAt.compareTo(a.note.updatedAt),
-    );
+    final now = DateTime.now();
+    views.sort((first, second) => _compareNotes(first, second, now));
     return views;
+  }
+
+  int _compareNotes(RecentNoteView first, RecentNoteView second, DateTime now) {
+    final firstPriority = _notePriority(first, now);
+    final secondPriority = _notePriority(second, now);
+    final priorityComparison = firstPriority.compareTo(secondPriority);
+    if (priorityComparison != 0) {
+      return priorityComparison;
+    }
+
+    if (firstPriority == 2) {
+      final firstReminder = _activeReminderFor(first);
+      final secondReminder = _activeReminderFor(second);
+      if (firstReminder != null && secondReminder != null) {
+        final reminderComparison = firstReminder.dateTime.compareTo(
+          secondReminder.dateTime,
+        );
+        if (reminderComparison != 0) {
+          return reminderComparison;
+        }
+      }
+    }
+
+    return second.note.updatedAt.compareTo(first.note.updatedAt);
+  }
+
+  int _notePriority(RecentNoteView note, DateTime now) {
+    if (note.note.isPinned) {
+      return 0;
+    }
+    if (note.note.updatedAt.isAfter(now.subtract(_recentUpdateWindow))) {
+      return 1;
+    }
+    if (_activeReminderFor(note) != null) {
+      return 2;
+    }
+    return 3;
+  }
+
+  Reminder? _activeReminderFor(RecentNoteView note) {
+    final reminderId = note.note.reminderId;
+    if (reminderId == null) {
+      return null;
+    }
+    final reminder = _remindersById[reminderId];
+    if (reminder == null || !reminder.enabled || reminder.isCompleted) {
+      return null;
+    }
+    return reminder;
+  }
+
+  Future<void> _loadReminderIndex() async {
+    try {
+      final reminders = await _reminderStorage.getReminders();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _remindersById = {
+          for (final reminder in reminders) reminder.id: reminder,
+        };
+      });
+    } on Exception catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _storageError ??= 'Reminder dates could not be loaded. Notes are sorted by update time.';
+      });
+      debugPrint('Notes reminder index restore failed: $error');
+    }
   }
 
   Future<void> _createNotebook() async {
@@ -254,68 +282,6 @@ class _NotesScreenState extends State<NotesScreen> {
     );
     setState(() {
       _notebooks = [..._notebooks, notebook];
-    });
-    await _persistWorkspace();
-  }
-
-  Future<void> _renameNotebook(Notebook notebook) async {
-    final name = await _showNotebookNameDialog(
-      title: 'Rename notebook',
-      actionLabel: 'Save',
-      initialValue: notebook.name,
-    );
-    if (name == null || !mounted) {
-      return;
-    }
-    final now = DateTime.now();
-    setState(() {
-      _notebooks = _notebooks.map((item) {
-        if (item.id != notebook.id) {
-          return item;
-        }
-        return item.copyWith(name: name, updatedAt: now);
-      }).toList();
-    });
-    await _persistWorkspace();
-  }
-
-  Future<void> _deleteNotebook(Notebook notebook) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        icon: const Icon(Icons.delete_outline),
-        title: const Text('Delete notebook?'),
-        content: Text(
-          'Delete "${notebook.name}" with its sections and notes? This cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) {
-      return;
-    }
-    final reminderStorage = ReminderStorage();
-    for (final note in notebook.notes) {
-      final reminderId = note.reminderId;
-      if (reminderId != null) {
-        await reminderStorage.deleteReminder(reminderId);
-      }
-    }
-    setState(() {
-      _notebooks = _notebooks.where((item) => item.id != notebook.id).toList();
-      if (_selectedCategory != null &&
-          !_notebooks.any((item) => item.iconType == _selectedCategory)) {
-        _selectedCategory = null;
-      }
     });
     await _persistWorkspace();
   }
@@ -377,6 +343,23 @@ class _NotesScreenState extends State<NotesScreen> {
     );
   }
 
+  Future<void> _showAllNotes() async {
+    final selectedNote = await Navigator.of(context).push<RecentNoteView>(
+      MaterialPageRoute<RecentNoteView>(
+        builder: (_) => AllNotesScreen(
+          notes: _recentNotes(),
+          onTogglePinned: _togglePinnedNote,
+          onColorChanged: _changeNoteColor,
+          onTagColorChanged: _changeTagColor,
+        ),
+      ),
+    );
+    if (!mounted || selectedNote == null) {
+      return;
+    }
+    await _openRecentNote(selectedNote);
+  }
+
   Future<void> _togglePinnedNote(RecentNoteView recentNote) async {
     final notebookIndex = _notebooks.indexWhere(
       (notebook) => notebook.id == recentNote.notebookId,
@@ -396,6 +379,46 @@ class _NotesScreenState extends State<NotesScreen> {
       updatedAt: DateTime.now(),
     );
     await _updateNotebook(updated);
+  }
+
+  Future<void> _changeNoteColor(
+    RecentNoteView recentNote,
+    NoteCardColor color,
+  ) async {
+    final notebookIndex = _notebooks.indexWhere(
+      (notebook) => notebook.id == recentNote.notebookId,
+    );
+    if (notebookIndex == -1) {
+      return;
+    }
+    final notebook = _notebooks[notebookIndex];
+    final now = DateTime.now();
+    final updated = notebook.copyWith(
+      notes: notebook.notes
+          .map(
+            (note) => note.id == recentNote.note.id
+                ? note.copyWith(color: color, updatedAt: now)
+                : note,
+          )
+          .toList(),
+      updatedAt: now,
+    );
+    await _updateNotebook(updated);
+  }
+
+  void _expandSearch() {
+    setState(() => _isSearchExpanded = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _searchFocusNode.requestFocus();
+      }
+    });
+  }
+
+  void _closeSearch() {
+    _searchController.clear();
+    _searchFocusNode.unfocus();
+    setState(() => _isSearchExpanded = false);
   }
 
   Future<void> _createNote() async {
@@ -459,6 +482,7 @@ class _NotesScreenState extends State<NotesScreen> {
       appBar: AppBar(
         elevation: 0,
         scrolledUnderElevation: 0,
+        backgroundColor: theme.colorScheme.surface.withValues(alpha: 0.88),
         title: Text(
           'Notes',
           style: theme.textTheme.headlineSmall?.copyWith(
@@ -468,9 +492,11 @@ class _NotesScreenState extends State<NotesScreen> {
         actions: [
           IconButton(
             key: const ValueKey('notes-search-button'),
-            tooltip: 'Search notes',
-            onPressed: () => _searchFocusNode.requestFocus(),
-            icon: const Icon(Icons.search_rounded),
+            tooltip: _isSearchExpanded ? 'Close search' : 'Search notes',
+            onPressed: _isSearchExpanded ? _closeSearch : _expandSearch,
+            icon: Icon(
+              _isSearchExpanded ? Icons.close_rounded : Icons.search_rounded,
+            ),
           ),
           IconButton(
             key: const ValueKey('notes-new-notebook-button'),
@@ -481,54 +507,77 @@ class _NotesScreenState extends State<NotesScreen> {
           if (widget.appMenu != null) widget.appMenu!,
         ],
       ),
-      body: _isLoading
-          ? _buildLoadingState(context)
-          : SafeArea(
-              top: false,
-              child: GestureDetector(
-                onTap: () => FocusScope.of(context).unfocus(),
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final isWide = constraints.maxWidth >= 720;
-                    return SingleChildScrollView(
-                      keyboardDismissBehavior:
-                          ScrollViewKeyboardDismissBehavior.onDrag,
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          if (_storageError != null)
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 12),
-                              child: MaterialBanner(
-                                content: Text(_storageError!),
-                                leading: const Icon(
-                                  Icons.warning_amber_rounded,
-                                ),
-                                actions: [
-                                  TextButton(
-                                    onPressed: _loadWorkspace,
-                                    child: const Text('Retry'),
+      body: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              theme.colorScheme.surface,
+              Color.lerp(
+                theme.colorScheme.surface,
+                theme.colorScheme.primaryContainer,
+                theme.brightness == Brightness.light ? 0.12 : 0.08,
+              )!,
+            ],
+          ),
+        ),
+        child: _isLoading
+            ? _buildLoadingState(context)
+            : SafeArea(
+                top: false,
+                child: GestureDetector(
+                  onTap: () => FocusScope.of(context).unfocus(),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final isWide = constraints.maxWidth >= 720;
+                      return SingleChildScrollView(
+                        keyboardDismissBehavior:
+                            ScrollViewKeyboardDismissBehavior.onDrag,
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (_storageError != null)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 12),
+                                child: MaterialBanner(
+                                  content: Text(_storageError!),
+                                  leading: const Icon(
+                                    Icons.warning_amber_rounded,
                                   ),
-                                ],
+                                  actions: [
+                                    TextButton(
+                                      onPressed: _loadWorkspace,
+                                      child: const Text('Retry'),
+                                    ),
+                                  ],
+                                ),
                               ),
+                            AnimatedSize(
+                              duration: const Duration(milliseconds: 220),
+                              curve: Curves.easeInOut,
+                              alignment: Alignment.topCenter,
+                              child: _isSearchExpanded
+                                  ? Padding(
+                                      padding: const EdgeInsets.only(
+                                        bottom: 14,
+                                      ),
+                                      child: _buildSearchBar(context),
+                                    )
+                                  : const SizedBox(width: double.infinity),
                             ),
-                          _buildCategoryStrip(context),
-                          const SizedBox(height: 14),
-                          _buildSearchBar(context),
-                          const SizedBox(height: 22),
-                          _buildPinnedSection(context),
-                          const SizedBox(height: 20),
-                          _buildRecentNotesSection(context, isWide: isWide),
-                          const SizedBox(height: 24),
-                          _buildNotebookSection(context),
-                        ],
-                      ),
-                    );
-                  },
+                            _buildNotebookPanel(context),
+                            const SizedBox(height: 16),
+                            _buildRecentNotesSection(context, isWide: isWide),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
                 ),
               ),
-            ),
+      ),
       floatingActionButton: FloatingActionButton(
         key: const ValueKey('notes-add-note-fab'),
         tooltip: 'Create note',
@@ -548,6 +597,24 @@ class _NotesScreenState extends State<NotesScreen> {
           const SizedBox(height: 12),
           Text('Loading notes workspace...', style: theme.textTheme.bodyMedium),
         ],
+      ),
+    );
+  }
+
+  Widget _buildNotebookPanel(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      key: const ValueKey('notes-notebook-panel'),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: colorScheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [_buildCategoryStrip(context)],
       ),
     );
   }
@@ -725,150 +792,59 @@ class _NotesScreenState extends State<NotesScreen> {
           borderRadius: BorderRadius.circular(24),
           borderSide: BorderSide(color: colorScheme.primary, width: 1.2),
         ),
-        suffixIcon: _query.isNotEmpty
-            ? IconButton(
-                tooltip: 'Clear search',
-                onPressed: () {
+        suffixIcon: IconButton(
+          tooltip: _query.isEmpty ? 'Close search' : 'Clear search',
+          onPressed: _query.isEmpty
+              ? _closeSearch
+              : () {
                   _searchController.clear();
                   setState(() {});
                 },
-                icon: const Icon(Icons.close_rounded),
-              )
-            : PopupMenuButton<bool>(
-                tooltip: 'Sort notes',
-                initialValue: _oldestFirst,
-                onSelected: (oldestFirst) {
-                  setState(() => _oldestFirst = oldestFirst);
-                },
-                itemBuilder: (context) => const [
-                  PopupMenuItem<bool>(
-                    value: false,
-                    child: Text('Newest first'),
-                  ),
-                  PopupMenuItem<bool>(value: true, child: Text('Oldest first')),
-                ],
-                icon: const Icon(Icons.tune_rounded),
-              ),
+          icon: const Icon(Icons.close_rounded),
+        ),
       ),
       onChanged: (_) => setState(() {}),
     );
   }
 
-  Widget _buildPinnedSection(BuildContext context) {
-    final notes = _filteredPinnedNotes;
-    final visibleNotes = _showAllPinned ? notes : notes.take(2).toList();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _buildSectionHeading(
-          context,
-          title: 'Pinned',
-          icon: Icons.push_pin_rounded,
-          totalCount: notes.length,
-          visibleCount: 2,
-          showAll: _showAllPinned,
-          onShowAll: () => setState(() => _showAllPinned = !_showAllPinned),
-        ),
-        if (visibleNotes.isEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Text(
-              'Pin notes to keep them close at hand.',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-          )
-        else
-          ...visibleNotes.map(
-            (note) => Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Semantics(
-                button: true,
-                label: 'Open ${note.note.title} in ${note.notebookName}',
-                child: SizedBox(
-                  height: 132,
-                  child: RecentNoteCard(
-                    note: note,
-                    onTap: () => _openRecentNote(note),
-                    onTogglePinned: () => _togglePinnedNote(note),
-                    onTagColorChanged: _changeTagColor,
-                  ),
-                ),
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-
-  Widget _buildSectionHeading(
-    BuildContext context, {
-    required String title,
-    required IconData icon,
-    required int totalCount,
-    required int visibleCount,
-    required bool showAll,
-    required VoidCallback onShowAll,
-  }) {
+  Widget _buildRecentNotesHeading(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
     return Row(
       children: [
-        Icon(icon, size: 18, color: colorScheme.primary),
-        const SizedBox(width: 7),
         Expanded(
           child: Text(
-            title,
+            'Recent Notes',
             style: theme.textTheme.titleMedium?.copyWith(
               fontWeight: FontWeight.w700,
             ),
           ),
         ),
-        if (totalCount > visibleCount)
-          TextButton(
-            onPressed: onShowAll,
-            style: TextButton.styleFrom(
-              visualDensity: VisualDensity.compact,
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-            ),
-            child: Text(showAll ? 'Show less' : 'See all'),
+        TextButton(
+          key: const ValueKey('notes-see-all-button'),
+          onPressed: _showAllNotes,
+          style: TextButton.styleFrom(
+            visualDensity: VisualDensity.compact,
+            padding: const EdgeInsets.symmetric(horizontal: 4),
           ),
-      ],
-    );
-  }
-
-  Widget _buildNotebookSection(BuildContext context) {
-    final notebooks = _filteredNotebooks;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          'Notebooks',
-          style: Theme.of(context).textTheme.titleMedium
-              ?.copyWith(fontWeight: FontWeight.w700),
-        ),
-        const SizedBox(height: 10),
-        if (notebooks.isEmpty)
-          _SectionEmptyState(
-            message: _query.isEmpty
-                ? 'No notebooks yet. Create your first notebook.'
-                : 'No notebooks match your search.',
-          )
-        else
-          ...notebooks.map(
-            (notebook) => Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: NotebookListTile(
-                notebook: notebook,
-                onOpen: () => _openNotebook(notebook),
-                onRename: () => _renameNotebook(notebook),
-                onDelete: () => _deleteNotebook(notebook),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'See all',
+                style: theme.textTheme.labelLarge?.copyWith(
+                  color: colorScheme.primary,
+                ),
               ),
-            ),
+              Icon(
+                Icons.chevron_right_rounded,
+                size: 20,
+                color: colorScheme.primary,
+              ),
+            ],
           ),
+        ),
       ],
     );
   }
@@ -878,20 +854,12 @@ class _NotesScreenState extends State<NotesScreen> {
     required bool isWide,
   }) {
     final notes = _filteredRecentNotes;
-    final visibleNotes = _showAllRecent ? notes : notes.take(8).toList();
+    final visibleNotes = notes.take(8).toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _buildSectionHeading(
-          context,
-          title: 'Recent Notes',
-          icon: Icons.notes_rounded,
-          totalCount: notes.length,
-          visibleCount: 8,
-          showAll: _showAllRecent,
-          onShowAll: () => setState(() => _showAllRecent = !_showAllRecent),
-        ),
+        _buildRecentNotesHeading(context),
         const SizedBox(height: 8),
         if (visibleNotes.isEmpty)
           _SectionEmptyState(
@@ -906,7 +874,7 @@ class _NotesScreenState extends State<NotesScreen> {
             itemCount: visibleNotes.length,
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: isWide ? 3 : 2,
-              mainAxisExtent: 152,
+              mainAxisExtent: 176,
               crossAxisSpacing: 10,
               mainAxisSpacing: 10,
             ),
@@ -920,6 +888,7 @@ class _NotesScreenState extends State<NotesScreen> {
                   compact: true,
                   onTap: () => _openRecentNote(note),
                   onTogglePinned: () => _togglePinnedNote(note),
+                  onColorChanged: (color) => _changeNoteColor(note, color),
                   onTagColorChanged: _changeTagColor,
                 ),
               );

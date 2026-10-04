@@ -1,5 +1,9 @@
+import 'dart:convert';
+
 import 'package:app_smarana/features/notes/models/note_workspace_models.dart';
 import 'package:app_smarana/features/notes/notes_screen.dart';
+import 'package:app_smarana/features/notes/widgets/recent_note_card.dart';
+import 'package:app_smarana/features/reminders/models/reminder.dart';
 import 'package:app_smarana/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,43 +14,32 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  testWidgets('creates, renames, and deletes notebooks', (tester) async {
-    await tester.pumpWidget(const MaterialApp(home: NotesScreen()));
-    await tester.pump(const Duration(seconds: 1));
-    await tester.pump();
-
-    await tester.tap(find.byKey(const ValueKey('notes-new-notebook-button')));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField).last, 'Project Launch');
-    await tester.tap(find.widgetWithText(FilledButton, 'Create'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Project Launch'), findsOneWidget);
-
-    await tester.ensureVisible(
-      find.byTooltip('Notebook actions for Project Launch'),
+  testWidgets('keeps the folder selector without a notebook list', (
+    tester,
+  ) async {
+    final now = DateTime.now();
+    final notebook = Notebook(
+      id: 'folder-notebook',
+      name: 'app',
+      iconType: NotebookIconType.general,
+      sections: [
+        NoteSection(id: 'folder-section', name: 'General', createdAt: now),
+      ],
+      notes: const [],
+      createdAt: now,
+      updatedAt: now,
     );
-    await tester.tap(find.byTooltip('Notebook actions for Project Launch'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Rename'));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField).last, 'Project X');
-    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
-    await tester.pumpAndSettle();
 
-    expect(find.text('Project X'), findsOneWidget);
-
-    await tester.ensureVisible(
-      find.byTooltip('Notebook actions for Project X'),
+    await tester.pumpWidget(
+      MaterialApp(home: NotesScreen(initialNotebooks: [notebook])),
     );
-    await tester.tap(find.byTooltip('Notebook actions for Project X'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Delete'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Project X'), findsNothing);
+    expect(find.text('All'), findsOneWidget);
+    expect(find.text('General'), findsOneWidget);
+    expect(find.text('Notebooks'), findsNothing);
+    expect(find.text('app'), findsNothing);
+    expect(find.byKey(const ValueKey('notes-add-note-fab')), findsOneWidget);
   });
 
   testWidgets('starts with a real empty workspace instead of demo notes', (
@@ -57,9 +50,10 @@ void main() {
     await tester.pump();
 
     expect(
-      find.text('No notebooks yet. Create your first notebook.'),
+      find.text('No recent notes yet. Open a notebook and start writing.'),
       findsOneWidget,
     );
+    expect(find.text('Notebooks'), findsNothing);
     expect(find.text('Plans & Goals'), findsNothing);
     expect(find.text('Weekly Review'), findsNothing);
     expect(
@@ -133,13 +127,25 @@ void main() {
           : mode == ThemeMode.dark
           ? Brightness.dark
           : Brightness.light;
+      expect(find.byKey(const ValueKey('notes-search-button')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('notes-workspace-search')),
+        findsNothing,
+      );
+      await tester.tap(find.byKey(const ValueKey('notes-search-button')));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('notes-workspace-search')),
+        findsOneWidget,
+      );
       expect(
         Theme.of(
           tester.element(find.byKey(const ValueKey('notes-workspace-search'))),
         ).brightness,
         expectedBrightness,
       );
-      expect(find.byKey(const ValueKey('notes-search-button')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('notes-search-button')));
+      await tester.pumpAndSettle();
 
       final finalColorNote = find.text('Palette lavender');
       await tester.ensureVisible(finalColorNote);
@@ -184,7 +190,9 @@ void main() {
       MaterialApp(home: NotesScreen(initialNotebooks: [notebook])),
     );
 
-    await tester.tap(find.text('Engineering'));
+    await tester.tap(find.text('Sprint Review'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('note-editor-back')));
     await tester.pumpAndSettle();
 
     expect(find.text('Roadmap'), findsNWidgets(2));
@@ -238,7 +246,9 @@ void main() {
     expect(find.text('Engineering'), findsOneWidget);
   });
 
-  testWidgets('search filters notebook and recent note lists', (tester) async {
+  testWidgets('search filters recent notes without a notebook list', (
+    tester,
+  ) async {
     final notebooks = [
       Notebook(
         id: 'notebook-workout',
@@ -285,9 +295,12 @@ void main() {
       MaterialApp(home: NotesScreen(initialNotebooks: notebooks)),
     );
 
-    expect(find.text('Plans & Goals'), findsOneWidget);
+    expect(find.text('Notebooks'), findsNothing);
+    expect(find.text('Plans & Goals'), findsNothing);
     expect(find.text('Workout Split'), findsOneWidget);
 
+    await tester.tap(find.byKey(const ValueKey('notes-search-button')));
+    await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const ValueKey('notes-workspace-search')),
       'workout',
@@ -337,7 +350,7 @@ void main() {
     await tester.tap(find.text('Pin note'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Pinned'), findsOneWidget);
+    expect(find.text('Pinned'), findsNothing);
     expect(find.text('Launch ideas'), findsOneWidget);
 
     await tester.tap(find.byTooltip('Note actions for Launch ideas'));
@@ -345,12 +358,237 @@ void main() {
     await tester.tap(find.text('Unpin note'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Pin notes to keep them close at hand.'), findsOneWidget);
+    expect(find.text('Pinned'), findsNothing);
     expect(find.text('Launch ideas'), findsOneWidget);
 
     await tester.tap(find.text('Launch ideas'));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('rich-note-title-field')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('See all opens every note with the requested card styling', (
+    tester,
+  ) async {
+    final now = DateTime.now();
+    final notebook = Notebook(
+      id: 'all-notes-notebook',
+      name: 'Planning Notebook',
+      iconType: NotebookIconType.general,
+      sections: [
+        NoteSection(id: 'all-notes-section', name: 'Plans', createdAt: now),
+      ],
+      notes: [
+        for (var index = 0; index < 9; index++)
+          NoteEntry(
+            id: 'recent-note-$index',
+            notebookId: 'all-notes-notebook',
+            sectionId: 'all-notes-section',
+            title: 'Recent planning note $index',
+            content: 'A recent note for the home page.',
+            createdAt: now.subtract(Duration(hours: index + 1)),
+            updatedAt: now.subtract(Duration(hours: index + 1)),
+          ),
+        NoteEntry(
+          id: 'older-note',
+          notebookId: 'all-notes-notebook',
+          sectionId: 'all-notes-section',
+          title: 'Older planning note',
+          content: 'This older note is still part of all notes.',
+          createdAt: now.subtract(const Duration(days: 60)),
+          updatedAt: now.subtract(const Duration(days: 45)),
+        ),
+      ],
+      createdAt: now.subtract(const Duration(days: 60)),
+      updatedAt: now,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: NotesScreen(initialNotebooks: [notebook])),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Recent Notes'), findsOneWidget);
+    expect(find.text('Older planning note'), findsNothing);
+    final seeAllButton = find.byKey(const ValueKey('notes-see-all-button'));
+    await tester.ensureVisible(seeAllButton);
+    await tester.tap(seeAllButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('All Notes'), findsOneWidget);
+    final olderNoteCard = find.byKey(
+      const ValueKey('recent-note-card-older-note'),
+    );
+    await tester.scrollUntilVisible(
+      olderNoteCard,
+      300,
+      scrollable: find.byType(Scrollable).last,
+    );
+    final titleFinder = find.descendant(
+      of: olderNoteCard,
+      matching: find.text('Older planning note'),
+    );
+    final title = tester.widget<Text>(titleFinder);
+    expect(title.style?.fontWeight, FontWeight.w700);
+    expect(title.style?.decoration, isNot(TextDecoration.underline));
+
+    final notebookName = tester.widget<Text>(
+      find.descendant(
+        of: olderNoteCard,
+        matching: find.text('Planning Notebook'),
+      ),
+    );
+    expect(
+      find.descendant(
+        of: olderNoteCard,
+        matching: find.byKey(const ValueKey('recent-note-notebook-older-note')),
+      ),
+      findsOneWidget,
+    );
+    expect(notebookName.style?.decoration, isNot(TextDecoration.underline));
+
+    await tester.tap(find.byTooltip('Note actions for Older planning note'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Pin note'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Note actions for Older planning note'));
+    await tester.pumpAndSettle();
+    expect(find.text('Unpin note'), findsOneWidget);
+    await tester.tap(find.text('Unpin note'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(titleFinder);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('rich-note-title-field')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'orders note cards by pin, recent update, reminder, then others',
+    (tester) async {
+      final now = DateTime.now();
+      final reminder = Reminder(
+        id: 'sort-reminder',
+        title: 'Follow up',
+        dateTime: now.add(const Duration(days: 2)),
+        createdAt: now.subtract(const Duration(days: 60)),
+      );
+      SharedPreferences.setMockInitialValues({
+        'reminders': jsonEncode([reminder.toJson()]),
+      });
+
+      final notebook = Notebook(
+        id: 'sorting-notebook',
+        name: 'Planning',
+        iconType: NotebookIconType.general,
+        sections: [
+          NoteSection(
+            id: 'sorting-section',
+            name: 'General',
+            createdAt: now.subtract(const Duration(days: 90)),
+          ),
+        ],
+        notes: [
+          NoteEntry(
+            id: 'pinned-note',
+            notebookId: 'sorting-notebook',
+            sectionId: 'sorting-section',
+            title: 'Pinned note',
+            content: 'Pinned',
+            isPinned: true,
+            createdAt: now.subtract(const Duration(days: 90)),
+            updatedAt: now.subtract(const Duration(days: 60)),
+          ),
+          NoteEntry(
+            id: 'updated-note',
+            notebookId: 'sorting-notebook',
+            sectionId: 'sorting-section',
+            title: 'Recently updated',
+            content: 'Updated',
+            createdAt: now.subtract(const Duration(days: 90)),
+            updatedAt: now.subtract(const Duration(days: 1)),
+          ),
+          NoteEntry(
+            id: 'reminder-note',
+            notebookId: 'sorting-notebook',
+            sectionId: 'sorting-section',
+            title: 'Reminder note',
+            content: 'Reminder',
+            reminderId: reminder.id,
+            createdAt: now.subtract(const Duration(days: 90)),
+            updatedAt: now.subtract(const Duration(days: 60)),
+          ),
+          NoteEntry(
+            id: 'other-note',
+            notebookId: 'sorting-notebook',
+            sectionId: 'sorting-section',
+            title: 'Other note',
+            content: 'Other',
+            createdAt: now.subtract(const Duration(days: 90)),
+            updatedAt: now.subtract(const Duration(days: 60)),
+          ),
+        ],
+        createdAt: now.subtract(const Duration(days: 90)),
+        updatedAt: now,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(home: NotesScreen(initialNotebooks: [notebook])),
+      );
+      await tester.pumpAndSettle();
+
+      final titles = tester
+          .widgetList<RecentNoteCard>(find.byType(RecentNoteCard))
+          .map((card) => card.note.note.title)
+          .toList();
+      expect(titles, [
+        'Pinned note',
+        'Recently updated',
+        'Reminder note',
+        'Other note',
+      ]);
+    },
+  );
+
+  testWidgets('updates note card color from its home card menu', (
+    tester,
+  ) async {
+    final now = DateTime.now();
+    final notebook = Notebook(
+      id: 'color-notebook',
+      name: 'Color tests',
+      iconType: NotebookIconType.ideas,
+      sections: [
+        NoteSection(id: 'color-section', name: 'Ideas', createdAt: now),
+      ],
+      notes: [
+        NoteEntry(
+          id: 'color-note',
+          notebookId: 'color-notebook',
+          sectionId: 'color-section',
+          title: 'Color target',
+          content: 'Change this note color.',
+          createdAt: now,
+          updatedAt: now,
+        ),
+      ],
+      createdAt: now,
+      updatedAt: now,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: NotesScreen(initialNotebooks: [notebook])),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Note actions for Color target'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Change color'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('note-color-blue')));
+    await tester.pumpAndSettle();
+
+    final card = tester.widget<RecentNoteCard>(find.byType(RecentNoteCard));
+    expect(card.note.note.color, NoteCardColor.blue);
     expect(tester.takeException(), isNull);
   });
 
@@ -426,7 +664,9 @@ void main() {
       MaterialApp(home: NotesScreen(initialNotebooks: [notebook])),
     );
 
-    await tester.tap(find.text('Project Board'));
+    await tester.tap(find.text('Task A'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('note-editor-back')));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('List'));
