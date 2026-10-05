@@ -505,13 +505,14 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
       itemBuilder: (context, index) {
         final note = notes[index];
         final metadata = note.projectMetadata;
+        final noteForeground = noteCardForegroundColor(theme, note.color);
         return Card(
           color: noteCardSurfaceColor(theme, note.color),
           surfaceTintColor: Colors.transparent,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
             side: BorderSide(
-              color: notebookAccentColor(theme, _notebook.colorValue),
+            color: colorScheme.outlineVariant.withValues(alpha: 0.45),
             ),
           ),
           child: ListTile(
@@ -519,10 +520,15 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
             leading: note.reminderId != null
                 ? Icon(
                     Icons.notifications_active_outlined,
-                    color: colorScheme.primary,
+                  color: noteForeground,
                   )
                 : null,
-            title: Text(note.title.isEmpty ? 'Untitled note' : note.title),
+          title: Text(
+            note.title.isEmpty ? 'Untitled note' : note.title,
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: noteForeground,
+            ),
+          ),
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -530,6 +536,9 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
                   note.preview,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: noteForeground,
+                  ),
                 ),
                 if (metadata != null) ...[
                   const SizedBox(height: 6),
@@ -563,7 +572,7 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
             trailing: IconButton(
               key: ValueKey('delete-note-${note.id}'),
               tooltip: 'Delete note',
-              icon: const Icon(Icons.delete_outline),
+              icon: Icon(Icons.delete_outline, color: noteForeground),
               onPressed: () => _deleteNote(note),
             ),
           ),
@@ -592,19 +601,25 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
         final note = notes[index];
         final metadata = note.projectMetadata;
         final status = metadata?.status ?? NoteProjectStatus.toDo;
+        final noteForeground = noteCardForegroundColor(theme, note.color);
         return Card(
           color: noteCardSurfaceColor(theme, note.color),
           surfaceTintColor: Colors.transparent,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
             side: BorderSide(
-              color: notebookAccentColor(theme, _notebook.colorValue),
+              color: colorScheme.outlineVariant.withValues(alpha: 0.45),
             ),
           ),
           child: ListTile(
             key: ValueKey('list-note-${note.id}'),
             onTap: () => _editNote(note),
-            title: Text(note.title.isEmpty ? 'Untitled note' : note.title),
+            title: Text(
+              note.title.isEmpty ? 'Untitled note' : note.title,
+              style: theme.textTheme.titleMedium?.copyWith(
+                color: noteForeground,
+              ),
+            ),
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -614,6 +629,9 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
                       : 'Owner: ${metadata!.owner} · ${_statusLabel(status)}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: noteForeground,
+                  ),
                 ),
                 if (metadata?.tags.isNotEmpty ?? false) ...[
                   const SizedBox(height: 4),
@@ -799,13 +817,14 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
     required ColorScheme colorScheme,
   }) {
     final metadata = note.projectMetadata;
+    final noteForeground = noteCardForegroundColor(theme, note.color);
     return Card(
       color: noteCardSurfaceColor(theme, note.color),
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
         side: BorderSide(
-          color: notebookAccentColor(theme, _notebook.colorValue),
+          color: colorScheme.outlineVariant.withValues(alpha: 0.45),
         ),
       ),
       child: ListTile(
@@ -815,6 +834,9 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
           note.title.isEmpty ? 'Untitled note' : note.title,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
+          style: theme.textTheme.titleSmall?.copyWith(
+            color: noteForeground,
+          ),
         ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -826,7 +848,7 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: theme.textTheme.bodySmall?.copyWith(
-                color: colorScheme.onSurfaceVariant,
+                color: noteForeground,
               ),
             ),
             if (metadata?.tags.isNotEmpty ?? false) ...[

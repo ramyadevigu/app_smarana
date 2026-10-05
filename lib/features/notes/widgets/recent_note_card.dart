@@ -29,7 +29,7 @@ class RecentNoteCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final cardAccent = noteCardAccentColor(theme, note.note.color);
+    final cardForeground = noteCardForegroundColor(theme, note.note.color);
     final notebookAccent = notebookAccentColor(theme, note.notebookColorValue);
     final borderRadius = BorderRadius.circular(AppRadius.compactCard);
 
@@ -47,9 +47,7 @@ class RecentNoteCard extends StatelessWidget {
             border: Border.all(
               color: note.note.isPinned
                   ? colorScheme.primary.withValues(alpha: 0.42)
-                  : note.note.color == NoteCardColor.standard
-                  ? colorScheme.outlineVariant.withValues(alpha: 0.5)
-                  : cardAccent.withValues(alpha: 0.38),
+                  : colorScheme.outlineVariant.withValues(alpha: 0.45),
             ),
           ),
           child: Column(
@@ -64,7 +62,7 @@ class RecentNoteCard extends StatelessWidget {
                       child: Icon(
                         Icons.push_pin_rounded,
                         size: 15,
-                        color: colorScheme.primary,
+                        color: cardForeground,
                       ),
                     ),
                     const SizedBox(width: 5),
@@ -78,6 +76,7 @@ class RecentNoteCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w700,
+                        color: cardForeground,
                       ),
                     ),
                   ),
@@ -87,7 +86,10 @@ class RecentNoteCard extends StatelessWidget {
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(minWidth: 40),
                       iconSize: 19,
-                      icon: const Icon(Icons.more_horiz_rounded),
+                      icon: Icon(
+                        Icons.more_horiz_rounded,
+                        color: cardForeground,
+                      ),
                       onSelected: (value) async {
                         if (value == 'pin') {
                           onTogglePinned?.call();
@@ -143,7 +145,7 @@ class RecentNoteCard extends StatelessWidget {
                   maxLines: compact ? 2 : 3,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodySmall?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
+                    color: cardForeground,
                   ),
                 ),
               ),
@@ -201,7 +203,7 @@ class RecentNoteCard extends StatelessWidget {
                     Icon(
                       Icons.notifications_active_outlined,
                       size: 14,
-                      color: colorScheme.primary,
+                      color: cardForeground,
                     ),
                     const SizedBox(width: 6),
                   ],
@@ -258,7 +260,7 @@ class RecentNoteCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       textAlign: TextAlign.end,
                       style: theme.textTheme.labelSmall?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
+                        color: cardForeground,
                       ),
                     ),
                   ),

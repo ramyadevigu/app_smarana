@@ -178,7 +178,7 @@ void main() {
       final migratedColors = legacyNotebook.notes
           .map((note) => note.color)
           .toList();
-      expect(migratedColors, [NoteCardColor.yellow, NoteCardColor.pink]);
+      expect(migratedColors, [NoteCardColor.yellow, NoteCardColor.blue]);
 
       final persisted = jsonDecode(
         preferences.getString('smarana_note_workspace_v1')!,
@@ -196,7 +196,7 @@ void main() {
         (persistedLegacy['notes'] as List)
             .map((note) => note['color'])
             .toList(),
-        ['yellow', 'pink'],
+        ['yellow', 'blue'],
       );
       expect(
         (persistedLegacy['notes'] as List).every(

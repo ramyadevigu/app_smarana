@@ -55,6 +55,7 @@ enum NoteCardColor {
   cyan,
   orange,
   lavender,
+  teal,
   sky,
   mint,
 }

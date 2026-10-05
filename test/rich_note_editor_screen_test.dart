@@ -40,7 +40,12 @@ void main() {
       find.byKey(const ValueKey('rich-note-formatting-toolbar')),
       findsOneWidget,
     );
-    expect(find.byTooltip('Heading'), findsOneWidget);
+    expect(find.byTooltip('Bold'), findsOneWidget);
+    expect(find.byTooltip('Italic'), findsOneWidget);
+    expect(find.byTooltip('Bullet list'), findsOneWidget);
+    expect(find.byTooltip('Checklist'), findsOneWidget);
+    expect(find.byTooltip('More formatting options'), findsOneWidget);
+    expect(find.byTooltip('Heading'), findsNothing);
   });
 
   testWidgets('opens compact reminder settings from the bell', (tester) async {
@@ -59,19 +64,24 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('formatting rail collapses and More exposes note actions', (
+  testWidgets('formatting toolbar keeps common actions and + shows more', (
     tester,
   ) async {
     await tester.pumpWidget(MaterialApp(home: RichNoteEditorScreen()));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Collapse formatting toolbar'));
+    expect(find.byTooltip('Bold'), findsOneWidget);
+    expect(find.byTooltip('Italic'), findsOneWidget);
+    expect(find.byTooltip('Bullet list'), findsOneWidget);
+    expect(find.byTooltip('Checklist'), findsOneWidget);
+    await tester.tap(find.byTooltip('More formatting options'));
     await tester.pumpAndSettle();
-    expect(find.byTooltip('Heading'), findsNothing);
-
-    await tester.tap(find.byTooltip('Expand formatting toolbar'));
+    expect(find.text('Heading'), findsOneWidget);
+    expect(find.text('Insert image'), findsOneWidget);
+    expect(find.text('Insert hyperlink'), findsOneWidget);
+    expect(find.text('Undo'), findsOneWidget);
+    await tester.tap(find.text('Heading'));
     await tester.pumpAndSettle();
-    expect(find.byTooltip('Heading'), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('note-editor-more-menu')));
     await tester.pumpAndSettle();
@@ -81,6 +91,26 @@ void main() {
     expect(find.text('Duplicate'), findsOneWidget);
     expect(find.text('Share'), findsOneWidget);
     expect(find.text('Delete'), findsOneWidget);
+  });
+
+  testWidgets('formatting toolbar stays above the keyboard inset', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(400, 800);
+    tester.view.devicePixelRatio = 1;
+    tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetViewInsets);
+
+    await tester.pumpWidget(MaterialApp(home: RichNoteEditorScreen()));
+    await tester.pumpAndSettle();
+
+    final toolbarRect = tester.getRect(
+      find.byKey(const ValueKey('rich-note-formatting-toolbar')),
+    );
+    expect(toolbarRect.bottom, lessThanOrEqualTo(500));
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('note color picker uses the approved theme palette', (
@@ -107,21 +137,19 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('all ten note colors can be selected', (tester) async {
+  testWidgets('all eight note colors can be selected', (tester) async {
     await tester.pumpWidget(MaterialApp(home: RichNoteEditorScreen()));
     await tester.pumpAndSettle();
 
     for (final color in [
       'Yellow',
-      'Pink',
-      'Purple',
       'Blue',
       'Green',
-      'Cyan',
-      'Mint',
+      'Pink',
+      'Purple',
       'Orange',
+      'Teal',
       'Lavender',
-      'Sky',
     ]) {
       await tester.tap(find.byKey(const ValueKey('note-editor-more-menu')));
       await tester.pumpAndSettle();
@@ -275,7 +303,9 @@ void main() {
     );
     await tester.pump();
 
-    await tester.tap(find.byTooltip('Text colors'));
+    await tester.tap(find.byTooltip('More formatting options'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Text colors'));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Text highlight Yellow'));
     await tester.pumpAndSettle();
@@ -354,7 +384,9 @@ void main() {
           quill.ChangeSource.local,
         );
         await tester.pump();
-        await tester.tap(find.byTooltip('Text colors'));
+        await tester.tap(find.byTooltip('More formatting options'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Text colors'));
         await tester.pumpAndSettle();
         await tester.tap(find.byTooltip('Text highlight ${colorNames[index]}'));
         await tester.pumpAndSettle();
@@ -370,7 +402,9 @@ void main() {
           quill.ChangeSource.local,
         );
         await tester.pump();
-        await tester.tap(find.byTooltip('Text colors'));
+        await tester.tap(find.byTooltip('More formatting options'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Text colors'));
         await tester.pumpAndSettle();
         await tester.tap(find.byTooltip('Text color ${colorNames[index]}'));
         await tester.pumpAndSettle();

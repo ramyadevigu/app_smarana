@@ -90,7 +90,6 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
   late NoteCardColor _selectedNoteColor;
   late List<NoteAttachment> _attachments;
   late Map<String, NoteCardColor> _tagColors;
-  bool _toolbarExpanded = true;
   bool _isExiting = false;
   bool _projectMetadataVisible = false;
 
@@ -1704,30 +1703,72 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
       useSafeArea: true,
       showDragHandle: true,
       builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.palette_outlined),
-              title: const Text('Highlight color'),
-              onTap: () => Navigator.of(context).pop('highlight'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.attach_file_rounded),
-              title: const Text('Add attachment'),
-              onTap: () => Navigator.of(context).pop('attachment'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.undo_rounded),
-              title: const Text('Undo'),
-              onTap: () => Navigator.of(context).pop('undo'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.redo_rounded),
-              title: const Text('Redo'),
-              onTap: () => Navigator.of(context).pop('redo'),
-            ),
-          ],
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.title_rounded),
+                title: const Text('Heading'),
+                onTap: () => Navigator.of(context).pop('heading'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.format_underlined_rounded),
+                title: const Text('Underline'),
+                onTap: () => Navigator.of(context).pop('underline'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.palette_outlined),
+                title: const Text('Text colors'),
+                onTap: () => Navigator.of(context).pop('text_colors'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.format_list_numbered_rounded),
+                title: const Text('Numbered list'),
+                onTap: () => Navigator.of(context).pop('numbered_list'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.image_outlined),
+                title: const Text('Insert image'),
+                onTap: () => Navigator.of(context).pop('image'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.link_rounded),
+                title: const Text('Insert hyperlink'),
+                onTap: () => Navigator.of(context).pop('link'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.table_chart_outlined),
+                title: const Text('Insert table'),
+                onTap: () => Navigator.of(context).pop('table'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.code_rounded),
+                title: const Text('Code block'),
+                onTap: () => Navigator.of(context).pop('code'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.horizontal_rule_rounded),
+                title: const Text('Insert divider'),
+                onTap: () => Navigator.of(context).pop('divider'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.attach_file_rounded),
+                title: const Text('Add attachment'),
+                onTap: () => Navigator.of(context).pop('attachment'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.undo_rounded),
+                title: const Text('Undo'),
+                onTap: () => Navigator.of(context).pop('undo'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.redo_rounded),
+                title: const Text('Redo'),
+                onTap: () => Navigator.of(context).pop('redo'),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1735,6 +1776,33 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
       return;
     }
     switch (option) {
+      case 'heading':
+        _toggleInlineAttribute(quill.Attribute.h1);
+        break;
+      case 'underline':
+        _toggleInlineAttribute(quill.Attribute.underline);
+        break;
+      case 'text_colors':
+        await _showFormattingColorPicker();
+        break;
+      case 'numbered_list':
+        _toggleInlineAttribute(quill.Attribute.ol);
+        break;
+      case 'image':
+        await _addImages();
+        break;
+      case 'link':
+        await _insertHyperlink();
+        break;
+      case 'table':
+        _insertTableTemplate();
+        break;
+      case 'code':
+        _toggleInlineAttribute(quill.Attribute.codeBlock);
+        break;
+      case 'divider':
+        _insertDivider();
+        break;
       case 'highlight':
         await _showHighlightColors();
         break;
@@ -1847,7 +1915,7 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
     final colorScheme = theme.colorScheme;
     final noteColors = target == _FormattingColorTarget.highlight
         ? noteTextHighlightColors
-        : selectableNoteCardColors;
+        : selectableNoteTextColors;
     final colors = noteColors
         .map((noteColor) {
           final color = noteCardSwatchColor(theme, noteColor);
@@ -1949,133 +2017,51 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
     );
   }
 
-  Widget _buildFloatingToolbar(double availableHeight) {
+  Widget _buildFloatingToolbar() {
     final colorScheme = Theme.of(context).colorScheme;
-    final maxHeight = math.min(
-      availableHeight,
-      math.max(48.0, availableHeight * 0.78),
-    );
-    final buttons = [
-      _toolbarButton(
-        tooltip: 'Heading',
-        icon: Icons.title_rounded,
-        onPressed: () => _toggleInlineAttribute(quill.Attribute.h1),
-      ),
-      _toolbarButton(
-        tooltip: 'Bold',
-        icon: Icons.format_bold_rounded,
-        onPressed: () => _toggleInlineAttribute(quill.Attribute.bold),
-      ),
-      _toolbarButton(
-        tooltip: 'Italic',
-        icon: Icons.format_italic_rounded,
-        onPressed: () => _toggleInlineAttribute(quill.Attribute.italic),
-      ),
-      _toolbarButton(
-        tooltip: 'Underline',
-        icon: Icons.format_underlined_rounded,
-        onPressed: () => _toggleInlineAttribute(quill.Attribute.underline),
-      ),
-      _toolbarButton(
-        tooltip: 'Text colors',
-        icon: Icons.palette_outlined,
-        onPressed: _showFormattingColorPicker,
-      ),
-      _toolbarButton(
-        tooltip: 'Checklist',
-        icon: Icons.check_box_outlined,
-        onPressed: () => _toggleInlineAttribute(quill.Attribute.unchecked),
-      ),
-      _toolbarButton(
-        tooltip: 'Bullet list',
-        icon: Icons.format_list_bulleted_rounded,
-        onPressed: () => _toggleInlineAttribute(quill.Attribute.ul),
-      ),
-      _toolbarButton(
-        tooltip: 'Numbered list',
-        icon: Icons.format_list_numbered_rounded,
-        onPressed: () => _toggleInlineAttribute(quill.Attribute.ol),
-      ),
-      _toolbarButton(
-        tooltip: 'Insert image',
-        icon: Icons.image_outlined,
-        onPressed: _addImages,
-      ),
-      _toolbarButton(
-        tooltip: 'Insert hyperlink',
-        icon: Icons.link_rounded,
-        onPressed: _insertHyperlink,
-      ),
-      _toolbarButton(
-        tooltip: 'Insert table',
-        icon: Icons.table_chart_outlined,
-        onPressed: _insertTableTemplate,
-      ),
-      _toolbarButton(
-        tooltip: 'Code block',
-        icon: Icons.code_rounded,
-        onPressed: () => _toggleInlineAttribute(quill.Attribute.codeBlock),
-      ),
-      _toolbarButton(
-        tooltip: 'Insert divider',
-        icon: Icons.horizontal_rule_rounded,
-        onPressed: _insertDivider,
-      ),
-      _toolbarButton(
-        tooltip: 'Add formatting or content',
-        icon: Icons.add_rounded,
-        onPressed: _showInsertionOptions,
-      ),
-    ];
-
-    return AnimatedSize(
-      duration: AppMotion.resolve(context, AppMotion.interaction),
-      curve: Curves.easeOutCubic,
-      alignment: Alignment.topLeft,
-      child: Material(
-        key: const ValueKey('rich-note-formatting-toolbar'),
-        color: colorScheme.surface,
-        elevation: 5,
-        shadowColor: colorScheme.shadow.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(14),
-        clipBehavior: Clip.antiAlias,
-        child: _toolbarExpanded
-            ? ConstrainedBox(
-                constraints: BoxConstraints(maxHeight: maxHeight, maxWidth: 40),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _toolbarButton(
-                      tooltip: 'Collapse formatting toolbar',
-                      icon: Icons.tune_rounded,
-                      onPressed: () {
-                        setState(() => _toolbarExpanded = false);
-                      },
-                    ),
-                    Divider(
-                      height: 1,
-                      indent: 9,
-                      endIndent: 9,
-                      color: colorScheme.outlineVariant.withValues(alpha: 0.6),
-                    ),
-                    Flexible(
-                      child: SingleChildScrollView(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: buttons,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              )
-            : _toolbarButton(
-                tooltip: 'Expand formatting toolbar',
-                icon: Icons.tune_rounded,
-                onPressed: () {
-                  setState(() => _toolbarExpanded = true);
-                },
+    return Material(
+      key: const ValueKey('rich-note-formatting-toolbar'),
+      color: colorScheme.surfaceContainerLow,
+      elevation: 2,
+      shadowColor: colorScheme.shadow.withValues(alpha: 0.12),
+      borderRadius: BorderRadius.circular(16),
+      child: SizedBox(
+        width: double.infinity,
+        height: 48,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          child: Row(
+            children: [
+              _toolbarButton(
+                tooltip: 'Bold',
+                icon: Icons.format_bold_rounded,
+                onPressed: () => _toggleInlineAttribute(quill.Attribute.bold),
               ),
+              _toolbarButton(
+                tooltip: 'Italic',
+                icon: Icons.format_italic_rounded,
+                onPressed: () => _toggleInlineAttribute(quill.Attribute.italic),
+              ),
+              _toolbarButton(
+                tooltip: 'Bullet list',
+                icon: Icons.format_list_bulleted_rounded,
+                onPressed: () => _toggleInlineAttribute(quill.Attribute.ul),
+              ),
+              _toolbarButton(
+                tooltip: 'Checklist',
+                icon: Icons.check_box_outlined,
+                onPressed: () =>
+                    _toggleInlineAttribute(quill.Attribute.unchecked),
+              ),
+              const Spacer(),
+              _toolbarButton(
+                tooltip: 'More formatting options',
+                icon: Icons.add_rounded,
+                onPressed: _showInsertionOptions,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -2231,28 +2217,14 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
             children: [
               _buildNotebookHeader(),
               Expanded(
-                child: LayoutBuilder(
-                  builder: (context, constraints) => Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      Positioned.fill(
-                        child: quill.QuillEditor.basic(
-                          key: const ValueKey('rich-note-content-editor'),
-                          controller: _quillController,
-                          config: quill.QuillEditorConfig(
-                            autoFocus: widget.focusOnOpen,
-                            placeholder: 'Write something...',
-                            padding: const EdgeInsets.fromLTRB(56, 16, 18, 24),
-                            embedBuilders: const [NoteTableEmbedBuilder()],
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        left: 8,
-                        top: 8,
-                        child: _buildFloatingToolbar(constraints.maxHeight),
-                      ),
-                    ],
+                child: quill.QuillEditor.basic(
+                  key: const ValueKey('rich-note-content-editor'),
+                  controller: _quillController,
+                  config: quill.QuillEditorConfig(
+                    autoFocus: widget.focusOnOpen,
+                    placeholder: 'Write something...',
+                    padding: const EdgeInsets.fromLTRB(18, 16, 18, 24),
+                    embedBuilders: const [NoteTableEmbedBuilder()],
                   ),
                 ),
               ),
@@ -2278,6 +2250,10 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
                     );
                   },
                 ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+                child: _buildFloatingToolbar(),
               ),
             ],
           ),

@@ -4,29 +4,92 @@ import '../models/note_workspace_models.dart';
 
 const List<NoteCardColor> selectableNoteCardColors = [
   NoteCardColor.yellow,
+  NoteCardColor.blue,
+  NoteCardColor.green,
+  NoteCardColor.pink,
+  NoteCardColor.purple,
+  NoteCardColor.orange,
+  NoteCardColor.teal,
+  NoteCardColor.lavender,
+];
+
+const List<NoteCardColor> selectableNoteTextColors = [
+  NoteCardColor.yellow,
   NoteCardColor.pink,
   NoteCardColor.purple,
   NoteCardColor.blue,
   NoteCardColor.green,
   NoteCardColor.cyan,
+  NoteCardColor.mint,
   NoteCardColor.orange,
   NoteCardColor.lavender,
   NoteCardColor.sky,
-  NoteCardColor.mint,
 ];
 
-const Map<NoteCardColor, Color> noteCardPalette = {
-  NoteCardColor.yellow: Color(0xFFFFF4CC),
-  NoteCardColor.pink: Color(0xFFFFE4EC),
-  NoteCardColor.purple: Color(0xFFEEE5FF),
-  NoteCardColor.blue: Color(0xFFE3EDFF),
-  NoteCardColor.green: Color(0xFFE3F7E9),
+const Map<NoteCardColor, Color> _legacyNoteTextColorSwatches = {
   NoteCardColor.cyan: Color(0xFFDDF5F7),
-  NoteCardColor.orange: Color(0xFFFFE9D5),
-  NoteCardColor.lavender: Color(0xFFF0E8FF),
   NoteCardColor.sky: Color(0xFFE3F2FF),
   NoteCardColor.mint: Color(0xFFE3F7EF),
 };
+
+@immutable
+class NoteCardPalette {
+  const NoteCardPalette({
+    required this.noteYellow,
+    required this.noteBlue,
+    required this.noteGreen,
+    required this.notePink,
+    required this.notePurple,
+    required this.noteOrange,
+    required this.noteTeal,
+    required this.noteLavender,
+  });
+
+  final Color noteYellow;
+  final Color noteBlue;
+  final Color noteGreen;
+  final Color notePink;
+  final Color notePurple;
+  final Color noteOrange;
+  final Color noteTeal;
+  final Color noteLavender;
+
+  Color colorFor(NoteCardColor color) {
+    return switch (_canonicalNoteColor(color)) {
+      NoteCardColor.yellow => noteYellow,
+      NoteCardColor.blue => noteBlue,
+      NoteCardColor.green => noteGreen,
+      NoteCardColor.pink => notePink,
+      NoteCardColor.purple => notePurple,
+      NoteCardColor.orange => noteOrange,
+      NoteCardColor.teal => noteTeal,
+      NoteCardColor.lavender => noteLavender,
+      _ => Colors.transparent,
+    };
+  }
+}
+
+const NoteCardPalette lightNoteCardPalette = NoteCardPalette(
+  noteYellow: Color(0xFFFFF8D6),
+  noteBlue: Color(0xFFE3F2FD),
+  noteGreen: Color(0xFFE6F4EA),
+  notePink: Color(0xFFFCE8E6),
+  notePurple: Color(0xFFF3E8FD),
+  noteOrange: Color(0xFFFEEED8),
+  noteTeal: Color(0xFFE0F2F1),
+  noteLavender: Color(0xFFE8EAF6),
+);
+
+const NoteCardPalette darkNoteCardPalette = NoteCardPalette(
+  noteYellow: Color(0xFF4A4224),
+  noteBlue: Color(0xFF263F52),
+  noteGreen: Color(0xFF294334),
+  notePink: Color(0xFF4A3030),
+  notePurple: Color(0xFF3E304D),
+  noteOrange: Color(0xFF4A3825),
+  noteTeal: Color(0xFF264442),
+  noteLavender: Color(0xFF30334D),
+);
 
 const List<NoteCardColor> noteTextHighlightColors = [
   NoteCardColor.yellow,
@@ -39,14 +102,19 @@ const List<NoteCardColor> noteTextHighlightColors = [
 ];
 
 Color noteCardSurfaceColor(ThemeData theme, NoteCardColor noteColor) {
-  final colorScheme = theme.colorScheme;
-  final paletteColor = _paletteColor(noteColor);
-  if (paletteColor == null) {
-    return colorScheme.surfaceContainerLow;
+  if (noteColor == NoteCardColor.standard) {
+    return theme.colorScheme.surfaceContainerLow;
   }
+  final palette = theme.brightness == Brightness.light
+      ? lightNoteCardPalette
+      : darkNoteCardPalette;
+  return palette.colorFor(noteColor);
+}
 
-  final blend = theme.brightness == Brightness.light ? 0.9 : 0.18;
-  return Color.lerp(colorScheme.surfaceContainerLow, paletteColor, blend)!;
+Color noteCardForegroundColor(ThemeData theme, NoteCardColor noteColor) {
+  return theme.brightness == Brightness.light
+      ? const Color(0xFF202124)
+      : const Color(0xFFF1F3F4);
 }
 
 Color noteCardAccentColor(ThemeData theme, NoteCardColor noteColor) {
@@ -77,21 +145,38 @@ String noteCardColorLabel(NoteCardColor noteColor) {
     NoteCardColor.pink => 'Pink',
     NoteCardColor.purple => 'Purple',
     NoteCardColor.blue => 'Blue',
-    NoteCardColor.cyan => 'Cyan',
     NoteCardColor.green => 'Green',
     NoteCardColor.orange => 'Orange',
+    NoteCardColor.teal => 'Teal',
+    NoteCardColor.cyan => 'Cyan',
+    NoteCardColor.lavender => 'Lavender',
     NoteCardColor.sky => 'Sky',
     NoteCardColor.mint => 'Mint',
-    NoteCardColor.lavender => 'Lavender',
   };
 }
 
 Color noteCardSwatchColor(ThemeData theme, NoteCardColor noteColor) {
-  return _paletteColor(noteColor) ?? theme.colorScheme.surfaceContainerHighest;
+  final legacyTextColor = _legacyNoteTextColorSwatches[noteColor];
+  if (legacyTextColor != null) {
+    return legacyTextColor;
+  }
+  return noteCardSurfaceColor(theme, noteColor);
 }
 
 Color? _paletteColor(NoteCardColor noteColor) {
-  return noteCardPalette[noteColor];
+  if (noteColor == NoteCardColor.standard) {
+    return null;
+  }
+  return lightNoteCardPalette.colorFor(noteColor);
+}
+
+NoteCardColor _canonicalNoteColor(NoteCardColor color) {
+  return switch (color) {
+    NoteCardColor.cyan => NoteCardColor.teal,
+    NoteCardColor.sky => NoteCardColor.blue,
+    NoteCardColor.mint => NoteCardColor.green,
+    _ => color,
+  };
 }
 
 NoteCardColor nextBalancedNoteColor(Iterable<NoteEntry> notes) {

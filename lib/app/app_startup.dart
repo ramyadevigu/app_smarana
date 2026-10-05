@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/notification_service.dart';
+import '../theme/app_theme.dart';
 import '../theme/theme_preference_store.dart';
 import 'app.dart';
 
@@ -45,12 +46,14 @@ class _AppStartupState extends State<AppStartup> {
         if (snapshot.hasError) {
           return MaterialApp(
             debugShowCheckedModeBanner: false,
-            home: _StartupErrorScreen(onRetry: _retryInitialization),
-          );
+          theme: buildLightTheme(),
+          home: _StartupErrorScreen(onRetry: _retryInitialization),
+        );
         }
 
-        return const MaterialApp(
+        return MaterialApp(
           debugShowCheckedModeBanner: false,
+          theme: buildLightTheme(),
           home: StartupLoadingScreen(),
         );
       },
