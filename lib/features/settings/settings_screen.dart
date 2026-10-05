@@ -1,12 +1,14 @@
+import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../calender/models/calendar_view_mode.dart';
 import '../../services/notification_service.dart';
 import '../../theme/app_colors.dart';
-import '../reminders/models/reminder.dart';
 import '../../theme/app_design_tokens.dart';
+import '../reminders/models/reminder.dart';
 import '../../theme/app_theme.dart';
-import '../../theme/premium_surface.dart';
 import 'services/reminder_preferences_store.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -173,14 +175,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _selectAccentColor() async {
-    final accentColor = await showDialog<Color>(
+    await showDialog<void>(
       context: context,
-      builder: (_) =>
-          _AccentColorPickerDialog(initialColor: _selectedAccentColor),
+      builder: (_) => _AccentColorPickerDialog(
+        initialColor: _selectedAccentColor,
+        onColorChanged: (color) => unawaited(_changeAccentColor(color)),
+      ),
     );
-    if (accentColor != null && mounted) {
-      await _changeAccentColor(accentColor);
-    }
   }
 
   Future<void> _changeAccentColor(Color accentColor) async {
@@ -215,7 +216,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     if (_isLoading) {
       return Scaffold(
         appBar: AppBar(title: const Text('Settings')),
@@ -226,22 +226,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+        padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
         children: [
-          _sectionHeading(context, Icons.palette_outlined, 'Appearance'),
-          const SizedBox(height: 12),
-          _settingsGroup(
-            colorScheme,
+          _SettingsSection(
+            title: 'Appearance',
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+                padding: const EdgeInsets.fromLTRB(0, 8, 0, 4),
                 child: Text(
                   'Theme',
-                  style: Theme.of(context).textTheme.titleSmall,
+                  style: Theme.of(context).textTheme.titleSmall
+                      ?.copyWith(fontWeight: FontWeight.w600),
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+                padding: const EdgeInsets.only(bottom: 16),
                 child: SegmentedButton<ThemeMode>(
                   segments: const [
                     ButtonSegment<ThemeMode>(
@@ -267,33 +266,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   },
                 ),
               ),
-              const Divider(height: 1),
-              ListTile(
+              const _SettingsDivider(),
+              _SettingsTile(
                 key: const ValueKey('settings-accent-color-picker'),
-                leading: Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: _selectedAccentColor,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: colorScheme.outlineVariant),
-                  ),
-                ),
-                title: const Text('Accent color'),
-                subtitle: const Text('Customize the app color'),
-                trailing: const Icon(Icons.tune),
+                icon: Icons.color_lens_outlined,
+                title: 'Accent color',
+                subtitle: 'Customize the app color',
+                trailing: _AccentColorIndicator(color: _selectedAccentColor),
                 onTap: _selectAccentColor,
               ),
-              const Divider(height: 1),
+            ],
+          ),
+          _SettingsSection(
+            title: 'Calendar',
+            children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+                padding: const EdgeInsets.fromLTRB(0, 8, 0, 4),
                 child: Text(
-                  'Calendar view',
-                  style: Theme.of(context).textTheme.titleSmall,
+                  'Default calendar view',
+                  style: Theme.of(context).textTheme.titleSmall
+                      ?.copyWith(fontWeight: FontWeight.w600),
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+                padding: const EdgeInsets.only(bottom: 16),
                 child: Wrap(
                   key: const ValueKey('settings-calendar-view-mode'),
                   spacing: 8,
@@ -301,11 +297,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   children: [
                     for (final mode in CalendarViewMode.values)
                       ChoiceChip(
-                        label: Text(
-                          mode.name == 'threeDay'
-                              ? '3 Day'
-                              : '${mode.name[0].toUpperCase()}${mode.name.substring(1)}',
-                        ),
+                        label: Text(_calendarViewLabel(mode)),
                         selected: _defaults.calendarViewMode == mode,
                         onSelected: (_) => _changeCalendarViewMode(mode),
                       ),
@@ -314,21 +306,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 28),
-          _sectionHeading(
-            context,
-            Icons.notifications_active_outlined,
-            'Notifications',
-          ),
-          const SizedBox(height: 12),
-          _settingsGroup(
-            colorScheme,
+          _SettingsSection(
+            title: 'Notifications',
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                padding: const EdgeInsets.fromLTRB(0, 8, 0, 4),
                 child: Text(
                   'Default notification',
-                  style: Theme.of(context).textTheme.titleSmall,
+                  style: Theme.of(context).textTheme.titleSmall
+                      ?.copyWith(fontWeight: FontWeight.w600),
                 ),
               ),
               RadioGroup<ReminderNotificationMode>(
@@ -341,43 +327,47 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 child: const Column(
                   children: [
                     RadioListTile<ReminderNotificationMode>(
-                      dense: true,
+                      contentPadding: EdgeInsets.zero,
                       value: ReminderNotificationMode.alarmAndNotification,
                       title: Text('Alarm + Notification'),
                     ),
                     RadioListTile<ReminderNotificationMode>(
-                      dense: true,
+                      contentPadding: EdgeInsets.zero,
                       value: ReminderNotificationMode.notificationOnly,
                       title: Text('Notification only'),
                     ),
                   ],
                 ),
               ),
-              const Divider(height: 1),
-              ListTile(
+              const _SettingsDivider(),
+              _SettingsTile(
                 key: const ValueKey('settings-default-ringtone'),
-                leading: const Icon(Icons.music_note_outlined),
-                title: const Text('Default ringtone'),
-                subtitle: Text(_defaults.soundName),
-                trailing: const Icon(Icons.chevron_right),
+                icon: Icons.music_note_outlined,
+                title: 'Default ringtone',
+                subtitle: _defaults.soundName,
                 onTap: _selectSound,
               ),
-              const Divider(height: 1),
-              ListTile(
-                key: const ValueKey('settings-default-snooze'),
-                leading: const Icon(Icons.snooze_outlined),
-                title: const Text('Alarm snooze duration'),
-                subtitle: const Text('15 minutes'),
-              ),
-              const Divider(height: 1),
-              SwitchListTile(
+              const _SettingsDivider(),
+              _SettingsSwitchTile(
                 key: const ValueKey('settings-default-vibration'),
-                secondary: const Icon(Icons.vibration_outlined),
-                title: const Text('Vibration'),
-                subtitle: Text(_defaults.vibrate ? 'On' : 'Off'),
+                icon: Icons.vibration_outlined,
+                title: 'Vibration',
+                subtitle: _defaults.vibrate ? 'On' : 'Off',
                 value: _defaults.vibrate,
                 onChanged: (value) =>
                     _updateDefaults(_defaults.copyWith(vibrate: value)),
+              ),
+            ],
+          ),
+          _SettingsSection(
+            title: 'Alarms',
+            children: [
+              _SettingsTile(
+                key: const ValueKey('settings-default-snooze'),
+                icon: Icons.snooze_outlined,
+                title: 'Snooze duration',
+                subtitle: '15 minutes',
+                showChevron: false,
               ),
             ],
           ),
@@ -386,39 +376,160 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _sectionHeading(BuildContext context, IconData icon, String title) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Row(
-      children: [
-        Icon(icon, color: colorScheme.primary, size: 20),
-        const SizedBox(width: 10),
-        Text(title, style: Theme.of(context).textTheme.titleMedium),
-      ],
+  String _calendarViewLabel(CalendarViewMode mode) => switch (mode) {
+    CalendarViewMode.threeDay => '3 Day',
+    CalendarViewMode.year => 'Year',
+    CalendarViewMode.month => 'Month',
+    CalendarViewMode.week => 'Week',
+    CalendarViewMode.day => 'Day',
+    CalendarViewMode.list => 'List',
+  };
+}
+
+class _SettingsSection extends StatelessWidget {
+  const _SettingsSection({required this.title, required this.children});
+
+  final String title;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              title,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                color: Theme.of(context).colorScheme.primary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          ...children,
+        ],
+      ),
     );
   }
+}
 
-  Widget _settingsGroup(
-    ColorScheme colorScheme, {
-    required List<Widget> children,
-  }) {
-    return PremiumSurface(
-      color: colorScheme.surfaceContainerLow,
-      radius: AppRadius.card,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        child: Material(
-          color: Colors.transparent,
-          child: Column(mainAxisSize: MainAxisSize.min, children: children),
-        ),
+class _SettingsDivider extends StatelessWidget {
+  const _SettingsDivider();
+
+  @override
+  Widget build(BuildContext context) => Divider(
+    height: 1,
+    indent: 56,
+    color: Theme.of(context).colorScheme.outlineVariant,
+  );
+}
+
+class _SettingsTile extends StatelessWidget {
+  const _SettingsTile({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    this.trailing,
+    this.onTap,
+    this.showChevron = true,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Widget? trailing;
+  final VoidCallback? onTap;
+  final bool showChevron;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return ListTile(
+      minVerticalPadding: 12,
+      contentPadding: EdgeInsets.zero,
+      leading: SizedBox(
+        width: 32,
+        child: Icon(icon, size: 22, color: colorScheme.onSurfaceVariant),
+      ),
+      title: Text(title),
+      subtitle: Text(subtitle),
+      trailing:
+          trailing ??
+          (showChevron
+              ? Icon(
+                  Icons.chevron_right,
+                  color: colorScheme.onSurfaceVariant,
+                  size: 22,
+                )
+              : null),
+      onTap: onTap,
+    );
+  }
+}
+
+class _SettingsSwitchTile extends StatelessWidget {
+  const _SettingsSwitchTile({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return SwitchListTile(
+      contentPadding: EdgeInsets.zero,
+      secondary: Icon(icon, size: 22, color: colorScheme.onSurfaceVariant),
+      title: Text(title),
+      subtitle: Text(subtitle),
+      value: value,
+      onChanged: onChanged,
+    );
+  }
+}
+
+class _AccentColorIndicator extends StatelessWidget {
+  const _AccentColorIndicator({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final outline = Theme.of(context).colorScheme.outlineVariant;
+    return AnimatedContainer(
+      duration: AppMotion.resolve(context, AppMotion.interaction),
+      width: 36,
+      height: 36,
+      decoration: BoxDecoration(
+        color: color,
+        shape: BoxShape.circle,
+        border: Border.all(color: outline),
       ),
     );
   }
 }
 
 class _AccentColorPickerDialog extends StatefulWidget {
-  const _AccentColorPickerDialog({required this.initialColor});
+  const _AccentColorPickerDialog({
+    required this.initialColor,
+    required this.onColorChanged,
+  });
 
   final Color initialColor;
+  final ValueChanged<Color> onColorChanged;
 
   @override
   State<_AccentColorPickerDialog> createState() =>
@@ -426,102 +537,296 @@ class _AccentColorPickerDialog extends StatefulWidget {
 }
 
 class _AccentColorPickerDialogState extends State<_AccentColorPickerDialog> {
+  static const List<Color> _presetColors = [
+    Color(0xFF4773FA),
+    Color(0xFF008CFF),
+    Color(0xFF00A896),
+    Color(0xFF7B61FF),
+    Color(0xFFE55381),
+    Color(0xFFE47732),
+    Color(0xFF65717D),
+    Color(0xFFB28B00),
+  ];
+
   late HSLColor _selectedColor;
+  late final TextEditingController _hexController;
+  String? _hexErrorText;
 
   @override
   void initState() {
     super.initState();
     _selectedColor = HSLColor.fromColor(widget.initialColor);
+    _hexController = TextEditingController(
+      text: _formatHex(widget.initialColor),
+    );
+  }
+
+  @override
+  void dispose() {
+    _hexController.dispose();
+    super.dispose();
   }
 
   Color get _color => _selectedColor.toColor();
 
   String get _hexColor {
-    final rgb = (_color.toARGB32() & 0x00FFFFFF)
-        .toRadixString(16)
-        .padLeft(6, '0')
-        .toUpperCase();
-    return '#$rgb';
+    return _formatHex(_color);
+  }
+
+  static String _formatHex(Color color) {
+    final argb = color.toARGB32();
+    final alpha = (argb >> 24) & 0xFF;
+    final value = alpha == 255 ? argb & 0x00FFFFFF : argb;
+    return '#${value.toRadixString(16).padLeft(alpha == 255 ? 6 : 8, '0').toUpperCase()}';
+  }
+
+  void _selectColor(Color color) {
+    setState(() {
+      _selectedColor = HSLColor.fromColor(color);
+      _hexErrorText = null;
+      _hexController.value = TextEditingValue(
+        text: _formatHex(color),
+        selection: TextSelection.collapsed(offset: _formatHex(color).length),
+      );
+    });
+    widget.onColorChanged(color);
+  }
+
+  void _handleHexChanged(String input) {
+    final normalized = input.trim().replaceFirst(RegExp(r'^#'), '');
+    final isValidLength = normalized.length == 6 || normalized.length == 8;
+    final value = isValidLength ? int.tryParse(normalized, radix: 16) : null;
+    if (value == null) {
+      setState(() {
+        _hexErrorText = input.isEmpty
+            ? null
+            : 'Enter 6 or 8 hexadecimal digits.';
+      });
+      return;
+    }
+
+    final color = normalized.length == 6
+        ? Color(0xFF000000 | value)
+        : Color(value);
+    setState(() {
+      _selectedColor = HSLColor.fromColor(color);
+      _hexErrorText = null;
+    });
+    widget.onColorChanged(color);
+  }
+
+  void _updateWheel(Offset position, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final offset = position - center;
+    final radius = math.min(size.width, size.height) / 2;
+    final distance = math.min(offset.distance / radius, 1.0);
+    final hue = (math.atan2(offset.dy, offset.dx) * 180 / math.pi + 360) % 360;
+    _selectColor(
+      _selectedColor.withHue(hue).withSaturation(distance).toColor(),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final wheelSide = math.min(
+      248.0,
+      math.max(160.0, MediaQuery.sizeOf(context).width - 96),
+    );
     return AlertDialog(
       title: const Text('Choose accent color'),
       content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Semantics(
-              label: 'Accent color preview $_hexColor',
-              child: Container(
-                width: 72,
-                height: 72,
-                decoration: BoxDecoration(
-                  color: _color,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: colorScheme.outlineVariant),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Semantics(
+                label: 'Accent color preview $_hexColor',
+                child: Container(
+                  width: 72,
+                  height: 72,
+                  decoration: BoxDecoration(
+                    color: _color,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: colorScheme.outlineVariant),
+                  ),
+                  child: Icon(
+                    Icons.check_rounded,
+                    color: AppColors.highContrastForeground(_color),
+                    size: 32,
+                  ),
                 ),
-                child: Icon(
-                  Icons.check_rounded,
-                  color: AppColors.highContrastForeground(_color),
-                  size: 32,
+              ),
+              const SizedBox(height: 16),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Presets',
+                  style: Theme.of(context).textTheme.titleSmall,
                 ),
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(_hexColor, style: Theme.of(context).textTheme.labelLarge),
-            const SizedBox(height: 12),
-            _buildSlider(
-              label: 'Hue',
-              value: _selectedColor.hue,
-              min: 0,
-              max: 360,
-              divisions: 360,
-              valueLabel: '${_selectedColor.hue.round()}°',
-              sliderKey: const ValueKey('accent-hue-slider'),
-              onChanged: (value) => setState(
-                () => _selectedColor = _selectedColor.withHue(value),
+              const SizedBox(height: 8),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  for (var index = 0; index < _presetColors.length; index++)
+                    _buildPresetSwatch(index, _presetColors[index]),
+                ],
               ),
-            ),
-            _buildSlider(
-              label: 'Saturation',
-              value: _selectedColor.saturation,
-              min: 0,
-              max: 1,
-              divisions: 100,
-              valueLabel: '${(_selectedColor.saturation * 100).round()}%',
-              sliderKey: const ValueKey('accent-saturation-slider'),
-              onChanged: (value) => setState(
-                () => _selectedColor = _selectedColor.withSaturation(value),
+              const SizedBox(height: 18),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Color wheel',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
               ),
-            ),
-            _buildSlider(
-              label: 'Lightness',
-              value: _selectedColor.lightness,
-              min: 0,
-              max: 1,
-              divisions: 100,
-              valueLabel: '${(_selectedColor.lightness * 100).round()}%',
-              sliderKey: const ValueKey('accent-lightness-slider'),
-              onChanged: (value) => setState(
-                () => _selectedColor = _selectedColor.withLightness(value),
+              const SizedBox(height: 8),
+              Center(
+                child: Semantics(
+                  label: 'Color wheel',
+                  value: _hexColor,
+                  hint: 'Touch and drag to choose hue and saturation',
+                  child: SizedBox.square(
+                    dimension: wheelSide,
+                    child: Builder(
+                      builder: (context) {
+                        final size = Size.square(wheelSide);
+                        final hueRadians = _selectedColor.hue * math.pi / 180;
+                        final center = Offset(size.width / 2, size.height / 2);
+                        final radius = wheelSide / 2;
+                        final indicator =
+                            center +
+                            Offset(math.cos(hueRadians), math.sin(hueRadians)) *
+                                (radius * _selectedColor.saturation);
+                        return GestureDetector(
+                          key: const ValueKey('accent-color-wheel'),
+                          onPanDown: (details) =>
+                              _updateWheel(details.localPosition, size),
+                          onPanUpdate: (details) =>
+                              _updateWheel(details.localPosition, size),
+                          child: Stack(
+                            children: [
+                              Positioned.fill(
+                                child: CustomPaint(
+                                  painter: _ColorWheelPainter(),
+                                ),
+                              ),
+                              Positioned(
+                                left: indicator.dx - 13,
+                                top: indicator.dy - 13,
+                                child: IgnorePointer(
+                                  child: Container(
+                                    width: 26,
+                                    height: 26,
+                                    decoration: BoxDecoration(
+                                      color: _color,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: Colors.white,
+                                        width: 3,
+                                      ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withValues(
+                                            alpha: 0.45,
+                                          ),
+                                          blurRadius: 3,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 8),
+              _buildSlider(
+                label: 'Brightness',
+                value: _selectedColor.lightness,
+                min: 0,
+                max: 1,
+                divisions: 100,
+                valueLabel: '${(_selectedColor.lightness * 100).round()}%',
+                sliderKey: const ValueKey('accent-lightness-slider'),
+                onChanged: (value) =>
+                    _selectColor(_selectedColor.withLightness(value).toColor()),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                key: const ValueKey('accent-hex-input'),
+                controller: _hexController,
+                autocorrect: false,
+                enableSuggestions: false,
+                textCapitalization: TextCapitalization.characters,
+                decoration: InputDecoration(
+                  labelText: 'HEX color',
+                  hintText: '#008CFF',
+                  errorText: _hexErrorText,
+                  prefixIcon: const Icon(Icons.tag),
+                ),
+                onChanged: _handleHexChanged,
+              ),
+            ],
+          ),
         ),
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () {
+            _selectColor(widget.initialColor);
+            Navigator.of(context).pop();
+          },
           child: const Text('Cancel'),
         ),
         FilledButton(
-          onPressed: () => Navigator.of(context).pop(_color),
-          child: const Text('Use color'),
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Done'),
         ),
       ],
+    );
+  }
+
+  Widget _buildPresetSwatch(int index, Color color) {
+    final selected = color.toARGB32() == _color.toARGB32();
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: 'Preset color ${_formatHex(color)}',
+      child: InkResponse(
+        key: ValueKey('accent-preset-$index'),
+        onTap: () => _selectColor(color),
+        radius: 28,
+        child: Container(
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: selected
+                  ? Theme.of(context).colorScheme.outline
+                  : Colors.transparent,
+              width: 2,
+            ),
+          ),
+          child: selected
+              ? Icon(
+                  Icons.check_rounded,
+                  color: AppColors.highContrastForeground(color),
+                )
+              : null,
+        ),
+      ),
     );
   }
 
@@ -559,4 +864,43 @@ class _AccentColorPickerDialogState extends State<_AccentColorPickerDialog> {
       ],
     );
   }
+}
+
+class _ColorWheelPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final bounds = Offset.zero & size;
+    final center = bounds.center;
+    final radius = math.min(size.width, size.height) / 2;
+    final circle = Rect.fromCircle(center: center, radius: radius);
+    canvas.save();
+    canvas.clipPath(Path()..addOval(circle));
+    canvas.drawRect(
+      bounds,
+      Paint()
+        ..shader = const SweepGradient(
+          colors: [
+            Color(0xFFFF0000),
+            Color(0xFFFFFF00),
+            Color(0xFF00FF00),
+            Color(0xFF00FFFF),
+            Color(0xFF0000FF),
+            Color(0xFFFF00FF),
+            Color(0xFFFF0000),
+          ],
+        ).createShader(circle),
+    );
+    canvas.drawCircle(
+      center,
+      radius,
+      Paint()
+        ..shader = const RadialGradient(
+          colors: [Colors.white, Color(0x00FFFFFF)],
+        ).createShader(circle),
+    );
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _ColorWheelPainter oldDelegate) => false;
 }

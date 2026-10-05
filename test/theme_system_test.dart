@@ -114,18 +114,39 @@ void main() {
     await tester.tap(picker);
     await tester.pumpAndSettle();
     expect(find.text('Choose accent color'), findsOneWidget);
-    final hueSlider = find.byKey(const ValueKey('accent-hue-slider'));
-    expect(hueSlider, findsOneWidget);
-    await tester.drag(hueSlider, const Offset(500, 0));
+    expect(find.byKey(const ValueKey('accent-color-wheel')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('accent-lightness-slider')),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(const ValueKey('accent-preset-1')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Use color'));
+    var appTheme = tester.widget<MaterialApp>(find.byType(MaterialApp));
+    expect(appTheme.theme!.colorScheme.primary, const Color(0xFF008CFF));
+
+    final hexInput = find.byKey(const ValueKey('accent-hex-input'));
+    await tester.enterText(hexInput, '#12GGFF');
+    await tester.pumpAndSettle();
+    expect(find.text('Enter 6 or 8 hexadecimal digits.'), findsOneWidget);
+    appTheme = tester.widget<MaterialApp>(find.byType(MaterialApp));
+    expect(appTheme.theme!.colorScheme.primary, const Color(0xFF008CFF));
+
+    final wheel = find.byKey(const ValueKey('accent-color-wheel'));
+    await tester.drag(wheel, const Offset(0, -72));
+    await tester.pumpAndSettle();
+    appTheme = tester.widget<MaterialApp>(find.byType(MaterialApp));
+    expect(appTheme.theme!.colorScheme.primary, isNot(const Color(0xFF008CFF)));
+
+    await tester.enterText(hexInput, '#00A896');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Done'));
     await tester.pumpAndSettle();
 
-    final appTheme = tester.widget<MaterialApp>(find.byType(MaterialApp));
+    appTheme = tester.widget<MaterialApp>(find.byType(MaterialApp));
     final selectedAccent = appTheme.theme!.colorScheme.primary;
-    expect(selectedAccent, isNot(defaultAccentColor));
+    expect(selectedAccent, const Color(0xFF00A896));
     final preferences = await SharedPreferences.getInstance();
-    expect(preferences.getString('colorTheme'), startsWith('#'));
+    expect(preferences.getString('colorTheme'), '#00A896');
 
     await tester.pumpWidget(const SizedBox.shrink());
     final restoredAccent = await const ThemePreferenceStore().loadAccentColor();
@@ -182,6 +203,21 @@ void main() {
     );
   });
 
+  test(
+    '8-digit accent colors preserve their alpha when saved and restored',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      const accent = Color(0x80008CFF);
+      const store = ThemePreferenceStore();
+
+      await store.saveAccentColor(accent);
+
+      final preferences = await SharedPreferences.getInstance();
+      expect(preferences.getString('colorTheme'), '#80008CFF');
+      expect(await store.loadAccentColor(), accent);
+    },
+  );
+
   testWidgets('accent color picker works on a compact screen', (tester) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(320, 640);
@@ -197,7 +233,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Choose accent color'), findsOneWidget);
-    expect(find.byKey(const ValueKey('accent-hue-slider')), findsOneWidget);
+    expect(find.byKey(const ValueKey('accent-color-wheel')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('accent-lightness-slider')),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
 
     await tester.tap(find.text('Cancel'));

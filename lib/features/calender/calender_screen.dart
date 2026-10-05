@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 
 import 'models/calendar_view_mode.dart';
 import 'widgets/calendar_view_selector.dart';
@@ -60,7 +61,8 @@ class CalendarScreen extends StatefulWidget {
   State<CalendarScreen> createState() => _CalendarScreenState();
 }
 
-class _CalendarScreenState extends State<CalendarScreen> {
+class _CalendarScreenState extends State<CalendarScreen>
+    with SingleTickerProviderStateMixin {
   late final ReminderStorage _storage;
   final CalendarService _calendarService = CalendarService();
 
@@ -72,7 +74,17 @@ class _CalendarScreenState extends State<CalendarScreen> {
   Map<DateTime, List<CalendarOccurrence>> _occurrencesByDate = {};
   List<CalendarOccurrence> _upcomingOccurrences = [];
   int _monthTransitionDirection = 1;
-  Offset? _monthPointerStart;
+  late final AnimationController _monthSettleController;
+  Animation<Offset>? _monthSettleAnimation;
+  Offset _monthDragOffset = Offset.zero;
+  Offset _monthGestureDelta = Offset.zero;
+  Offset? _monthPointerPosition;
+  int? _monthPointerId;
+  VelocityTracker? _monthVelocityTracker;
+  Axis? _monthDragAxis;
+  int? _pendingMonthChange;
+  bool _isMonthTransitioning = false;
+  bool _skipNextMonthSwitcherTransition = false;
   bool _isLoading = true;
   bool _hasLoadError = false;
 
@@ -85,12 +97,43 @@ class _CalendarScreenState extends State<CalendarScreen> {
     _activeViewMode = widget.viewMode;
     _selectedDate = today;
     _displayedMonth = DateTime(today.year, today.month);
+    _monthSettleController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 220),
+    )..addStatusListener(_handleMonthSettleStatus);
     _loadReminders();
   }
 
   @override
   void dispose() {
+    _monthSettleController.dispose();
     super.dispose();
+  }
+
+  void _handleMonthSettleStatus(AnimationStatus status) {
+    if (status != AnimationStatus.completed || !mounted) {
+      return;
+    }
+    final monthChange = _pendingMonthChange;
+    setState(() {
+      if (monthChange != null) {
+        _skipNextMonthSwitcherTransition = true;
+        _applyMonthChange(monthChange);
+      }
+      _monthDragOffset = Offset.zero;
+      _monthGestureDelta = Offset.zero;
+      _monthDragAxis = null;
+      _pendingMonthChange = null;
+      _monthSettleAnimation = null;
+      _isMonthTransitioning = false;
+    });
+    if (monthChange != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() => _skipNextMonthSwitcherTransition = false);
+        }
+      });
+    }
   }
 
   @override
@@ -204,21 +247,134 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   void _changeMonth(int offset) {
+    setState(() => _applyMonthChange(offset));
+  }
+
+  void _applyMonthChange(int offset) {
     final nextMonth = DateTime(
       _displayedMonth.year,
       _displayedMonth.month + offset,
     );
     final lastDay = DateTime(nextMonth.year, nextMonth.month + 1, 0).day;
+    _monthTransitionDirection = offset.sign;
+    _displayedMonth = nextMonth;
+    _selectedDate = DateTime(
+      nextMonth.year,
+      nextMonth.month,
+      _selectedDate.day.clamp(1, lastDay),
+    );
+    _refreshVisibleOccurrences();
+  }
+
+  void _startMonthSwipe(PointerDownEvent event) {
+    if (_isMonthTransitioning) {
+      return;
+    }
+    _monthSettleController.stop();
+    _monthSettleAnimation = null;
+    _monthDragOffset = Offset.zero;
+    _monthGestureDelta = Offset.zero;
+    _monthDragAxis = null;
+    _monthPointerPosition = event.position;
+    _monthPointerId = event.pointer;
+    _monthVelocityTracker = VelocityTracker.withKind(event.kind)
+      ..addPosition(event.timeStamp, event.position);
+  }
+
+  void _updateMonthSwipe(PointerMoveEvent event) {
+    if (_isMonthTransitioning ||
+        event.pointer != _monthPointerId ||
+        _monthPointerPosition == null) {
+      return;
+    }
+    final delta = event.position - _monthPointerPosition!;
+    _monthPointerPosition = event.position;
+    _monthGestureDelta += delta;
+    _monthVelocityTracker?.addPosition(event.timeStamp, event.position);
+    if (_monthDragAxis == null && _monthGestureDelta.distance >= 12) {
+      _monthDragAxis =
+          _monthGestureDelta.dx.abs() >= _monthGestureDelta.dy.abs()
+          ? Axis.horizontal
+          : Axis.vertical;
+    }
+    final axis = _monthDragAxis;
+    if (axis == null) {
+      return;
+    }
     setState(() {
-      _monthTransitionDirection = offset.sign;
-      _displayedMonth = nextMonth;
-      _selectedDate = DateTime(
-        nextMonth.year,
-        nextMonth.month,
-        _selectedDate.day.clamp(1, lastDay),
-      );
-      _refreshVisibleOccurrences();
+      _monthDragOffset = axis == Axis.horizontal
+          ? Offset(_monthGestureDelta.dx, 0)
+          : Offset(0, _monthGestureDelta.dy);
     });
+  }
+
+  void _endMonthSwipe(Offset velocity, Size size) {
+    if (_isMonthTransitioning) {
+      return;
+    }
+    final axis = _monthDragAxis;
+    if (axis == null) {
+      _monthGestureDelta = Offset.zero;
+      return;
+    }
+
+    final displacement = axis == Axis.horizontal
+        ? _monthDragOffset.dx
+        : _monthDragOffset.dy;
+    final primaryVelocity = axis == Axis.horizontal ? velocity.dx : velocity.dy;
+    final extent = axis == Axis.horizontal ? size.width : size.height;
+    final distanceThreshold = extent * (axis == Axis.horizontal ? 0.25 : 0.20);
+    final distanceReached = displacement.abs() >= distanceThreshold;
+    final velocityReached = primaryVelocity.abs() > 800;
+    final shouldCommit = distanceReached || velocityReached;
+    final directionValue = distanceReached ? displacement : primaryVelocity;
+    final monthChange = shouldCommit ? (directionValue < 0 ? 1 : -1) : null;
+    final settlingOffset = shouldCommit
+        ? (axis == Axis.horizontal
+              ? Offset(-monthChange! * size.width, 0)
+              : Offset(0, -monthChange! * size.height))
+        : Offset.zero;
+
+    _isMonthTransitioning = true;
+    _pendingMonthChange = monthChange;
+    _monthSettleAnimation =
+        Tween<Offset>(begin: _monthDragOffset, end: settlingOffset).animate(
+          CurvedAnimation(
+            parent: _monthSettleController,
+            curve: Curves.easeOutCubic,
+          ),
+        );
+    _monthSettleController.forward(from: 0);
+  }
+
+  void _finishMonthPointer(PointerEvent event, Size size) {
+    if (event.pointer != _monthPointerId) {
+      return;
+    }
+    final velocity = _monthVelocityTracker?.getVelocity().pixelsPerSecond;
+    _monthPointerId = null;
+    _monthPointerPosition = null;
+    _monthVelocityTracker = null;
+    _endMonthSwipe(velocity ?? Offset.zero, size);
+  }
+
+  void _cancelMonthSwipe() {
+    _monthPointerId = null;
+    _monthPointerPosition = null;
+    _monthVelocityTracker = null;
+    if (_isMonthTransitioning || _monthDragAxis == null) {
+      return;
+    }
+    _isMonthTransitioning = true;
+    _pendingMonthChange = null;
+    _monthSettleAnimation =
+        Tween<Offset>(begin: _monthDragOffset, end: Offset.zero).animate(
+          CurvedAnimation(
+            parent: _monthSettleController,
+            curve: Curves.easeOutCubic,
+          ),
+        );
+    _monthSettleController.forward(from: 0);
   }
 
   void _changePeriod(int offset) {
@@ -495,7 +651,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
           _displayedMonth.year,
           _displayedMonth.month,
         );
-        final selectedDate = _selectedDate;
         final occurrencesByDate = _occurrencesByDate;
         final monthKey = ValueKey(
           'calendar-list-month-${displayedMonth.year}-'
@@ -511,41 +666,37 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 children: [
                   _buildWeekdayHeader(context),
                   Expanded(
-                    child: ClipRect(
-                      child: Listener(
-                        onPointerDown: (event) =>
-                            _monthPointerStart = event.position,
-                        onPointerUp: (event) {
-                          final start = _monthPointerStart;
-                          _monthPointerStart = null;
-                          if (start == null) {
-                            return;
-                          }
-                          final delta = event.position - start;
-                          if (delta.dx.abs() > 48 &&
-                              delta.dx.abs() > delta.dy.abs()) {
-                            _changeMonth(delta.dx < 0 ? 1 : -1);
-                          }
-                        },
-                        onPointerCancel: (_) => _monthPointerStart = null,
-                        child: AnimatedSwitcher(
-                          duration: AppMotion.resolve(
-                            context,
-                            AppMotion.screen,
-                          ),
+                    child: _buildMonthSwipeRegion(
+                      context,
+                      month: displayedMonth,
+                      buildMonth: (month, date, isPreview) {
+                        final card = _buildMonthGridCard(
+                          context,
+                          key: isPreview
+                              ? ValueKey(
+                                  'calendar-list-month-${month.year}-'
+                                  '${month.month}',
+                                )
+                              : monthKey,
+                          monthOnly: true,
+                          monthContext: month,
+                          selectedDateContext: date,
+                          occurrencesByDateContext: occurrencesByDate,
+                          exposeGridKey: !isPreview,
+                        );
+                        if (isPreview) {
+                          return card;
+                        }
+                        return AnimatedSwitcher(
+                          duration: _skipNextMonthSwitcherTransition
+                              ? Duration.zero
+                              : AppMotion.resolve(context, AppMotion.screen),
                           switchInCurve: Curves.easeOutCubic,
                           switchOutCurve: Curves.easeInCubic,
                           transitionBuilder: _buildMonthTransition,
-                          child: _buildMonthGridCard(
-                            context,
-                            key: monthKey,
-                            monthOnly: true,
-                            monthContext: displayedMonth,
-                            selectedDateContext: selectedDate,
-                            occurrencesByDateContext: occurrencesByDate,
-                          ),
-                        ),
-                      ),
+                          child: card,
+                        );
+                      },
                     ),
                   ),
                 ],
@@ -598,37 +749,112 @@ class _CalendarScreenState extends State<CalendarScreen> {
       children: [
         _buildWeekdayHeader(context),
         Expanded(
-          child: Listener(
-            onPointerDown: (event) => _monthPointerStart = event.position,
-            onPointerUp: (event) {
-              final start = _monthPointerStart;
-              _monthPointerStart = null;
-              if (start == null) {
-                return;
-              }
-              final delta = event.position - start;
-              if (delta.dx.abs() > 48 && delta.dx.abs() > delta.dy.abs()) {
-                _changeMonth(delta.dx < 0 ? 1 : -1);
-              }
-            },
-            onPointerCancel: (_) => _monthPointerStart = null,
-            child: AnimatedSwitcher(
-              duration: AppMotion.resolve(context, AppMotion.screen),
-              switchInCurve: Curves.easeOutCubic,
-              switchOutCurve: Curves.easeInCubic,
-              transitionBuilder: _buildMonthTransition,
-              child: _buildMonthGridCard(
+          child: _buildMonthSwipeRegion(
+            context,
+            month: _displayedMonth,
+            buildMonth: (month, selectedDate, isPreview) {
+              final card = _buildMonthGridCard(
                 context,
                 monthOnly: true,
-                key: ValueKey(
-                  'calendar-month-${_displayedMonth.year}-'
-                  '${_displayedMonth.month}',
-                ),
-              ),
-            ),
+                monthContext: month,
+                selectedDateContext: selectedDate,
+                occurrencesByDateContext: _occurrencesByDate,
+                exposeGridKey: !isPreview,
+                transparentSurface: true,
+                key: ValueKey('calendar-month-${month.year}-${month.month}'),
+              );
+              if (isPreview) {
+                return card;
+              }
+              return AnimatedSwitcher(
+                duration: _skipNextMonthSwitcherTransition
+                    ? Duration.zero
+                    : AppMotion.resolve(context, AppMotion.screen),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                transitionBuilder: _buildMonthTransition,
+                child: card,
+              );
+            },
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildMonthSwipeRegion(
+    BuildContext context, {
+    required DateTime month,
+    required Widget Function(
+      DateTime month,
+      DateTime selectedDate,
+      bool isPreview,
+    )
+    buildMonth,
+  }) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final size = constraints.biggest;
+        return ClipRect(
+          child: Listener(
+            key: const ValueKey('calendar-month-swipe-region'),
+            behavior: HitTestBehavior.opaque,
+            onPointerDown: _startMonthSwipe,
+            onPointerMove: _updateMonthSwipe,
+            onPointerUp: (event) => _finishMonthPointer(event, size),
+            onPointerCancel: (_) => _cancelMonthSwipe(),
+            child: AnimatedBuilder(
+              animation: _monthSettleController,
+              builder: (context, child) {
+                final offset = _monthSettleAnimation?.value ?? _monthDragOffset;
+                final axis = _monthDragAxis;
+                final monthChange =
+                    _pendingMonthChange ??
+                    ((axis == Axis.horizontal ? offset.dx : offset.dy) < 0
+                        ? 1
+                        : -1);
+                final neighbor = DateTime(
+                  month.year,
+                  month.month + monthChange,
+                );
+                final neighborSelectedDate = DateTime(
+                  neighbor.year,
+                  neighbor.month,
+                  _selectedDate.day.clamp(
+                    1,
+                    DateTime(neighbor.year, neighbor.month + 1, 0).day,
+                  ),
+                );
+                final currentPosition = Offset(
+                  size.width == 0 ? 0 : offset.dx / size.width,
+                  size.height == 0 ? 0 : offset.dy / size.height,
+                );
+                final neighborOffset = axis == Axis.horizontal
+                    ? Offset(offset.dx + monthChange * size.width, 0)
+                    : Offset(0, offset.dy + monthChange * size.height);
+                final neighborPosition = Offset(
+                  size.width == 0 ? 0 : neighborOffset.dx / size.width,
+                  size.height == 0 ? 0 : neighborOffset.dy / size.height,
+                );
+                return Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (axis != null)
+                      SlideTransition(
+                        position: AlwaysStoppedAnimation(neighborPosition),
+                        child: buildMonth(neighbor, neighborSelectedDate, true),
+                      ),
+                    SlideTransition(
+                      position: AlwaysStoppedAnimation(currentPosition),
+                      child: buildMonth(month, _selectedDate, false),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -1465,6 +1691,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
     DateTime? monthContext,
     DateTime? selectedDateContext,
     Map<DateTime, List<CalendarOccurrence>>? occurrencesByDateContext,
+    bool exposeGridKey = true,
+    bool transparentSurface = false,
   }) {
     return LayoutBuilder(
       key: key ?? ValueKey('calendar-month-grid-$monthOnly-$twoWeekPreview'),
@@ -1479,11 +1707,17 @@ class _CalendarScreenState extends State<CalendarScreen> {
             : _monthGridStartDate(monthContext ?? _displayedMonth);
         return PremiumSurface(
           padding: EdgeInsets.all(surfacePadding),
-          radius: AppRadius.section,
-          elevation: AppElevation.subtle,
+          color: transparentSurface ? Colors.transparent : null,
+          borderColor: transparentSurface ? Colors.transparent : null,
+          radius: transparentSurface ? 0 : AppRadius.section,
+          elevation: transparentSurface ? AppElevation.flat : AppElevation.subtle,
           child: GridView.builder(
             key: ValueKey(
-              twoWeekPreview ? 'calendar-week-preview' : 'calendar-month-grid',
+              twoWeekPreview
+                  ? 'calendar-week-preview'
+                  : exposeGridKey
+                  ? 'calendar-month-grid'
+                  : 'calendar-month-grid-preview',
             ),
             padding: EdgeInsets.zero,
             physics: const NeverScrollableScrollPhysics(),

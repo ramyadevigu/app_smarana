@@ -3,6 +3,8 @@ import 'package:app_smarana/features/calender/models/calendar_view_mode.dart';
 import 'package:app_smarana/features/calender/widgets/calendar_view_selector.dart';
 import 'package:app_smarana/features/reminders/models/reminder.dart';
 import 'package:app_smarana/features/reminders/services/reminder_storage.dart';
+import 'package:app_smarana/theme/app_design_tokens.dart';
+import 'package:app_smarana/theme/premium_surface.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -75,6 +77,36 @@ void main() {
 
     expect(find.byKey(const ValueKey('calendar-view-month')), findsOneWidget);
     expect(find.byType(GridView), findsOneWidget);
+  });
+
+  testWidgets('month grid is transparent while list grid keeps its surface', (
+    tester,
+  ) async {
+    await _pumpCalendar(tester, () => now, storage);
+
+    PremiumSurface monthSurface() => tester.widget<PremiumSurface>(
+      find.ancestor(
+        of: find.byKey(const ValueKey('calendar-month-grid')),
+        matching: find.byType(PremiumSurface),
+      ),
+    );
+
+    final month = monthSurface();
+    expect(month.color, Colors.transparent);
+    expect(month.borderColor, Colors.transparent);
+    expect(month.radius, 0);
+    expect(month.elevation, AppElevation.flat);
+
+    await tester.tap(find.byKey(const ValueKey('calendar-view-selector')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('List'));
+    await tester.pumpAndSettle();
+
+    final list = monthSurface();
+    expect(list.color, isNull);
+    expect(list.borderColor, isNull);
+    expect(list.radius, AppRadius.section);
+    expect(list.elevation, AppElevation.subtle);
   });
 
   testWidgets('view selector switches to 3 Day and keeps selected date', (
@@ -563,6 +595,76 @@ void main() {
 
     expect(find.text('October 2026'), findsOneWidget);
   });
+
+  for (final viewMode in [CalendarViewMode.month, CalendarViewMode.list]) {
+    testWidgets(
+      '${viewMode.name} fast flick navigates below distance threshold',
+      (tester) async {
+        await _pumpCalendar(tester, () => now, storage, viewMode: viewMode);
+        final grid = find.byKey(const ValueKey('calendar-month-grid'));
+        final isHorizontal = viewMode == CalendarViewMode.month;
+
+        await tester.timedDrag(
+          grid,
+          isHorizontal ? const Offset(-30, 0) : const Offset(0, -30),
+          const Duration(milliseconds: 20),
+          frequency: 200,
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('October 2026'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      '${viewMode.name} swipe cancels below threshold and supports vertical navigation',
+      (tester) async {
+        await _pumpCalendar(tester, () => now, storage, viewMode: viewMode);
+        final grid = find.byKey(const ValueKey('calendar-month-grid'));
+        final size = tester.getSize(grid);
+
+        await tester.drag(grid, Offset(-size.width * 0.20, 0));
+        await tester.pumpAndSettle();
+        expect(find.text('September 2026'), findsOneWidget);
+
+        await tester.drag(grid, Offset(0, -size.height * 0.15));
+        await tester.pumpAndSettle();
+        expect(find.text('September 2026'), findsOneWidget);
+
+        await tester.drag(grid, Offset(0, -size.height * 0.21));
+        await tester.pumpAndSettle();
+        expect(find.text('October 2026'), findsOneWidget);
+
+        final nextGrid = find.byKey(const ValueKey('calendar-month-grid'));
+        await tester.drag(nextGrid, Offset(0, size.height * 0.21));
+        await tester.pumpAndSettle();
+        expect(find.text('September 2026'), findsOneWidget);
+      },
+    );
+
+    testWidgets('${viewMode.name} swipe locks navigation while settling', (
+      tester,
+    ) async {
+      await _pumpCalendar(tester, () => now, storage, viewMode: viewMode);
+      final grid = find.byKey(const ValueKey('calendar-month-grid'));
+      final width = tester.getSize(grid).width;
+
+      await tester.timedDrag(
+        grid,
+        Offset(-width * 0.35, 0),
+        const Duration(milliseconds: 100),
+      );
+      await tester.pump(const Duration(milliseconds: 30));
+      await tester.drag(
+        find.byKey(const ValueKey('calendar-month-swipe-region')),
+        Offset(-width * 0.35, 0),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('October 2026'), findsOneWidget);
+      expect(find.text('November 2026'), findsNothing);
+    });
+  }
 
   for (final viewMode in [CalendarViewMode.month, CalendarViewMode.list]) {
     testWidgets('${viewMode.name} swipe slides months in the swipe direction', (
