@@ -59,6 +59,7 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
   ReminderNotificationMode _notificationMode =
       ReminderNotificationMode.alarmAndNotification;
   bool _vibrate = true;
+  late int _snoozeDurationMinutes;
   List<ReminderSoundOption> _availableAlarmSounds = const [];
   bool _isSaving = false;
   bool _defaultsReady = false;
@@ -90,6 +91,7 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
         reminder?.notificationMode ??
         ReminderNotificationMode.alarmAndNotification;
     _vibrate = reminder?.vibrate ?? true;
+    _snoozeDurationMinutes = reminder?.snoozeDurationMinutes ?? 15;
     _loadAvailableAlarmSounds();
     if (reminder != null) {
       _defaultsReady = true;
@@ -104,7 +106,6 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
       return;
     }
 
-    _titleController.text = 'Untitled Reminder';
     final initialDateTime = DateTime.now().add(const Duration(minutes: 5));
     final today = DateUtils.dateOnly(DateTime.now());
     final requestedDate = widget.initialDate;
@@ -255,7 +256,7 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
       soundName: _soundName,
       notificationMode: _notificationMode,
       vibrate: _vibrate,
-      snoozeDurationMinutes: 15,
+      snoozeDurationMinutes: _snoozeDurationMinutes,
       createdAt: existing?.createdAt ?? DateTime.now(),
     );
 
@@ -528,6 +529,163 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
     }
   }
 
+  Future<void> _selectSnoozeDuration() async {
+    final selection = await _showOptionOverlay(
+      () => showModalBottomSheet<int>(
+        context: context,
+        useSafeArea: true,
+        showDragHandle: true,
+        builder: (context) => ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.only(bottom: 12),
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+              child: Text(
+                'Snooze duration',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+            ),
+            for (final minutes in [5, 10, 15])
+              ListTile(
+                title: Text('$minutes minutes'),
+                trailing: _snoozeDurationMinutes == minutes
+                    ? const Icon(Icons.check)
+                    : null,
+                onTap: () => Navigator.of(context).pop(minutes),
+              ),
+            ListTile(
+              title: const Text('Custom'),
+              trailing: _isCustomSnoozeDuration
+                  ? const Icon(Icons.check)
+                  : null,
+              onTap: () => Navigator.of(context).pop(-1),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (selection == -1) {
+      final duration = await _selectCustomSnoozeDuration();
+      if (duration != null && mounted) {
+        setState(() => _snoozeDurationMinutes = duration);
+      }
+    } else if (selection != null && mounted) {
+      setState(() => _snoozeDurationMinutes = selection);
+    }
+  }
+
+  bool get _isCustomSnoozeDuration =>
+      _snoozeDurationMinutes != 5 &&
+      _snoozeDurationMinutes != 10 &&
+      _snoozeDurationMinutes != 15;
+
+  Future<int?> _selectCustomSnoozeDuration() async {
+    final isWholeHours =
+        _snoozeDurationMinutes >= 60 && _snoozeDurationMinutes % 60 == 0;
+    final controller = TextEditingController(
+      text: isWholeHours
+          ? (_snoozeDurationMinutes ~/ 60).toString()
+          : _snoozeDurationMinutes.toString(),
+    );
+    var unit = isWholeHours ? 'hours' : 'minutes';
+    String? error;
+    try {
+      return await _showOptionOverlay(
+        () => showDialog<int>(
+          context: context,
+          builder: (context) => StatefulBuilder(
+            builder: (context, setDialogState) => AlertDialog(
+              title: const Text('Custom snooze duration'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          key: const ValueKey('snooze-custom-value'),
+                          controller: controller,
+                          autofocus: true,
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
+                          decoration: InputDecoration(
+                            labelText: 'Duration',
+                            errorText: error,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      DropdownButton<String>(
+                        key: const ValueKey('snooze-custom-unit'),
+                        value: unit,
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'minutes',
+                            child: Text('Minutes'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'hours',
+                            child: Text('Hours'),
+                          ),
+                        ],
+                        onChanged: (value) {
+                          if (value != null) {
+                            setDialogState(() {
+                              unit = value;
+                              error = null;
+                            });
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    final value = int.tryParse(controller.text);
+                    final minutes = value == null
+                        ? null
+                        : value * (unit == 'hours' ? 60 : 1);
+                    if (minutes == null || minutes < 1 || minutes > 1440) {
+                      setDialogState(() {
+                        error = unit == 'hours'
+                            ? 'Enter 1 to 24 hours.'
+                            : 'Enter 1 to 1440 minutes.';
+                      });
+                      return;
+                    }
+                    Navigator.of(context).pop(minutes);
+                  },
+                  child: const Text('Save'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    } finally {
+      controller.dispose();
+    }
+  }
+
+  String _snoozeDurationLabel(int minutes) {
+    if (minutes >= 60 && minutes % 60 == 0) {
+      final hours = minutes ~/ 60;
+      return '$hours ${hours == 1 ? 'hour' : 'hours'}';
+    }
+    return '$minutes ${minutes == 1 ? 'minute' : 'minutes'}';
+  }
+
   Widget _fieldError(String? message) {
     if (message == null) {
       return const SizedBox.shrink();
@@ -603,7 +761,7 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
                       letterSpacing: -0.4,
                     ),
                     decoration: InputDecoration(
-                      hintText: 'Untitled Reminder',
+                      hintText: 'Title',
                       hintStyle: TextStyle(color: colorScheme.onSurfaceVariant),
                       border: InputBorder.none,
                       enabledBorder: InputBorder.none,
@@ -731,7 +889,8 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
                         key: const ValueKey('snooze-option'),
                         icon: Icons.snooze_outlined,
                         title: 'Snooze',
-                        value: '15 minutes',
+                        value: _snoozeDurationLabel(_snoozeDurationMinutes),
+                        onTap: _selectSnoozeDuration,
                       ),
                     ],
                   ),

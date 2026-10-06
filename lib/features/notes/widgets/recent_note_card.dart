@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../../../theme/app_design_tokens.dart';
 import '../models/note_workspace_models.dart';
 import '../theme/note_card_colors.dart';
-import '../theme/notebook_colors.dart';
 import 'note_tag_chip.dart';
 
 class RecentNoteCard extends StatelessWidget {
@@ -30,7 +29,6 @@ class RecentNoteCard extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final cardForeground = noteCardForegroundColor(theme, note.note.color);
-    final notebookAccent = notebookAccentColor(theme, note.notebookColorValue);
     final borderRadius = BorderRadius.circular(AppRadius.compactCard);
 
     return ClipRRect(
@@ -207,52 +205,7 @@ class RecentNoteCard extends StatelessWidget {
                     ),
                     const SizedBox(width: 6),
                   ],
-                  Flexible(
-                    flex: 3,
-                    child: Container(
-                      key: ValueKey('recent-note-notebook-${note.note.id}'),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: notebookSurfaceColor(
-                          theme,
-                          note.notebookColorValue,
-                        ),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: notebookAccent),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            notebookIconData(
-                              note.notebookIcon,
-                              note.notebookIconType,
-                            ),
-                            size: 13,
-                            color: notebookAccent,
-                          ),
-                          const SizedBox(width: 4),
-                          Flexible(
-                            child: Text(
-                              note.notebookName,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                fontWeight: FontWeight.w600,
-                                color: notebookAccent,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Flexible(
-                    flex: 2,
+                  Expanded(
                     child: Text(
                       MaterialLocalizations.of(context)
                           .formatShortDate(note.note.updatedAt),

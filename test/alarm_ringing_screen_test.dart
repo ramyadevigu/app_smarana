@@ -32,6 +32,7 @@ void main() {
       title: 'Wake up',
       description: 'Good Morning',
       dateTime: DateTime(2026, 10, 4, 7, 30),
+      snoozeDurationMinutes: 120,
       createdAt: DateTime(2026, 10, 1),
     );
 
@@ -66,14 +67,14 @@ void main() {
     expect(
       find.text(
         'If unanswered, this alarm snoozes automatically after '
-        '5 minutes, then rings again in 15 minutes.',
+        '5 minutes, then rings again in 2 hours.',
       ),
       findsOneWidget,
     );
     expect(find.text('Stop'), findsOneWidget);
-    expect(find.text('Snooze · 15 min'), findsOneWidget);
+    expect(find.text('Snooze · 2 hrs'), findsOneWidget);
 
-    await tester.tap(find.text('Snooze · 15 min'));
+    await tester.tap(find.text('Snooze · 2 hrs'));
     await tester.pumpAndSettle();
     expect(methodCalls.last.method, 'snoozeAlarm');
     expect(find.text('Open alarm'), findsOneWidget);

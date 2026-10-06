@@ -439,6 +439,10 @@ class _HomeScreenState extends State<HomeScreen> {
       1 => NotesScreen(
         appMenu: _buildAppMenu(),
         onBackToSmarana: _returnToCalendar,
+        onNavigateToTab: _navigateToTab,
+        onOpenSettings: () => _handleAppMenuAction(_AppMenuAction.settings),
+        onOpenHelp: () => _handleAppMenuAction(_AppMenuAction.help),
+        onOpenFeedback: () => _handleAppMenuAction(_AppMenuAction.feedback),
       ),
       2 => RemindersScreen(title: 'Alarms', appMenu: _buildAppMenu()),
       3 => StopwatchScreen(appMenu: _buildAppMenu()),
@@ -557,6 +561,16 @@ class _HomeScreenState extends State<HomeScreen> {
     }
     setState(() {
       _currentIndex = 0;
+    });
+  }
+
+  void _navigateToTab(int index) {
+    if (index < 0 || index >= 5) {
+      return;
+    }
+    setState(() {
+      _visitedTabs.add(index);
+      _currentIndex = index;
     });
   }
 }

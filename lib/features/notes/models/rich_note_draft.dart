@@ -11,6 +11,8 @@ class RichNoteDraft {
     required this.updatedAt,
     this.reminderId,
     this.color = NoteCardColor.yellow,
+    this.isPinned = false,
+    this.isArchived = false,
   });
 
   final String title;
@@ -22,4 +24,6 @@ class RichNoteDraft {
   final DateTime updatedAt;
   final String? reminderId;
   final NoteCardColor color;
+  final bool isPinned;
+  final bool isArchived;
 }

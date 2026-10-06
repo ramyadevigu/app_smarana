@@ -12,7 +12,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  testWidgets('shows the inline title and compact notebook selector', (
+  testWidgets('shows the inline title without notebook controls', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -23,7 +23,8 @@ void main() {
     final titleField = tester.widget<TextField>(
       find.byKey(const ValueKey('rich-note-title-field')),
     );
-    expect(titleField.controller?.text, 'Untitled');
+    expect(titleField.controller?.text, '');
+    expect(titleField.decoration?.hintText, 'Title');
     expect(titleField.style?.fontSize, 24);
     expect(titleField.style?.fontWeight, FontWeight.w700);
     expect(titleField.decoration?.filled, isFalse);
@@ -34,17 +35,19 @@ void main() {
     expect(titleField.decoration?.errorBorder, InputBorder.none);
     expect(titleField.decoration?.focusedErrorBorder, InputBorder.none);
     expect(find.text('Edit note'), findsNothing);
-    expect(find.textContaining('Quick Notes'), findsOneWidget);
+    expect(find.textContaining('Notebook:'), findsNothing);
+    expect(
+      find.byKey(const ValueKey('rich-note-notebook-dropdown')),
+      findsNothing,
+    );
     expect(find.text('General'), findsNothing);
     expect(
       find.byKey(const ValueKey('rich-note-formatting-toolbar')),
       findsOneWidget,
     );
-    expect(find.byTooltip('Bold'), findsOneWidget);
-    expect(find.byTooltip('Italic'), findsOneWidget);
-    expect(find.byTooltip('Bullet list'), findsOneWidget);
-    expect(find.byTooltip('Checklist'), findsOneWidget);
-    expect(find.byTooltip('More formatting options'), findsOneWidget);
+    expect(find.byTooltip('Bold'), findsNothing);
+    expect(find.byTooltip('Text formatting'), findsOneWidget);
+    expect(find.byTooltip('Add to note'), findsOneWidget);
     expect(find.byTooltip('Heading'), findsNothing);
   });
 
@@ -64,20 +67,92 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('formatting toolbar keeps common actions and + shows more', (
+  testWidgets('pin, archive, edited date, and back-dismiss use note state', (
+    tester,
+  ) async {
+    final editedAt = DateTime(2026, 4, 5, 10);
+    final note = NoteEntry(
+      id: 'menu-state-note',
+      notebookId: 'notebook',
+      title: 'Menu state',
+      content: '',
+      createdAt: editedAt,
+      updatedAt: editedAt,
+    );
+    bool? pinned;
+    bool? archived;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () {
+                Navigator.of(context).push<void>(
+                  MaterialPageRoute<void>(
+                    builder: (_) => RichNoteEditorScreen(
+                      note: note,
+                      onPinChanged: (draft) async {
+                        pinned = draft.isPinned;
+                      },
+                      onArchiveChanged: (draft) async {
+                        archived = draft.isArchived;
+                      },
+                    ),
+                  ),
+                );
+              },
+              child: const Text('Open editor'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Open editor'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('note-editor-more-menu')));
+    await tester.pumpAndSettle();
+    final localizations = MaterialLocalizations.of(
+      tester.element(find.byKey(const ValueKey('note-editor-more-menu'))),
+    );
+    expect(
+      find.text('Edited ${localizations.formatShortDate(editedAt)}'),
+      findsOneWidget,
+    );
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('note-editor-pin-button')));
+    await tester.pumpAndSettle();
+    expect(pinned, isTrue);
+
+    await tester.tap(find.byKey(const ValueKey('note-editor-archive-button')));
+    await tester.pumpAndSettle();
+    expect(archived, isTrue);
+    expect(find.text('Open editor'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('editor insert and more sheets expose their requested actions', (
     tester,
   ) async {
     await tester.pumpWidget(MaterialApp(home: RichNoteEditorScreen()));
     await tester.pumpAndSettle();
 
-    expect(find.byTooltip('Bold'), findsOneWidget);
-    expect(find.byTooltip('Italic'), findsOneWidget);
-    expect(find.byTooltip('Bullet list'), findsOneWidget);
-    expect(find.byTooltip('Checklist'), findsOneWidget);
-    await tester.tap(find.byTooltip('More formatting options'));
+    await tester.tap(find.byKey(const ValueKey('note-editor-insert-button')));
+    await tester.pumpAndSettle();
+    expect(find.text('Take photo'), findsOneWidget);
+    expect(find.text('Add image'), findsOneWidget);
+    expect(find.text('Recording'), findsOneWidget);
+    expect(find.text('Drawing'), findsOneWidget);
+    expect(find.text('Tick boxes'), findsOneWidget);
+    await tester.tap(find.text('Tick boxes'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('note-editor-format-button')));
     await tester.pumpAndSettle();
     expect(find.text('Heading'), findsOneWidget);
-    expect(find.text('Insert image'), findsOneWidget);
     expect(find.text('Insert hyperlink'), findsOneWidget);
     expect(find.text('Undo'), findsOneWidget);
     await tester.tap(find.text('Heading'));
@@ -85,12 +160,14 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('note-editor-more-menu')));
     await tester.pumpAndSettle();
-    expect(find.text('Choose Notebook'), findsOneWidget);
-    expect(find.text('Add Tags'), findsOneWidget);
-    expect(find.text('Add Attachment'), findsOneWidget);
-    expect(find.text('Duplicate'), findsOneWidget);
-    expect(find.text('Share'), findsOneWidget);
+    expect(find.textContaining('Edited '), findsOneWidget);
+    expect(find.text('Find in note'), findsOneWidget);
     expect(find.text('Delete'), findsOneWidget);
+    expect(find.text('Make a copy'), findsOneWidget);
+    expect(find.text('Send'), findsOneWidget);
+    expect(find.text('Collaborator'), findsOneWidget);
+    expect(find.text('Labels'), findsOneWidget);
+    expect(find.text('Help & feedback'), findsOneWidget);
   });
 
   testWidgets('formatting toolbar stays above the keyboard inset', (
@@ -119,18 +196,18 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: RichNoteEditorScreen()));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const ValueKey('note-editor-more-menu')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Note color'));
+    await tester.tap(
+      find.byKey(const ValueKey('note-editor-customize-button')),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('Note Colors'), findsOneWidget);
     await tester.tap(find.byTooltip('Pink'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const ValueKey('note-editor-more-menu')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Note color'));
+    await tester.tap(
+      find.byKey(const ValueKey('note-editor-customize-button')),
+    );
     await tester.pumpAndSettle();
 
     expect(find.bySemanticsLabel('Pink note color, selected'), findsOneWidget);
@@ -151,16 +228,16 @@ void main() {
       'Teal',
       'Lavender',
     ]) {
-      await tester.tap(find.byKey(const ValueKey('note-editor-more-menu')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Note color'));
+      await tester.tap(
+        find.byKey(const ValueKey('note-editor-customize-button')),
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip(color));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const ValueKey('note-editor-more-menu')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Note color'));
+      await tester.tap(
+        find.byKey(const ValueKey('note-editor-customize-button')),
+      );
       await tester.pumpAndSettle();
       expect(
         find.bySemanticsLabel('$color note color, selected'),
@@ -216,7 +293,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('notebook selector moves the note and autosaves its assignment', (
+  testWidgets('editor keeps notebook assignment without a dropdown', (
     tester,
   ) async {
     RichNoteDraft? savedDraft;
@@ -260,19 +337,16 @@ void main() {
 
     expect(
       find.byKey(const ValueKey('rich-note-notebook-dropdown')),
-      findsOneWidget,
+      findsNothing,
     );
-    expect(find.textContaining('Notebook: Quick Notes'), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('rich-note-notebook-dropdown')));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Choose notebook'), findsOneWidget);
-    await tester.tap(find.text('Work'));
-    await tester.pumpAndSettle();
+    expect(find.textContaining('Notebook:'), findsNothing);
+    await tester.enterText(
+      find.byKey(const ValueKey('rich-note-title-field')),
+      'A note edited',
+    );
     await tester.pump(const Duration(milliseconds: 800));
 
-    expect(savedDraft?.notebookId, 'work');
-    expect(find.textContaining('Notebook: Work'), findsOneWidget);
+    expect(savedDraft?.notebookId, quickNotes.id);
     expect(tester.takeException(), isNull);
   });
 
@@ -303,7 +377,7 @@ void main() {
     );
     await tester.pump();
 
-    await tester.tap(find.byTooltip('More formatting options'));
+    await tester.tap(find.byKey(const ValueKey('note-editor-format-button')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Text colors'));
     await tester.pumpAndSettle();
@@ -384,7 +458,9 @@ void main() {
           quill.ChangeSource.local,
         );
         await tester.pump();
-        await tester.tap(find.byTooltip('More formatting options'));
+        await tester.tap(
+          find.byKey(const ValueKey('note-editor-format-button')),
+        );
         await tester.pumpAndSettle();
         await tester.tap(find.text('Text colors'));
         await tester.pumpAndSettle();
@@ -402,7 +478,9 @@ void main() {
           quill.ChangeSource.local,
         );
         await tester.pump();
-        await tester.tap(find.byTooltip('More formatting options'));
+        await tester.tap(
+          find.byKey(const ValueKey('note-editor-format-button')),
+        );
         await tester.pumpAndSettle();
         await tester.tap(find.text('Text colors'));
         await tester.pumpAndSettle();

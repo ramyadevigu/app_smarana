@@ -47,6 +47,9 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen> {
     final time = MaterialLocalizations.of(context)
         .formatTimeOfDay(TimeOfDay.fromDateTime(widget.reminder.dateTime));
     final description = widget.reminder.description?.trim();
+    final snoozeDuration = _formatSnoozeDuration(
+      widget.reminder.snoozeDurationMinutes,
+    );
 
     return PopScope<void>(
       canPop: _responding,
@@ -134,7 +137,7 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen> {
                     const SizedBox(height: 14),
                     Text(
                       'If unanswered, this alarm snoozes automatically after '
-                      '5 minutes, then rings again in 15 minutes.',
+                      '5 minutes, then rings again in $snoozeDuration.',
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: colors.onSurfaceVariant,
@@ -166,7 +169,9 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen> {
                                 ? null
                                 : () => _respond(snooze: true),
                             icon: const Icon(Icons.snooze_rounded),
-                            label: const Text('Snooze · 15 min'),
+                            label: Text(
+                              'Snooze · ${_formatSnoozeDuration(widget.reminder.snoozeDurationMinutes, abbreviated: true)}',
+                            ),
                             style: OutlinedButton.styleFrom(
                               minimumSize: const Size.fromHeight(58),
                               foregroundColor: colors.onSurface,
@@ -188,5 +193,17 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen> {
         ),
       ),
     );
+  }
+
+  String _formatSnoozeDuration(int minutes, {bool abbreviated = false}) {
+    if (minutes >= 60 && minutes % 60 == 0) {
+      final hours = minutes ~/ 60;
+      return abbreviated
+          ? '$hours ${hours == 1 ? 'hr' : 'hrs'}'
+          : '$hours ${hours == 1 ? 'hour' : 'hours'}';
+    }
+    return abbreviated
+        ? '$minutes min'
+        : '$minutes ${minutes == 1 ? 'minute' : 'minutes'}';
   }
 }

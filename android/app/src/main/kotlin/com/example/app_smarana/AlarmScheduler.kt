@@ -31,7 +31,6 @@ internal object AlarmScheduler {
     private const val ACTIVE_ALARM_DEADLINE = "active_alarm_deadline"
     private const val ALARM_PREFIX = "alarm_"
     private const val TIMEOUT_MINUTES = 5L
-    private const val SNOOZE_MINUTES = 15L
 
     fun schedule(
         context: Context,
@@ -177,7 +176,19 @@ internal object AlarmScheduler {
 
     fun finishWithSnooze(context: Context, id: Int) {
         val config = readConfig(context, id) ?: return
-        val triggerAt = System.currentTimeMillis() + SNOOZE_MINUTES * 60_000L
+        val reminder = try {
+            JSONObject(config.getString("reminderJson"))
+        } catch (error: JSONException) {
+            Log.e("TotalRemindersAlarm", "Invalid reminder data for alarm $id.", error)
+            return
+        }
+        val configuredMinutes = reminder.optInt("snoozeDurationMinutes", 15)
+        val snoozeMinutes = if (configuredMinutes in 1..1440) {
+            configuredMinutes.toLong()
+        } else {
+            15L
+        }
+        val triggerAt = System.currentTimeMillis() + snoozeMinutes * 60_000L
         config.put("triggerAtMillis", triggerAt)
             .put("isSnooze", true)
         check(

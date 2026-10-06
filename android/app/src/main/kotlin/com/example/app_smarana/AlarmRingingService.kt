@@ -147,6 +147,17 @@ class AlarmRingingService : Service() {
     private fun buildNotification(id: Int, reminder: JSONObject): Notification {
         val title = reminder.optString("title", "Alarm")
         val description = reminder.optString("description").trim()
+        val configuredSnoozeMinutes = reminder.optInt("snoozeDurationMinutes", 15)
+        val snoozeMinutes = if (configuredSnoozeMinutes in 1..1440) {
+            configuredSnoozeMinutes
+        } else {
+            15
+        }
+        val snoozeLabel = if (snoozeMinutes >= 60 && snoozeMinutes % 60 == 0) {
+            "${snoozeMinutes / 60} hr"
+        } else {
+            "$snoozeMinutes min"
+        }
         val launchIntent = Intent(this, MainActivity::class.java)
             .setAction(AlarmScheduler.ACTION_OPEN_ALARM)
             .putExtra(AlarmScheduler.EXTRA_ALARM_ID, id)
@@ -182,7 +193,7 @@ class AlarmRingingService : Service() {
             .setFullScreenIntent(fullScreenIntent, true)
             .setContentIntent(fullScreenIntent)
             .addAction(
-                Notification.Action.Builder(null, "Snooze · 15 min", snoozeAction).build(),
+                Notification.Action.Builder(null, "Snooze · $snoozeLabel", snoozeAction).build(),
             )
             .addAction(Notification.Action.Builder(null, "Stop", stopAction).build())
             .apply {

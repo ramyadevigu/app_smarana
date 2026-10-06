@@ -18,20 +18,9 @@ import '../models/rich_note_draft.dart';
 import '../services/note_attachment_storage.dart';
 import '../services/note_editor_autosave_service.dart';
 import '../theme/note_card_colors.dart';
+import '../widgets/note_editor_action_sheets.dart';
 import '../widgets/note_tag_chip.dart';
 import '../widgets/note_table_embed_builder.dart';
-
-enum _NoteEditorAction {
-  noteColor,
-  selectNotebook,
-  addTags,
-  addAttachment,
-  insertDate,
-  insertTemplate,
-  duplicate,
-  share,
-  delete,
-}
 
 enum _FormattingColorTarget { highlight, text }
 
@@ -53,6 +42,10 @@ class RichNoteEditorScreen extends StatefulWidget {
     this.onAutosave,
     this.onDuplicate,
     this.onDelete,
+    this.onPinChanged,
+    this.onArchiveChanged,
+    this.startWithChecklist = false,
+    this.pickImageOnOpen = false,
     this.tagColors = const {},
     this.onTagColorsChanged,
     this.reminderStorage,
@@ -64,6 +57,10 @@ class RichNoteEditorScreen extends StatefulWidget {
   final Future<void> Function(RichNoteDraft draft)? onAutosave;
   final Future<void> Function(RichNoteDraft draft)? onDuplicate;
   final Future<void> Function(RichNoteDraft draft)? onDelete;
+  final Future<void> Function(RichNoteDraft draft)? onPinChanged;
+  final Future<void> Function(RichNoteDraft draft)? onArchiveChanged;
+  final bool startWithChecklist;
+  final bool pickImageOnOpen;
   final Map<String, NoteCardColor> tagColors;
   final Future<void> Function(Map<String, NoteCardColor> tagColors)?
   onTagColorsChanged;
@@ -91,6 +88,8 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
   late List<NoteAttachment> _attachments;
   late Map<String, NoteCardColor> _tagColors;
   bool _isExiting = false;
+  late bool _isPinned;
+  late bool _isArchived;
   bool _projectMetadataVisible = false;
 
   DateTime? _projectStartDate;
@@ -116,9 +115,8 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
     super.initState();
     final note = widget.note;
     _titleController.text = note?.title ?? '';
-    if (_titleController.text.trim().isEmpty) {
-      _titleController.text = 'Untitled';
-    }
+    _isPinned = note?.isPinned ?? false;
+    _isArchived = note?.isArchived ?? false;
     _selectedNotebookId =
         note?.notebookId ??
         (widget.notebooks.isEmpty
@@ -151,8 +149,12 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
       selection: const TextSelection.collapsed(offset: 0),
       readOnly: false,
     );
+    if (widget.startWithChecklist &&
+        _quillController.document.toPlainText().trim().isEmpty) {
+      _quillController.formatText(0, 1, quill.Attribute.unchecked);
+    }
 
-    _lastUpdated.value = note?.updatedAt;
+    _lastUpdated.value = note?.updatedAt ?? DateTime.now();
 
     _titleController.addListener(_queueAutosave);
     _quillController.addListener(_queueAutosave);
@@ -166,6 +168,13 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
     }
     unawaited(_loadAvailableAlarmSounds());
     unawaited(_loadAvailableCalendarReminders());
+    if (widget.pickImageOnOpen) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          unawaited(_addImages());
+        }
+      });
+    }
   }
 
   @override
@@ -497,6 +506,8 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
       updatedAt: now,
       reminderId: _reminderId,
       color: _selectedNoteColor,
+      isPinned: _isPinned,
+      isArchived: _isArchived,
     );
   }
 
@@ -1119,56 +1130,6 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
     _queueAutosave();
   }
 
-  String get _selectedNotebookName {
-    for (final notebook in widget.notebooks) {
-      if (notebook.id == _selectedNotebookId) {
-        return notebook.name;
-      }
-    }
-    return defaultNotebookName;
-  }
-
-  Future<void> _openNotebookPicker() async {
-    if (widget.notebooks.isEmpty) {
-      return;
-    }
-    final notebookId = await showModalBottomSheet<String>(
-      context: context,
-      useSafeArea: true,
-      showDragHandle: true,
-      builder: (context) => ListView(
-        shrinkWrap: true,
-        padding: const EdgeInsets.only(bottom: 16),
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-            child: Text(
-              'Choose notebook',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-          ),
-          for (final notebook in widget.notebooks)
-            ListTile(
-              leading: Icon(
-                notebook.id == _selectedNotebookId
-                    ? Icons.radio_button_checked_rounded
-                    : Icons.radio_button_unchecked_rounded,
-              ),
-              title: Text(notebook.name),
-              onTap: () => Navigator.of(context).pop(notebook.id),
-            ),
-        ],
-      ),
-    );
-    if (notebookId == null || !mounted || notebookId == _selectedNotebookId) {
-      return;
-    }
-    setState(() {
-      _selectedNotebookId = notebookId;
-    });
-    _queueAutosave();
-  }
-
   Future<void> _showTagsDialog() async {
     final controller = TextEditingController(text: _projectTagsController.text);
     final tags = await showDialog<String>(
@@ -1412,138 +1373,126 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
   }
 
   Future<void> _showMoreOptions() async {
-    final action = await showModalBottomSheet<_NoteEditorAction>(
-      context: context,
-      useSafeArea: true,
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
-      ),
-      builder: (context) => SafeArea(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.sizeOf(context).height * 0.78,
-          ),
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 34,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.outlineVariant,
-                    borderRadius: BorderRadius.circular(3),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Text(
-                      'More Options',
-                      style: Theme.of(context).textTheme.titleLarge
-                          ?.copyWith(fontWeight: FontWeight.w700),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                for (
-                  var index = 0;
-                  index < _NoteEditorAction.values.length;
-                  index++
-                ) ...[
-                  if (index == 4 || index == 6)
-                    Divider(
-                      height: 8,
-                      color: Theme.of(context).colorScheme.outlineVariant
-                          .withValues(alpha: 0.55),
-                    ),
-                  _moreOptionTile(context, _NoteEditorAction.values[index]),
-                ],
-              ],
-            ),
-          ),
-        ),
-      ),
+    final action = await NoteEditorMoreSheet.show(
+      context,
+      editedAt: _lastUpdated.value ?? widget.note?.updatedAt ?? DateTime.now(),
     );
-    if (action != null && mounted) {
-      _handleMoreAction(action);
+    if (action == null || !mounted) {
+      return;
+    }
+    switch (action) {
+      case NoteEditorMoreAction.findInNote:
+        await _showFindInNote();
+        break;
+      case NoteEditorMoreAction.delete:
+        await _deleteCurrentNote();
+        break;
+      case NoteEditorMoreAction.makeCopy:
+        await _duplicateCurrentNote();
+        break;
+      case NoteEditorMoreAction.send:
+        await _shareNote();
+        break;
+      case NoteEditorMoreAction.collaborator:
+        _showAttachmentError('Collaborators are not available yet.');
+        break;
+      case NoteEditorMoreAction.labels:
+        await _showTagsDialog();
+        break;
+      case NoteEditorMoreAction.helpAndFeedback:
+        _showAttachmentError('Help and feedback are not available here yet.');
+        break;
     }
   }
 
-  Widget _moreOptionTile(BuildContext context, _NoteEditorAction action) {
-    final isDestructive = action == _NoteEditorAction.delete;
-    final color = isDestructive
-        ? Theme.of(context).colorScheme.error
-        : Theme.of(context).colorScheme.onSurface;
-    return ListTile(
-      dense: true,
-      leading: Icon(_noteActionIcon(action), color: color, size: 20),
-      title: Text(_noteActionLabel(action), style: TextStyle(color: color)),
-      onTap: () => Navigator.of(context).pop(action),
+  Future<void> _showFindInNote() async {
+    final searchController = TextEditingController();
+    final query = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Find in note'),
+        content: TextField(
+          controller: searchController,
+          autofocus: true,
+          textInputAction: TextInputAction.search,
+          decoration: const InputDecoration(hintText: 'Search this note'),
+          onSubmitted: (value) => Navigator.of(context).pop(value),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(searchController.text),
+            child: const Text('Find'),
+          ),
+        ],
+      ),
     );
+    searchController.dispose();
+    if (!mounted || query == null || query.trim().isEmpty) {
+      return;
+    }
+    final plainText = _quillController.document.toPlainText();
+    final start = plainText.toLowerCase().indexOf(query.trim().toLowerCase());
+    if (start < 0) {
+      _showAttachmentError('No matches found.');
+      return;
+    }
+    final end = start + query.trim().length;
+    _quillController.updateSelection(
+      TextSelection(baseOffset: start, extentOffset: end),
+      quill.ChangeSource.local,
+    );
+    _showAttachmentError('Match found.');
   }
 
-  String _noteActionLabel(_NoteEditorAction action) {
-    return switch (action) {
-      _NoteEditorAction.noteColor => 'Note color',
-      _NoteEditorAction.selectNotebook => 'Choose Notebook',
-      _NoteEditorAction.addTags => 'Add Tags',
-      _NoteEditorAction.addAttachment => 'Add Attachment',
-      _NoteEditorAction.insertDate => 'Insert Date',
-      _NoteEditorAction.insertTemplate => 'Insert Template',
-      _NoteEditorAction.duplicate => 'Duplicate',
-      _NoteEditorAction.share => 'Share',
-      _NoteEditorAction.delete => 'Delete',
-    };
+  Future<void> _togglePinned() async {
+    final callback = widget.onPinChanged;
+    if (callback == null) {
+      _showAttachmentError('Pinning is unavailable from this screen.');
+      return;
+    }
+    final previousValue = _isPinned;
+    try {
+      setState(() => _isPinned = !previousValue);
+      await callback(_buildDraft());
+      if (!mounted) {
+        return;
+      }
+      _queueAutosave();
+    } on Exception catch (error) {
+      if (mounted) {
+        setState(() => _isPinned = previousValue);
+      }
+      _showAttachmentError('Could not update pin: $error');
+    }
   }
 
-  IconData _noteActionIcon(_NoteEditorAction action) {
-    return switch (action) {
-      _NoteEditorAction.noteColor => Icons.palette_outlined,
-      _NoteEditorAction.selectNotebook => Icons.drive_file_move_outline,
-      _NoteEditorAction.addTags => Icons.sell_outlined,
-      _NoteEditorAction.addAttachment => Icons.attach_file_rounded,
-      _NoteEditorAction.insertDate => Icons.calendar_today_outlined,
-      _NoteEditorAction.insertTemplate => Icons.description_outlined,
-      _NoteEditorAction.duplicate => Icons.copy_all_outlined,
-      _NoteEditorAction.share => Icons.ios_share_rounded,
-      _NoteEditorAction.delete => Icons.delete_outline_rounded,
-    };
-  }
-
-  void _handleMoreAction(_NoteEditorAction action) {
-    switch (action) {
-      case _NoteEditorAction.noteColor:
-        unawaited(_showNoteColorPicker());
-        break;
-      case _NoteEditorAction.selectNotebook:
-        unawaited(_openNotebookPicker());
-        break;
-      case _NoteEditorAction.addTags:
-        unawaited(_showTagsDialog());
-        break;
-      case _NoteEditorAction.addAttachment:
-        unawaited(_showAttachmentOptions());
-        break;
-      case _NoteEditorAction.insertDate:
-        _insertCurrentDate();
-        break;
-      case _NoteEditorAction.insertTemplate:
-        unawaited(_showTemplatePicker());
-        break;
-      case _NoteEditorAction.duplicate:
-        unawaited(_duplicateCurrentNote());
-        break;
-      case _NoteEditorAction.share:
-        unawaited(_shareNote());
-        break;
-      case _NoteEditorAction.delete:
-        unawaited(_deleteCurrentNote());
-        break;
+  Future<void> _toggleArchived() async {
+    try {
+      final callback = widget.onArchiveChanged;
+      if (callback == null) {
+        _showAttachmentError('Archive is unavailable from this screen.');
+        return;
+      }
+      final previousValue = _isArchived;
+      setState(() => _isArchived = !previousValue);
+      await callback(_buildDraft());
+      if (!mounted) {
+        return;
+      }
+      await _flushAutosave();
+      if (mounted) {
+        _isExiting = true;
+        Navigator.of(context).pop(_buildDraft());
+      }
+    } on Exception catch (error) {
+      if (mounted) {
+        setState(() => _isArchived = !_isArchived);
+      }
+      _showAttachmentError('Could not update archive: $error');
     }
   }
 
@@ -1697,11 +1646,39 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
     );
   }
 
-  Future<void> _showInsertionOptions() async {
+  Future<void> _showInsertSheet() async {
+    final action = await NoteEditorInsertSheet.show(context);
+    if (!mounted || action == null) {
+      return;
+    }
+    switch (action) {
+      case NoteEditorInsertAction.takePhoto:
+        _showAttachmentError('Camera capture is not available yet.');
+        break;
+      case NoteEditorInsertAction.addImage:
+        await _addImages();
+        break;
+      case NoteEditorInsertAction.recording:
+        _showAttachmentError('Audio recording is not available yet.');
+        break;
+      case NoteEditorInsertAction.drawing:
+        _showAttachmentError('Drawing notes are not available yet.');
+        break;
+      case NoteEditorInsertAction.tickBoxes:
+        _toggleInlineAttribute(quill.Attribute.unchecked);
+        break;
+    }
+  }
+
+  Future<void> _showFormattingOptions() async {
     final option = await showModalBottomSheet<String>(
       context: context,
       useSafeArea: true,
       showDragHandle: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+      ),
       builder: (context) => SafeArea(
         child: SingleChildScrollView(
           child: Column(
@@ -1728,11 +1705,6 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
                 onTap: () => Navigator.of(context).pop('numbered_list'),
               ),
               ListTile(
-                leading: const Icon(Icons.image_outlined),
-                title: const Text('Insert image'),
-                onTap: () => Navigator.of(context).pop('image'),
-              ),
-              ListTile(
                 leading: const Icon(Icons.link_rounded),
                 title: const Text('Insert hyperlink'),
                 onTap: () => Navigator.of(context).pop('link'),
@@ -1754,7 +1726,7 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
               ),
               ListTile(
                 leading: const Icon(Icons.attach_file_rounded),
-                title: const Text('Add attachment'),
+                title: const Text('Add file'),
                 onTap: () => Navigator.of(context).pop('attachment'),
               ),
               ListTile(
@@ -1766,6 +1738,16 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
                 leading: const Icon(Icons.redo_rounded),
                 title: const Text('Redo'),
                 onTap: () => Navigator.of(context).pop('redo'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.calendar_today_outlined),
+                title: const Text('Insert date'),
+                onTap: () => Navigator.of(context).pop('date'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.description_outlined),
+                title: const Text('Insert template'),
+                onTap: () => Navigator.of(context).pop('template'),
               ),
             ],
           ),
@@ -1787,9 +1769,6 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
         break;
       case 'numbered_list':
         _toggleInlineAttribute(quill.Attribute.ol);
-        break;
-      case 'image':
-        await _addImages();
         break;
       case 'link':
         await _insertHyperlink();
@@ -1816,6 +1795,12 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
       case 'redo':
         _quillController.redo();
         _queueAutosave();
+        break;
+      case 'date':
+        _insertCurrentDate();
+        break;
+      case 'template':
+        await _showTemplatePicker();
         break;
       default:
         return;
@@ -2000,11 +1985,13 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
     required String tooltip,
     required IconData icon,
     required VoidCallback onPressed,
+    Key? key,
   }) {
     return SizedBox(
       width: 36,
       height: 36,
       child: IconButton(
+        key: key,
         tooltip: tooltip,
         onPressed: onPressed,
         icon: Icon(icon, size: 18),
@@ -2018,55 +2005,45 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
   }
 
   Widget _buildFloatingToolbar() {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Material(
+    return SizedBox(
       key: const ValueKey('rich-note-formatting-toolbar'),
-      color: colorScheme.surfaceContainerLow,
-      elevation: 2,
-      shadowColor: colorScheme.shadow.withValues(alpha: 0.12),
-      borderRadius: BorderRadius.circular(16),
-      child: SizedBox(
-        width: double.infinity,
-        height: 48,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 6),
-          child: Row(
-            children: [
-              _toolbarButton(
-                tooltip: 'Bold',
-                icon: Icons.format_bold_rounded,
-                onPressed: () => _toggleInlineAttribute(quill.Attribute.bold),
-              ),
-              _toolbarButton(
-                tooltip: 'Italic',
-                icon: Icons.format_italic_rounded,
-                onPressed: () => _toggleInlineAttribute(quill.Attribute.italic),
-              ),
-              _toolbarButton(
-                tooltip: 'Bullet list',
-                icon: Icons.format_list_bulleted_rounded,
-                onPressed: () => _toggleInlineAttribute(quill.Attribute.ul),
-              ),
-              _toolbarButton(
-                tooltip: 'Checklist',
-                icon: Icons.check_box_outlined,
-                onPressed: () =>
-                    _toggleInlineAttribute(quill.Attribute.unchecked),
-              ),
-              const Spacer(),
-              _toolbarButton(
-                tooltip: 'More formatting options',
-                icon: Icons.add_rounded,
-                onPressed: _showInsertionOptions,
-              ),
-            ],
-          ),
+      height: 52,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Row(
+          children: [
+            _toolbarButton(
+              key: const ValueKey('note-editor-insert-button'),
+              tooltip: 'Add to note',
+              icon: Icons.add_box_outlined,
+              onPressed: _showInsertSheet,
+            ),
+            _toolbarButton(
+              key: const ValueKey('note-editor-customize-button'),
+              tooltip: 'Customize note',
+              icon: Icons.palette_outlined,
+              onPressed: _showNoteColorPicker,
+            ),
+            _toolbarButton(
+              key: const ValueKey('note-editor-format-button'),
+              tooltip: 'Text formatting',
+              icon: Icons.text_format_rounded,
+              onPressed: _showFormattingOptions,
+            ),
+            const Spacer(),
+            _toolbarButton(
+              key: const ValueKey('note-editor-more-menu'),
+              tooltip: 'More options',
+              icon: Icons.more_vert_rounded,
+              onPressed: _showMoreOptions,
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildNotebookHeader() {
+  Widget _buildNoteMetadata() {
     final theme = Theme.of(context);
     final colorScheme = Theme.of(context).colorScheme;
     final tags = _projectTagsController.text
@@ -2079,47 +2056,24 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: ActionChip(
-                  key: const ValueKey('rich-note-notebook-dropdown'),
-                  label: Text(
-                    'Notebook: $_selectedNotebookName  ›',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+          Align(
+            alignment: Alignment.centerLeft,
+            child: ValueListenableBuilder<String>(
+              valueListenable: _autosaveMessage,
+              builder: (context, value, _) {
+                if (value.isEmpty) {
+                  return const SizedBox.shrink();
+                }
+                return Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
                   ),
-                  labelStyle: theme.textTheme.labelSmall?.copyWith(
-                    color: colorScheme.primary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  backgroundColor: colorScheme.primaryContainer,
-                  side: BorderSide.none,
-                  visualDensity: VisualDensity.compact,
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  onPressed: _openNotebookPicker,
-                ),
-              ),
-              const SizedBox(width: 8),
-              ValueListenableBuilder<String>(
-                valueListenable: _autosaveMessage,
-                builder: (context, value, _) {
-                  if (value.isEmpty) {
-                    return const SizedBox.shrink();
-                  }
-                  return ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 92),
-                    child: Text(
-                      value,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.labelSmall
-                          ?.copyWith(color: colorScheme.onSurfaceVariant),
-                    ),
-                  );
-                },
-              ),
-            ],
+                );
+              },
+            ),
           ),
           if (tags.isNotEmpty) ...[
             const SizedBox(height: 2),
@@ -2146,8 +2100,6 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final localizations = MaterialLocalizations.of(context);
-
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -2172,32 +2124,35 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
             icon: const Icon(Icons.arrow_back_rounded),
             onPressed: _exitEditor,
           ),
-          title: TextField(
-            key: const ValueKey('rich-note-title-field'),
-            controller: _titleController,
-            textCapitalization: TextCapitalization.sentences,
-            textInputAction: TextInputAction.next,
-            maxLines: 1,
-            decoration: const InputDecoration(
-              hintText: 'Untitled',
-              filled: false,
-              border: InputBorder.none,
-              enabledBorder: InputBorder.none,
-              focusedBorder: InputBorder.none,
-              disabledBorder: InputBorder.none,
-              errorBorder: InputBorder.none,
-              focusedErrorBorder: InputBorder.none,
-              isDense: true,
-              contentPadding: EdgeInsets.zero,
-            ),
-            style: Theme.of(context).textTheme.headlineSmall
-                ?.copyWith(fontWeight: FontWeight.w700),
-          ),
           actions: [
+            IconButton(
+              key: const ValueKey('note-editor-pin-button'),
+              tooltip: _isPinned ? 'Unpin note' : 'Pin note',
+              onPressed: _togglePinned,
+              style: IconButton.styleFrom(
+                backgroundColor: Theme.of(context)
+                    .colorScheme
+                    .surfaceContainerHigh,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(13),
+                ),
+              ),
+              icon: Icon(
+                _isPinned ? Icons.push_pin_rounded : Icons.push_pin_outlined,
+              ),
+            ),
             IconButton(
               key: const ValueKey('note-editor-reminder-button'),
               tooltip: 'Set reminder',
               onPressed: _showReminderSettings,
+              style: IconButton.styleFrom(
+                backgroundColor: Theme.of(context)
+                    .colorScheme
+                    .surfaceContainerHigh,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(13),
+                ),
+              ),
               icon: Icon(
                 _reminderSectionVisible && _reminderEnabled
                     ? Icons.notifications_active_outlined
@@ -2205,52 +2160,67 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
               ),
             ),
             IconButton(
-              key: const ValueKey('note-editor-more-menu'),
-              tooltip: 'More options',
-              onPressed: _showMoreOptions,
-              icon: const Icon(Icons.more_vert_rounded),
+              key: const ValueKey('note-editor-archive-button'),
+              tooltip: _isArchived ? 'Unarchive note' : 'Archive note',
+              onPressed: _toggleArchived,
+              style: IconButton.styleFrom(
+                backgroundColor: Theme.of(context)
+                    .colorScheme
+                    .surfaceContainerHigh,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(13),
+                ),
+              ),
+              icon: Icon(
+                _isArchived ? Icons.unarchive_outlined : Icons.archive_outlined,
+              ),
             ),
           ],
         ),
         body: SafeArea(
           child: Column(
             children: [
-              _buildNotebookHeader(),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(22, 34, 22, 4),
+                child: TextField(
+                  key: const ValueKey('rich-note-title-field'),
+                  controller: _titleController,
+                  textCapitalization: TextCapitalization.sentences,
+                  textInputAction: TextInputAction.next,
+                  maxLines: 1,
+                  decoration: InputDecoration(
+                    hintText: 'Title',
+                    hintStyle: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                    filled: false,
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    disabledBorder: InputBorder.none,
+                    errorBorder: InputBorder.none,
+                    focusedErrorBorder: InputBorder.none,
+                    isDense: true,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                  style: Theme.of(context).textTheme.headlineSmall
+                      ?.copyWith(fontWeight: FontWeight.w700),
+                ),
+              ),
+              _buildNoteMetadata(),
               Expanded(
                 child: quill.QuillEditor.basic(
                   key: const ValueKey('rich-note-content-editor'),
                   controller: _quillController,
                   config: quill.QuillEditorConfig(
                     autoFocus: widget.focusOnOpen,
-                    placeholder: 'Write something...',
+                    placeholder: 'Note',
                     padding: const EdgeInsets.fromLTRB(18, 16, 18, 24),
                     embedBuilders: const [NoteTableEmbedBuilder()],
                   ),
                 ),
               ),
               if (_attachments.isNotEmpty) _buildAttachmentSection(),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 2, 16, 8),
-                child: ValueListenableBuilder<DateTime?>(
-                  valueListenable: _lastUpdated,
-                  builder: (context, dateTime, _) {
-                    if (dateTime == null) {
-                      return const SizedBox(height: 12);
-                    }
-                    final time = TimeOfDay.fromDateTime(dateTime);
-                    return Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        'Last updated ${localizations.formatShortDate(dateTime)} '
-                        '${localizations.formatTimeOfDay(time)}',
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
                 child: _buildFloatingToolbar(),

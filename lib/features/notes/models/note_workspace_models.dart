@@ -294,6 +294,7 @@ class NoteEntry {
     required this.updatedAt,
     this.reminderId,
     this.isPinned = false,
+    this.isArchived = false,
     this.color = NoteCardColor.yellow,
   });
 
@@ -308,6 +309,7 @@ class NoteEntry {
   final DateTime updatedAt;
   final String? reminderId;
   final bool isPinned;
+  final bool isArchived;
   final NoteCardColor color;
 
   Map<String, Object?> toJson() => {
@@ -324,6 +326,7 @@ class NoteEntry {
     'updatedAt': updatedAt.toIso8601String(),
     'reminderId': reminderId,
     'isPinned': isPinned,
+    'isArchived': isArchived,
     'color': color.name,
   };
 
@@ -347,6 +350,9 @@ class NoteEntry {
           ? json['reminderId']! as String
           : null,
       isPinned: json['isPinned'] is bool ? json['isPinned']! as bool : false,
+      isArchived: json['isArchived'] is bool
+          ? json['isArchived']! as bool
+          : false,
       color: _readNoteCardColor(json['color']),
     );
   }
@@ -403,6 +409,7 @@ class NoteEntry {
     String? reminderId,
     bool clearReminderId = false,
     bool? isPinned,
+    bool? isArchived,
     NoteCardColor? color,
   }) {
     return NoteEntry(
@@ -419,6 +426,7 @@ class NoteEntry {
       updatedAt: updatedAt ?? this.updatedAt,
       reminderId: clearReminderId ? null : reminderId ?? this.reminderId,
       isPinned: isPinned ?? this.isPinned,
+      isArchived: isArchived ?? this.isArchived,
       color: color ?? this.color,
     );
   }

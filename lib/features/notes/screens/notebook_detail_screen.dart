@@ -115,6 +115,14 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
               await _deleteNoteFromWorkspace(note.id);
             }
           },
+          onPinChanged: (snapshot) async {
+            await _saveNote(_noteFromDraft(base: note, draft: snapshot));
+            wasInserted = true;
+          },
+          onArchiveChanged: (snapshot) async {
+            await _saveNote(_noteFromDraft(base: note, draft: snapshot));
+            wasInserted = true;
+          },
           onAutosave: (snapshot) async {
             if (!_hasMeaningfulContent(snapshot) || !mounted) {
               return;
@@ -160,6 +168,12 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
               await _reminderStorage.deleteReminder(draft.reminderId!);
             }
             await _deleteNoteFromWorkspace(note.id);
+          },
+          onPinChanged: (snapshot) async {
+            await _saveNote(_noteFromDraft(base: note, draft: snapshot));
+          },
+          onArchiveChanged: (snapshot) async {
+            await _saveNote(_noteFromDraft(base: note, draft: snapshot));
           },
           onAutosave: (snapshot) async {
             if (!mounted) {
@@ -286,6 +300,8 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
       reminderId: draft.reminderId,
       clearReminderId: draft.reminderId == null,
       color: draft.color,
+      isPinned: draft.isPinned,
+      isArchived: draft.isArchived,
     );
   }
 
@@ -322,7 +338,10 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
 
   bool _hasMeaningfulContent(RichNoteDraft draft) {
     return draft.title.trim().isNotEmpty ||
-        draft.plainContent.trim().isNotEmpty;
+        draft.plainContent.trim().isNotEmpty ||
+        draft.attachments.isNotEmpty ||
+        draft.isPinned ||
+        draft.isArchived;
   }
 
   Future<void> _deleteNote(NoteEntry note) async {
@@ -512,7 +531,7 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
             side: BorderSide(
-            color: colorScheme.outlineVariant.withValues(alpha: 0.45),
+              color: colorScheme.outlineVariant.withValues(alpha: 0.45),
             ),
           ),
           child: ListTile(
@@ -520,15 +539,15 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
             leading: note.reminderId != null
                 ? Icon(
                     Icons.notifications_active_outlined,
-                  color: noteForeground,
+                    color: noteForeground,
                   )
                 : null,
-          title: Text(
-            note.title.isEmpty ? 'Untitled note' : note.title,
-            style: theme.textTheme.titleMedium?.copyWith(
-              color: noteForeground,
+            title: Text(
+              note.title.isEmpty ? 'Untitled note' : note.title,
+              style: theme.textTheme.titleMedium?.copyWith(
+                color: noteForeground,
+              ),
             ),
-          ),
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -834,9 +853,7 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
           note.title.isEmpty ? 'Untitled note' : note.title,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: theme.textTheme.titleSmall?.copyWith(
-            color: noteForeground,
-          ),
+          style: theme.textTheme.titleSmall?.copyWith(color: noteForeground),
         ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -847,9 +864,7 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
                   : 'Owner: ${metadata!.owner}',
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: noteForeground,
-              ),
+              style: theme.textTheme.bodySmall?.copyWith(color: noteForeground),
             ),
             if (metadata?.tags.isNotEmpty ?? false) ...[
               const SizedBox(height: 4),

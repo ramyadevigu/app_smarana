@@ -33,11 +33,17 @@ void main() {
       endExclusive: DateTime(2026, 3, 1),
     );
 
-    expect(occurrences.keys, contains(DateTime(2026, 2, 27)));
+    expect(occurrences.keys, isNot(contains(DateTime(2026, 2, 27))));
     expect(occurrences.keys, contains(DateTime(2026, 2, 28)));
     expect(
       occurrences[DateTime(2026, 2, 28)]!.map((item) => item.reminder.id),
-      ['daily', 'once', 'monthly'],
+      ['once', 'monthly'],
+    );
+    expect(
+      occurrences.values
+          .expand((dayOccurrences) => dayOccurrences)
+          .map((item) => item.reminder.id),
+      isNot(contains('daily')),
     );
     expect(occurrences.keys, isNot(contains(DateTime(2026, 3, 1))));
   });
@@ -110,15 +116,11 @@ void main() {
 
     expect(
       occurrences[DateTime(2026, 9, 1)]!.map((item) => item.reminder.id),
-      containsAll(['weekdays', 'biweekly']),
+      contains('biweekly'),
     );
     expect(
       occurrences[DateTime(2026, 9, 2)]!.map((item) => item.reminder.id),
-      containsAll(['daily', 'alternate-weeks']),
-    );
-    expect(
-      occurrences[DateTime(2026, 9, 3)]!.map((item) => item.reminder.id),
-      contains('weekdays'),
+      contains('alternate-weeks'),
     );
     expect(
       occurrences[DateTime(2026, 9, 4)]!.map((item) => item.reminder.id),
@@ -133,17 +135,123 @@ void main() {
       contains('monthly'),
     );
     expect(
-      occurrences[DateTime(2026, 10, 5)]!.map((item) => item.reminder.id),
-      isNot(contains('alternate-months')),
-    );
-    expect(
       occurrences[DateTime(2026, 11, 5)]!.map((item) => item.reminder.id),
       contains('alternate-months'),
     );
-    expect(
-      occurrences[DateTime(2026, 9, 10)]!.map((item) => item.reminder.id),
-      contains('yearly'),
+    final displayedIds = occurrences.values
+        .expand((dayOccurrences) => dayOccurrences)
+        .map((item) => item.reminder.id)
+        .toSet();
+    expect(displayedIds, isNot(contains('daily')));
+    expect(displayedIds, isNot(contains('weekdays')));
+  });
+
+  test('filters Calendar occurrences by recurrence visibility', () {
+    final reminders = [
+      _reminder(
+        id: 'one-time',
+        title: 'One-time',
+        dateTime: DateTime(2026, 10, 20, 8),
+      ),
+      _reminder(
+        id: 'weekly',
+        title: 'Weekly Monday',
+        dateTime: DateTime(2026, 10, 5, 9),
+        type: RecurrenceType.weekly,
+        weekdays: const [DateTime.monday],
+      ),
+      _reminder(
+        id: 'monthly',
+        title: 'Monthly',
+        dateTime: DateTime(2026, 10, 1, 10),
+        type: RecurrenceType.monthly,
+      ),
+      _reminder(
+        id: 'daily',
+        title: 'Daily',
+        dateTime: DateTime(2026, 10, 1, 11),
+        type: RecurrenceType.daily,
+      ),
+      _reminder(
+        id: 'twice-weekly',
+        title: 'Monday and Thursday',
+        dateTime: DateTime(2026, 10, 5, 12),
+        type: RecurrenceType.weekly,
+        weekdays: const [DateTime.monday, DateTime.thursday],
+      ),
+      _reminder(
+        id: 'weekdays',
+        title: 'Every weekday',
+        dateTime: DateTime(2026, 10, 5, 13),
+        type: RecurrenceType.weekly,
+        weekdays: const [
+          DateTime.monday,
+          DateTime.tuesday,
+          DateTime.wednesday,
+          DateTime.thursday,
+          DateTime.friday,
+        ],
+      ),
+      _reminder(
+        id: 'every-two-days',
+        title: 'Every two days',
+        dateTime: DateTime(2026, 10, 1, 14),
+        type: RecurrenceType.daily,
+        interval: 2,
+      ),
+      _reminder(
+        id: 'every-two-weeks',
+        title: 'Every two weeks',
+        dateTime: DateTime(2026, 10, 5, 15),
+        type: RecurrenceType.weekly,
+        interval: 2,
+        weekdays: const [DateTime.monday],
+      ),
+      _reminder(
+        id: 'monthly-alarm',
+        title: 'Monthly alarm',
+        dateTime: DateTime(2026, 10, 3, 7),
+        type: RecurrenceType.monthly,
+        notificationMode: ReminderNotificationMode.alarmAndNotification,
+      ),
+      _reminder(
+        id: 'daily-alarm',
+        title: 'Daily alarm',
+        dateTime: DateTime(2026, 10, 2, 7),
+        type: RecurrenceType.daily,
+        notificationMode: ReminderNotificationMode.alarmAndNotification,
+      ),
+    ];
+
+    final occurrences = service.occurrencesBetween(
+      reminders,
+      start: DateTime(2026, 10, 1),
+      endExclusive: DateTime(2026, 10, 29),
     );
+    final displayedIds = occurrences.values
+        .expand((dayOccurrences) => dayOccurrences)
+        .map((item) => item.reminder.id)
+        .toSet();
+
+    expect(
+      displayedIds,
+      containsAll([
+        'one-time',
+        'weekly',
+        'monthly',
+        'every-two-weeks',
+        'monthly-alarm',
+      ]),
+    );
+    for (final excludedId in [
+      'daily',
+      'twice-weekly',
+      'weekdays',
+      'every-two-days',
+      'daily-alarm',
+    ]) {
+      expect(displayedIds, isNot(contains(excludedId)));
+    }
   });
 
   test('excludes disabled and completed reminders', () {
@@ -183,6 +291,8 @@ Reminder _reminder({
   List<int> weekdays = const [],
   bool enabled = true,
   bool isCompleted = false,
+  ReminderNotificationMode notificationMode =
+      ReminderNotificationMode.alarmAndNotification,
 }) {
   return Reminder(
     id: id,
@@ -196,6 +306,7 @@ Reminder _reminder({
     ),
     enabled: enabled,
     isCompleted: isCompleted,
+    notificationMode: notificationMode,
     createdAt: DateTime(2026),
   );
 }
