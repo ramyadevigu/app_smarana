@@ -60,6 +60,8 @@ enum NoteCardColor {
   mint,
 }
 
+enum NoteTextColor { defaultText, charcoal, blue, green, red, purple }
+
 enum NoteProjectPriority { low, medium, high }
 
 enum NoteProjectStatus { toDo, inProgress, done }
@@ -296,6 +298,7 @@ class NoteEntry {
     this.isPinned = false,
     this.isArchived = false,
     this.color = NoteCardColor.yellow,
+    this.textColor = NoteTextColor.defaultText,
   });
 
   final String id;
@@ -311,6 +314,7 @@ class NoteEntry {
   final bool isPinned;
   final bool isArchived;
   final NoteCardColor color;
+  final NoteTextColor textColor;
 
   Map<String, Object?> toJson() => {
     'id': id,
@@ -328,6 +332,7 @@ class NoteEntry {
     'isPinned': isPinned,
     'isArchived': isArchived,
     'color': color.name,
+    'textColor': textColor.name,
   };
 
   factory NoteEntry.fromJson(Map<String, Object?> json) {
@@ -354,6 +359,7 @@ class NoteEntry {
           ? json['isArchived']! as bool
           : false,
       color: _readNoteCardColor(json['color']),
+      textColor: _readNoteTextColor(json['textColor']),
     );
   }
 
@@ -411,6 +417,7 @@ class NoteEntry {
     bool? isPinned,
     bool? isArchived,
     NoteCardColor? color,
+    NoteTextColor? textColor,
   }) {
     return NoteEntry(
       id: id,
@@ -428,8 +435,19 @@ class NoteEntry {
       isPinned: isPinned ?? this.isPinned,
       isArchived: isArchived ?? this.isArchived,
       color: color ?? this.color,
+      textColor: textColor ?? this.textColor,
     );
   }
+}
+
+NoteTextColor _readNoteTextColor(Object? value) {
+  if (value is! String) {
+    return NoteTextColor.defaultText;
+  }
+  return NoteTextColor.values.firstWhere(
+    (color) => color.name == value,
+    orElse: () => NoteTextColor.defaultText,
+  );
 }
 
 NoteProjectMetadata? _readProjectMetadata(Object? value) {

@@ -7,6 +7,7 @@ import '../calender/models/calendar_view_mode.dart';
 import '../../services/notification_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_design_tokens.dart';
+import '../../theme/app_color_themes.dart';
 import '../reminders/models/reminder.dart';
 import '../../theme/app_theme.dart';
 import 'services/reminder_preferences_store.dart';
@@ -184,6 +185,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  Future<void> _selectColorTheme() async {
+    final selectedColor = await showDialog<Color>(
+      context: context,
+      builder: (_) =>
+          _ColorThemePickerDialog(selectedColor: _selectedAccentColor),
+    );
+    if (selectedColor != null) {
+      await _changeAccentColor(selectedColor);
+    }
+  }
+
   Future<void> _changeAccentColor(Color accentColor) async {
     if (_selectedAccentColor == accentColor) {
       return;
@@ -268,10 +280,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               const _SettingsDivider(),
               _SettingsTile(
+                key: const ValueKey('settings-color-theme-picker'),
+                icon: Icons.palette_outlined,
+                title: 'Color theme',
+                subtitle: 'Choose the app color appearance',
+                trailing: _ColorThemePreview(color: _selectedAccentColor),
+                onTap: _selectColorTheme,
+              ),
+              const _SettingsDivider(),
+              _SettingsTile(
                 key: const ValueKey('settings-accent-color-picker'),
                 icon: Icons.color_lens_outlined,
-                title: 'Accent color',
-                subtitle: 'Customize the app color',
+                title: 'Custom accent color',
+                subtitle: 'Choose any app accent color',
                 trailing: _AccentColorIndicator(color: _selectedAccentColor),
                 onTap: _selectAccentColor,
               ),
@@ -518,6 +539,81 @@ class _AccentColorIndicator extends StatelessWidget {
         shape: BoxShape.circle,
         border: Border.all(color: outline),
       ),
+    );
+  }
+}
+
+class _ColorThemePreview extends StatelessWidget {
+  const _ColorThemePreview({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = ColorScheme.fromSeed(seedColor: color);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final value in [colors.primary, colors.secondary, colors.tertiary])
+          Container(
+            width: 18,
+            height: 18,
+            margin: const EdgeInsets.only(left: 3),
+            decoration: BoxDecoration(
+              color: value,
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: Theme.of(context).colorScheme.outlineVariant,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _ColorThemePickerDialog extends StatelessWidget {
+  const _ColorThemePickerDialog({required this.selectedColor});
+
+  final Color selectedColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return AlertDialog(
+      title: const Text('Color theme'),
+      contentPadding: const EdgeInsets.fromLTRB(8, 8, 8, 16),
+      content: SizedBox(
+        width: 360,
+        height: math.min(MediaQuery.sizeOf(context).height * 0.5, 400),
+        child: ListView(
+          children: [
+            for (final colorTheme in appColorThemes)
+              Semantics(
+                button: true,
+                selected: selectedColor == colorTheme.primary,
+                label:
+                    '${colorTheme.name} color theme'
+                    '${selectedColor == colorTheme.primary ? ', selected' : ''}',
+                child: ListTile(
+                  key: ValueKey('color-theme-${colorTheme.name.toLowerCase()}'),
+                  leading: _ColorThemePreview(color: colorTheme.primary),
+                  title: Text(colorTheme.name),
+                  trailing: selectedColor == colorTheme.primary
+                      ? Icon(Icons.check_circle, color: colorScheme.primary)
+                      : null,
+                  onTap: () => Navigator.of(context).pop(colorTheme.primary),
+                ),
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+      ],
     );
   }
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../theme/app_colors.dart';
 import '../models/note_workspace_models.dart';
 
 const List<NoteCardColor> selectableNoteCardColors = [
@@ -111,10 +112,55 @@ Color noteCardSurfaceColor(ThemeData theme, NoteCardColor noteColor) {
   return palette.colorFor(noteColor);
 }
 
-Color noteCardForegroundColor(ThemeData theme, NoteCardColor noteColor) {
-  return theme.brightness == Brightness.light
-      ? const Color(0xFF202124)
-      : const Color(0xFFF1F3F4);
+Color noteCardForegroundColor(
+  ThemeData theme,
+  NoteCardColor noteColor, [
+  NoteTextColor textColor = NoteTextColor.defaultText,
+]) {
+  final background = noteCardSurfaceColor(theme, noteColor);
+  final hue = switch (textColor) {
+    NoteTextColor.defaultText => null,
+    NoteTextColor.charcoal => const Color(0xFF5F6368),
+    NoteTextColor.blue => const Color(0xFF1A73E8),
+    NoteTextColor.green => const Color(0xFF188038),
+    NoteTextColor.red => const Color(0xFFC5221F),
+    NoteTextColor.purple => const Color(0xFF7654C8),
+  };
+  if (hue == null) {
+    return AppColors.highContrastForeground(background);
+  }
+
+  final isLight = theme.brightness == Brightness.light;
+  final initialLightness = isLight ? 0.28 : 0.78;
+  final direction = isLight ? -1 : 1;
+  final hsl = HSLColor.fromColor(hue);
+  for (var step = 0; step <= 100; step++) {
+    final lightness = (initialLightness + direction * step / 100)
+        .clamp(0.0, 1.0)
+        .toDouble();
+    final candidate = hsl.withLightness(lightness).toColor();
+    if (_contrastRatio(candidate, background) >= 4.5) {
+      return candidate;
+    }
+  }
+  return AppColors.highContrastForeground(background);
+}
+
+Color noteTextColorSwatch(ThemeData theme, NoteTextColor textColor) {
+  if (textColor == NoteTextColor.defaultText) {
+    return theme.colorScheme.onSurface;
+  }
+  final base = switch (textColor) {
+    NoteTextColor.defaultText => theme.colorScheme.onSurface,
+    NoteTextColor.charcoal => const Color(0xFF5F6368),
+    NoteTextColor.blue => const Color(0xFF1A73E8),
+    NoteTextColor.green => const Color(0xFF188038),
+    NoteTextColor.red => const Color(0xFFC5221F),
+    NoteTextColor.purple => const Color(0xFF7654C8),
+  };
+  return HSLColor.fromColor(base)
+      .withLightness(theme.brightness == Brightness.light ? 0.28 : 0.78)
+      .toColor();
 }
 
 Color noteCardAccentColor(ThemeData theme, NoteCardColor noteColor) {
@@ -168,6 +214,18 @@ Color? _paletteColor(NoteCardColor noteColor) {
     return null;
   }
   return lightNoteCardPalette.colorFor(noteColor);
+}
+
+double _contrastRatio(Color foreground, Color background) {
+  final foregroundLuminance = foreground.computeLuminance();
+  final backgroundLuminance = background.computeLuminance();
+  final lighter = foregroundLuminance > backgroundLuminance
+      ? foregroundLuminance
+      : backgroundLuminance;
+  final darker = foregroundLuminance > backgroundLuminance
+      ? backgroundLuminance
+      : foregroundLuminance;
+  return (lighter + 0.05) / (darker + 0.05);
 }
 
 NoteCardColor _canonicalNoteColor(NoteCardColor color) {

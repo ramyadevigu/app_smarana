@@ -26,6 +26,13 @@ enum _FormattingColorTarget { highlight, text }
 
 enum _NoteTemplate { meeting, project, daily }
 
+class _NoteColorSelection {
+  const _NoteColorSelection({required this.background, required this.text});
+
+  final NoteCardColor background;
+  final NoteTextColor text;
+}
+
 class _FormattingColorChoice {
   const _FormattingColorChoice(this.color, this.target);
 
@@ -85,6 +92,7 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
   late final ReminderStorage _reminderStorage;
   late String _selectedNotebookId;
   late NoteCardColor _selectedNoteColor;
+  late NoteTextColor _selectedNoteTextColor;
   late List<NoteAttachment> _attachments;
   late Map<String, NoteCardColor> _tagColors;
   bool _isExiting = false;
@@ -123,6 +131,7 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
             ? defaultNotebookId
             : widget.notebooks.first.id);
     _selectedNoteColor = note?.color ?? NoteCardColor.yellow;
+    _selectedNoteTextColor = note?.textColor ?? NoteTextColor.defaultText;
     _attachments = List<NoteAttachment>.of(note?.attachments ?? const []);
     _tagColors = Map<String, NoteCardColor>.of(widget.tagColors);
     final existingTags = note?.projectMetadata?.tags ?? const <String>[];
@@ -506,6 +515,7 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
       updatedAt: now,
       reminderId: _reminderId,
       color: _selectedNoteColor,
+      textColor: _selectedNoteTextColor,
       isPinned: _isPinned,
       isArchived: _isArchived,
     );
@@ -1568,7 +1578,7 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
   }
 
   Future<void> _showNoteColorPicker() async {
-    final selectedColor = await showModalBottomSheet<NoteCardColor>(
+    final selection = await showModalBottomSheet<_NoteColorSelection>(
       context: context,
       useSafeArea: true,
       showDragHandle: true,
@@ -1586,7 +1596,9 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
                   fontWeight: FontWeight.w700,
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
+              Text('Background', style: theme.textTheme.labelLarge),
+              const SizedBox(height: 12),
               Wrap(
                 spacing: 14,
                 runSpacing: 14,
@@ -1599,7 +1611,33 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
                       tooltip: noteCardColorLabel(noteColor),
                       semanticLabel:
                           '${noteCardColorLabel(noteColor)} note color',
-                      onTap: () => Navigator.of(context).pop(noteColor),
+                      onTap: () => Navigator.of(context).pop(
+                        _NoteColorSelection(
+                          background: noteColor,
+                          text: _selectedNoteTextColor,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              Text('Text color', style: theme.textTheme.labelLarge),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 14,
+                runSpacing: 14,
+                children: [
+                  for (final textColor in NoteTextColor.values)
+                    _buildTextColorSwatch(
+                      context,
+                      color: textColor,
+                      selected: _selectedNoteTextColor == textColor,
+                      onTap: () => Navigator.of(context).pop(
+                        _NoteColorSelection(
+                          background: _selectedNoteColor,
+                          text: textColor,
+                        ),
+                      ),
                     ),
                 ],
               ),
@@ -1608,11 +1646,66 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
         );
       },
     );
-    if (selectedColor == null || !mounted) {
+    if (selection == null || !mounted) {
       return;
     }
-    setState(() => _selectedNoteColor = selectedColor);
+    setState(() {
+      _selectedNoteColor = selection.background;
+      _selectedNoteTextColor = selection.text;
+    });
     _queueAutosave();
+  }
+
+  Widget _buildTextColorSwatch(
+    BuildContext context, {
+    required NoteTextColor color,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    final theme = Theme.of(context);
+    final label = switch (color) {
+      NoteTextColor.defaultText => 'Default',
+      NoteTextColor.charcoal => 'Charcoal',
+      NoteTextColor.blue => 'Blue',
+      NoteTextColor.green => 'Green',
+      NoteTextColor.red => 'Red',
+      NoteTextColor.purple => 'Purple',
+    };
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: '$label note text color${selected ? ', selected' : ''}',
+      child: Tooltip(
+        message: 'Text: $label',
+        child: InkWell(
+          key: ValueKey('note-text-color-${color.name}'),
+          customBorder: const CircleBorder(),
+          onTap: onTap,
+          child: AnimatedContainer(
+            duration: AppMotion.resolve(context, AppMotion.micro),
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: theme.colorScheme.surface,
+              border: Border.all(
+                color: selected
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.outlineVariant,
+                width: selected ? 2.5 : 1,
+              ),
+            ),
+            child: Center(
+              child: Icon(
+                Icons.text_fields_rounded,
+                size: 20,
+                color: noteTextColorSwatch(theme, color),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _showProjectDetails() async {
@@ -2100,6 +2193,13 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final noteSurface = noteCardSurfaceColor(theme, _selectedNoteColor);
+    final noteForeground = noteCardForegroundColor(
+      theme,
+      _selectedNoteColor,
+      _selectedNoteTextColor,
+    );
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -2108,13 +2208,13 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
         }
       },
       child: Scaffold(
-        backgroundColor: Theme.of(context).colorScheme.surface,
+        backgroundColor: noteSurface,
         resizeToAvoidBottomInset: true,
         appBar: AppBar(
           leadingWidth: 48,
           toolbarHeight: 54,
           titleSpacing: 0,
-          backgroundColor: Theme.of(context).colorScheme.surface,
+          backgroundColor: noteSurface,
           surfaceTintColor: Colors.transparent,
           elevation: 0,
           scrolledUnderElevation: 0,
@@ -2191,7 +2291,7 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
                   decoration: InputDecoration(
                     hintText: 'Title',
                     hintStyle: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      color: noteForeground.withValues(alpha: 0.65),
                     ),
                     filled: false,
                     border: InputBorder.none,
@@ -2203,20 +2303,25 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
                     isDense: true,
                     contentPadding: EdgeInsets.zero,
                   ),
-                  style: Theme.of(context).textTheme.headlineSmall
-                      ?.copyWith(fontWeight: FontWeight.w700),
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: noteForeground,
+                  ),
                 ),
               ),
               _buildNoteMetadata(),
               Expanded(
-                child: quill.QuillEditor.basic(
-                  key: const ValueKey('rich-note-content-editor'),
-                  controller: _quillController,
-                  config: quill.QuillEditorConfig(
-                    autoFocus: widget.focusOnOpen,
-                    placeholder: 'Note',
-                    padding: const EdgeInsets.fromLTRB(18, 16, 18, 24),
-                    embedBuilders: const [NoteTableEmbedBuilder()],
+                child: DefaultTextStyle.merge(
+                  style: TextStyle(color: noteForeground),
+                  child: quill.QuillEditor.basic(
+                    key: const ValueKey('rich-note-content-editor'),
+                    controller: _quillController,
+                    config: quill.QuillEditorConfig(
+                      autoFocus: widget.focusOnOpen,
+                      placeholder: 'Note',
+                      padding: const EdgeInsets.fromLTRB(18, 16, 18, 24),
+                      embedBuilders: const [NoteTableEmbedBuilder()],
+                    ),
                   ),
                 ),
               ),

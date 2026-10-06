@@ -28,7 +28,11 @@ class RecentNoteCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final cardForeground = noteCardForegroundColor(theme, note.note.color);
+    final cardForeground = noteCardForegroundColor(
+      theme,
+      note.note.color,
+      note.note.textColor,
+    );
     final borderRadius = BorderRadius.circular(AppRadius.compactCard);
 
     return ClipRRect(

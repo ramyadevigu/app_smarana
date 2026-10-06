@@ -249,6 +249,44 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('note text color saves without changing its background', (
+    tester,
+  ) async {
+    RichNoteDraft? savedDraft;
+    final now = DateTime(2026, 10, 1);
+    final note = NoteEntry(
+      id: 'colored-note',
+      notebookId: defaultNotebookId,
+      title: 'Colored note',
+      content: 'Note body',
+      color: NoteCardColor.yellow,
+      createdAt: now,
+      updatedAt: now,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RichNoteEditorScreen(
+          note: note,
+          onAutosave: (draft) async {
+            savedDraft = draft;
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey('note-editor-customize-button')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('note-text-color-purple')));
+    await tester.pump(const Duration(milliseconds: 800));
+
+    expect(savedDraft?.color, NoteCardColor.yellow);
+    expect(savedDraft?.textColor, NoteTextColor.purple);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('tag colors can be changed and persisted by tag key', (
     tester,
   ) async {

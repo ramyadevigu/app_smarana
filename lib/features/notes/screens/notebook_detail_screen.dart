@@ -212,6 +212,7 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
       createdAt: now,
       updatedAt: now,
       color: draft.color,
+      textColor: draft.textColor,
     );
     await _saveNote(duplicate);
   }
@@ -300,6 +301,7 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
       reminderId: draft.reminderId,
       clearReminderId: draft.reminderId == null,
       color: draft.color,
+      textColor: draft.textColor,
       isPinned: draft.isPinned,
       isArchived: draft.isArchived,
     );
@@ -524,7 +526,11 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
       itemBuilder: (context, index) {
         final note = notes[index];
         final metadata = note.projectMetadata;
-        final noteForeground = noteCardForegroundColor(theme, note.color);
+        final noteForeground = noteCardForegroundColor(
+          theme,
+          note.color,
+          note.textColor,
+        );
         return Card(
           color: noteCardSurfaceColor(theme, note.color),
           surfaceTintColor: Colors.transparent,
@@ -620,7 +626,11 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
         final note = notes[index];
         final metadata = note.projectMetadata;
         final status = metadata?.status ?? NoteProjectStatus.toDo;
-        final noteForeground = noteCardForegroundColor(theme, note.color);
+        final noteForeground = noteCardForegroundColor(
+          theme,
+          note.color,
+          note.textColor,
+        );
         return Card(
           color: noteCardSurfaceColor(theme, note.color),
           surfaceTintColor: Colors.transparent,
@@ -836,7 +846,11 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
     required ColorScheme colorScheme,
   }) {
     final metadata = note.projectMetadata;
-    final noteForeground = noteCardForegroundColor(theme, note.color);
+    final noteForeground = noteCardForegroundColor(
+      theme,
+      note.color,
+      note.textColor,
+    );
     return Card(
       color: noteCardSurfaceColor(theme, note.color),
       surfaceTintColor: Colors.transparent,

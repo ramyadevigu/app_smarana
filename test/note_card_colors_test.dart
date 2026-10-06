@@ -58,29 +58,49 @@ void main() {
         reason: '${color.name} must remain readable in light mode.',
       );
       expect(
-        _contrastRatio(
-          darkSurface,
-          noteCardForegroundColor(darkTheme, color),
-        ),
+        _contrastRatio(darkSurface, noteCardForegroundColor(darkTheme, color)),
         greaterThanOrEqualTo(4.5),
         reason: '${color.name} must remain readable in dark mode.',
       );
     }
   });
 
-  test('legacy saved colors resolve to the nearest current note palette color', () {
-    expect(
-      noteCardSurfaceColor(lightTheme, NoteCardColor.cyan),
-      lightNoteCardPalette.noteTeal,
-    );
-    expect(
-      noteCardSurfaceColor(lightTheme, NoteCardColor.sky),
-      lightNoteCardPalette.noteBlue,
-    );
-    expect(
-      noteCardSurfaceColor(lightTheme, NoteCardColor.mint),
-      lightNoteCardPalette.noteGreen,
-    );
+  test(
+    'legacy saved colors resolve to the nearest current note palette color',
+    () {
+      expect(
+        noteCardSurfaceColor(lightTheme, NoteCardColor.cyan),
+        lightNoteCardPalette.noteTeal,
+      );
+      expect(
+        noteCardSurfaceColor(lightTheme, NoteCardColor.sky),
+        lightNoteCardPalette.noteBlue,
+      );
+      expect(
+        noteCardSurfaceColor(lightTheme, NoteCardColor.mint),
+        lightNoteCardPalette.noteGreen,
+      );
+    },
+  );
+
+  test('custom note text colors remain readable on every note surface', () {
+    for (final theme in [lightTheme, darkTheme]) {
+      for (final background in selectableNoteCardColors) {
+        final surface = noteCardSurfaceColor(theme, background);
+        for (final textColor in NoteTextColor.values) {
+          expect(
+            _contrastRatio(
+              surface,
+              noteCardForegroundColor(theme, background, textColor),
+            ),
+            greaterThanOrEqualTo(4.5),
+            reason:
+                '${textColor.name} must remain readable on '
+                '${background.name} in ${theme.brightness}.',
+          );
+        }
+      }
+    }
   });
 }
 

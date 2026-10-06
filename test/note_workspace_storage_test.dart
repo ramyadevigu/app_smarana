@@ -55,6 +55,7 @@ void main() {
           ),
           isPinned: true,
           color: NoteCardColor.pink,
+          textColor: NoteTextColor.purple,
           createdAt: createdAt,
           updatedAt: updatedAt,
         ),
@@ -101,6 +102,7 @@ void main() {
     );
     expect(restored.notes.single.isPinned, isTrue);
     expect(restored.notes.single.color, NoteCardColor.pink);
+    expect(restored.notes.single.textColor, NoteTextColor.purple);
     expect(restored.notes.single.content, 'Review agenda');
     expect(restored.notes.single.createdAt, createdAt);
     expect(restored.notes.single.updatedAt, updatedAt);

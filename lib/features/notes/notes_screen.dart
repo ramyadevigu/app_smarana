@@ -491,6 +491,7 @@ class _NotesScreenState extends State<NotesScreen> {
       reminderId: draft.reminderId,
       clearReminderId: draft.reminderId == null,
       color: draft.color,
+      textColor: draft.textColor,
       isPinned: draft.isPinned,
       isArchived: draft.isArchived,
     );
@@ -668,6 +669,7 @@ class _NotesScreenState extends State<NotesScreen> {
                 createdAt: DateTime.now(),
                 updatedAt: DateTime.now(),
                 color: snapshot.color,
+                textColor: snapshot.textColor,
               ),
             );
           },

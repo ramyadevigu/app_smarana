@@ -162,6 +162,45 @@ void main() {
     );
   });
 
+  testWidgets('curated color themes update and persist', (tester) async {
+    await tester.pumpWidget(const AppSmarana());
+    await _openSettings(tester);
+
+    final picker = find.byKey(const ValueKey('settings-color-theme-picker'));
+    await tester.ensureVisible(picker);
+    await tester.pumpAndSettle();
+    await tester.tap(picker);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.text('Color theme'),
+      ),
+      findsOneWidget,
+    );
+    final green = find.byKey(const ValueKey('color-theme-green'));
+    expect(green, findsOneWidget);
+    await tester.ensureVisible(green);
+    await tester.pumpAndSettle();
+    await tester.tap(green);
+    await tester.pumpAndSettle();
+
+    final expected = const Color(0xFF188038);
+    expect(
+      tester
+          .widget<MaterialApp>(find.byType(MaterialApp))
+          .theme!
+          .colorScheme
+          .primary,
+      expected,
+    );
+    expect(
+      (await SharedPreferences.getInstance()).getString('colorTheme'),
+      '#188038',
+    );
+  });
+
   test('custom accent colors have readable primary foregrounds', () {
     for (var hue = 0; hue <= 360; hue += 15) {
       final accentColor = HSLColor.fromAHSL(
