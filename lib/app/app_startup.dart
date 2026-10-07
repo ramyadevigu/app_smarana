@@ -1,5 +1,7 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 
+import '../firebase_options.dart';
 import '../services/notification_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/theme_preference_store.dart';
@@ -109,6 +111,12 @@ class _StartupErrorScreen extends StatelessWidget {
 
 Future<_AppStartupConfiguration> _initializeApplication() async {
   try {
+    if (Firebase.apps.isEmpty) {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+    }
+
     const themePreferenceStore = ThemePreferenceStore();
     late final ThemeMode themeMode;
     late final Color accentColor;

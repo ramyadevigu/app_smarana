@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../auth/widgets/google_account_section.dart';
 import '../calender/models/calendar_view_mode.dart';
 import '../../services/notification_service.dart';
 import '../../theme/app_colors.dart';
@@ -240,6 +241,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
         children: [
+          const GoogleAccountSection(),
           _SettingsSection(
             title: 'Appearance',
             children: [

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../services/analytics_service.dart';
 import '../reminders/models/reminder.dart';
 import '../reminders/services/reminder_storage.dart';
 import '../../../theme/app_design_tokens.dart';
@@ -150,7 +151,7 @@ class _NotesScreenState extends State<NotesScreen> {
     }
   }
 
-  Future<void> _persistWorkspace() async {
+  Future<bool> _persistWorkspace() async {
     try {
       await _workspaceStorage.saveWorkspace(_notebooks, tagColors: _tagColors);
       if (mounted && _storageError != null) {
@@ -158,9 +159,10 @@ class _NotesScreenState extends State<NotesScreen> {
           _storageError = null;
         });
       }
+      return true;
     } on Exception catch (error) {
       if (!mounted) {
-        return;
+        return false;
       }
       setState(() {
         _storageError = 'Notes could not be saved. Check device storage.';
@@ -169,6 +171,7 @@ class _NotesScreenState extends State<NotesScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Notes could not be saved.')),
       );
+      return false;
     }
   }
 
@@ -433,6 +436,9 @@ class _NotesScreenState extends State<NotesScreen> {
       throw StateError('The selected notebook is no longer available.');
     }
 
+    final isNewNote = !_notebooks.any(
+      (notebook) => notebook.notes.any((existing) => existing.id == note.id),
+    );
     final now = note.updatedAt;
     final updatedNotebooks = _notebooks.map((notebook) {
       final alreadyContains = notebook.notes.any(
@@ -453,7 +459,10 @@ class _NotesScreenState extends State<NotesScreen> {
       _notebooks = updatedNotebooks;
     });
     if (widget.initialNotebooks == null) {
-      await _persistWorkspace();
+      final saved = await _persistWorkspace();
+      if (saved && isNewNote) {
+        unawaited(AnalyticsService.instance.logNoteCreated());
+      }
     }
   }
 
