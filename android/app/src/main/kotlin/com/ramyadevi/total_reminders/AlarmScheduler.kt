@@ -1,4 +1,4 @@
-package com.example.app_smarana
+package com.ramyadevi.total_reminders
 
 import android.app.AlarmManager
 import android.app.PendingIntent
@@ -18,11 +18,11 @@ import java.time.format.DateTimeParseException
 import java.time.temporal.ChronoUnit
 
 internal object AlarmScheduler {
-    const val ACTION_TRIGGER = "com.example.app_smarana.ALARM_TRIGGER"
-    const val ACTION_TIMEOUT = "com.example.app_smarana.ALARM_TIMEOUT"
-    const val ACTION_RINGING = "com.example.app_smarana.ALARM_RINGING"
-    const val ACTION_STOPPED = "com.example.app_smarana.ALARM_STOPPED"
-    const val ACTION_OPEN_ALARM = "com.example.app_smarana.OPEN_ALARM"
+    const val ACTION_TRIGGER = "com.ramyadevi.total_reminders.ALARM_TRIGGER"
+    const val ACTION_TIMEOUT = "com.ramyadevi.total_reminders.ALARM_TIMEOUT"
+    const val ACTION_RINGING = "com.ramyadevi.total_reminders.ALARM_RINGING"
+    const val ACTION_STOPPED = "com.ramyadevi.total_reminders.ALARM_STOPPED"
+    const val ACTION_OPEN_ALARM = "com.ramyadevi.total_reminders.OPEN_ALARM"
     const val EXTRA_ALARM_ID = "alarmId"
 
     private const val PREFERENCES = "smarana_alarm_runtime"

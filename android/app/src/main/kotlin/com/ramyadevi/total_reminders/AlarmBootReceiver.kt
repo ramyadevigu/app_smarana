@@ -1,4 +1,4 @@
-package com.example.app_smarana
+package com.ramyadevi.total_reminders
 
 import android.app.AlarmManager
 import android.content.BroadcastReceiver

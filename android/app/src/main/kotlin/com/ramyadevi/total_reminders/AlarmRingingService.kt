@@ -1,4 +1,4 @@
-package com.example.app_smarana
+package com.ramyadevi.total_reminders
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -26,11 +26,11 @@ import java.io.IOException
 
 class AlarmRingingService : Service() {
     companion object {
-        const val ACTION_START = "com.example.app_smarana.RING_ALARM"
-        const val ACTION_STOP = "com.example.app_smarana.STOP_ALARM"
-        const val ACTION_SNOOZE = "com.example.app_smarana.SNOOZE_ALARM"
-        const val ACTION_TIMEOUT = "com.example.app_smarana.TIMEOUT_ALARM"
-        const val ACTION_CANCEL = "com.example.app_smarana.CANCEL_ALARM"
+        const val ACTION_START = "com.ramyadevi.total_reminders.RING_ALARM"
+        const val ACTION_STOP = "com.ramyadevi.total_reminders.STOP_ALARM"
+        const val ACTION_SNOOZE = "com.ramyadevi.total_reminders.SNOOZE_ALARM"
+        const val ACTION_TIMEOUT = "com.ramyadevi.total_reminders.TIMEOUT_ALARM"
+        const val ACTION_CANCEL = "com.ramyadevi.total_reminders.CANCEL_ALARM"
 
         private const val NOTIFICATION_CHANNEL = "active_alarm"
         private const val NOTIFICATION_ID = 9001
