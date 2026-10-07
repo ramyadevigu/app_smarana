@@ -67,11 +67,11 @@ class _GoogleAccountSectionState extends State<GoogleAccountSection> {
   }
 
   void _showError(Object error) {
-    final message = error is FirebaseAuthException
-        ? error.message ?? 'Google sign-in could not be completed.'
-        : 'Google sign-in could not be completed. Check your connection and try again.';
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('The account request could not be completed. Try again.'),
+      ),
+    );
   }
 
   @override

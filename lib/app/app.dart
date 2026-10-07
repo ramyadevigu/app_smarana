@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../features/auth/widgets/authentication_gate.dart';
 import '../features/calender/models/calendar_view_mode.dart';
 import '../features/calender/calender_screen.dart';
 import '../features/notes/notes_screen.dart';
@@ -301,11 +302,13 @@ class _AppSmaranaState extends State<AppSmarana> {
       themeMode: _themeMode,
       themeAnimationDuration: AppMotion.theme,
       themeAnimationCurve: AppMotion.standard,
-      home: HomeScreen(
-        selectedThemeMode: _themeMode,
-        onThemeModeChanged: _changeThemeMode,
-        selectedAccentColor: _accentColor,
-        onAccentColorChanged: _changeAccentColor,
+      home: AuthenticationGate(
+        authenticatedChild: HomeScreen(
+          selectedThemeMode: _themeMode,
+          onThemeModeChanged: _changeThemeMode,
+          selectedAccentColor: _accentColor,
+          onAccentColorChanged: _changeAccentColor,
+        ),
       ),
     );
   }
