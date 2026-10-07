@@ -2,7 +2,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 
+import '../screens/profile_screen.dart';
 import '../services/google_auth_service.dart';
+import 'google_profile_avatar.dart';
 
 class GoogleAccountSection extends StatefulWidget {
   const GoogleAccountSection({super.key});
@@ -29,31 +31,6 @@ class _GoogleAccountSectionState extends State<GoogleAccountSection> {
           exception: error,
           stack: stackTrace,
           library: 'Google sign-in',
-        ),
-      );
-      if (mounted) {
-        _showError(error);
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isBusy = false);
-      }
-    }
-  }
-
-  Future<void> _signOut() async {
-    if (_isBusy) {
-      return;
-    }
-    setState(() => _isBusy = true);
-    try {
-      await _authService.signOut();
-    } on Object catch (error, stackTrace) {
-      FlutterError.reportError(
-        FlutterErrorDetails(
-          exception: error,
-          stack: stackTrace,
-          library: 'Google sign-out',
         ),
       );
       if (mounted) {
@@ -93,7 +70,7 @@ class _GoogleAccountSectionState extends State<GoogleAccountSection> {
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Text(
-                  'Account',
+                  'User Profile',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     color: Theme.of(context).colorScheme.primary,
                     fontWeight: FontWeight.w600,
@@ -112,8 +89,11 @@ class _GoogleAccountSectionState extends State<GoogleAccountSection> {
               else
                 _SignedInAccountCard(
                   user: user,
-                  isBusy: _isBusy,
-                  onSignOut: _signOut,
+                  onTap: () => Navigator.of(context).push<void>(
+                    MaterialPageRoute<void>(
+                      builder: (_) => ProfileScreen(user: user),
+                    ),
+                  ),
                 ),
               const Padding(
                 padding: EdgeInsets.only(top: 8),
@@ -163,63 +143,38 @@ class _SignedOutAccountCard extends StatelessWidget {
 }
 
 class _SignedInAccountCard extends StatelessWidget {
-  const _SignedInAccountCard({
-    required this.user,
-    required this.isBusy,
-    required this.onSignOut,
-  });
+  const _SignedInAccountCard({required this.user, required this.onTap});
 
   final User user;
-  final bool isBusy;
-  final VoidCallback onSignOut;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return Card(
+      elevation: 1,
       child: ListTile(
+        key: const ValueKey('user-profile-settings-card'),
+        onTap: onTap,
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        leading: CircleAvatar(
-          backgroundColor: colorScheme.secondaryContainer,
-          child: user.photoURL == null
-              ? Icon(
-                  Icons.person_outline,
-                  color: colorScheme.onSecondaryContainer,
-                )
-              : ClipOval(
-                  child: Image.network(
-                    user.photoURL!,
-                    width: 40,
-                    height: 40,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => Icon(
-                      Icons.person_outline,
-                      color: colorScheme.onSecondaryContainer,
-                    ),
-                  ),
-                ),
-        ),
+        leading: GoogleProfileAvatar(user: user, radius: 24),
         title: Text(
           user.displayName?.trim().isNotEmpty == true
-              ? user.displayName!
+              ? user.displayName!.trim()
               : 'Google account',
+          style: Theme.of(context).textTheme.titleMedium
+              ?.copyWith(fontWeight: FontWeight.w600),
         ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (user.email?.isNotEmpty == true) Text(user.email!),
-            SelectableText('ID: ${user.uid}', maxLines: 1),
-          ],
+        subtitle: Text(
+          user.email?.trim().isNotEmpty == true
+              ? user.email!.trim()
+              : 'Email unavailable',
+          style: Theme.of(context).textTheme.bodyMedium
+              ?.copyWith(color: colorScheme.onSurfaceVariant),
         ),
-        trailing: IconButton(
-          tooltip: 'Sign out',
-          onPressed: isBusy ? null : onSignOut,
-          icon: isBusy
-              ? const SizedBox.square(
-                  dimension: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.logout),
+        trailing: Icon(
+          Icons.chevron_right,
+          color: colorScheme.onSurfaceVariant,
         ),
       ),
     );

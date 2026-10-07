@@ -1,0 +1,147 @@
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
+
+import '../../../theme/app_design_tokens.dart';
+import '../services/google_auth_service.dart';
+import '../widgets/google_profile_avatar.dart';
+
+class ProfileScreen extends StatefulWidget {
+  const ProfileScreen({super.key, required this.user});
+
+  final User user;
+
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  bool _isSigningOut = false;
+
+  Future<void> _signOut() async {
+    if (_isSigningOut) {
+      return;
+    }
+    setState(() => _isSigningOut = true);
+
+    try {
+      await GoogleAuthService.instance.signOut();
+    } on Object catch (error, stackTrace) {
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'Google sign-out',
+        ),
+      );
+      if (!mounted) {
+        return;
+      }
+      if (GoogleAuthService.instance.currentUser != null) {
+        setState(() => _isSigningOut = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Unable to sign out. Please try again.'),
+          ),
+        );
+        return;
+      }
+    }
+
+    if (mounted) {
+      Navigator.of(context).popUntil((route) => route.isFirst);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Profile')),
+      body: StreamBuilder<User?>(
+        stream: GoogleAuthService.instance.authStateChanges,
+        initialData: GoogleAuthService.instance.currentUser ?? widget.user,
+        builder: (context, snapshot) {
+          final user = snapshot.data;
+          if (snapshot.hasError) {
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.all(AppSpacing.xl),
+                child: Text('Profile information is unavailable.'),
+              ),
+            );
+          }
+          if (user == null) {
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.all(AppSpacing.xl),
+                child: Text('No Google account is currently signed in.'),
+              ),
+            );
+          }
+
+          final colorScheme = Theme.of(context).colorScheme;
+          final displayName = user.displayName?.trim();
+          final email = user.email?.trim();
+          return SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(AppSpacing.xl),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 440),
+                  child: Card(
+                    elevation: AppElevation.subtle,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.xl,
+                        vertical: AppSpacing.xxxl,
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          GoogleProfileAvatar(user: user, radius: 52),
+                          const SizedBox(height: AppSpacing.lg),
+                          Text(
+                            displayName?.isNotEmpty == true
+                                ? displayName!
+                                : 'Google account',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.headlineSmall
+                                ?.copyWith(fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: AppSpacing.xs),
+                          Text(
+                            email?.isNotEmpty == true
+                                ? email!
+                                : 'Email unavailable',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.bodyLarge
+                                ?.copyWith(color: colorScheme.onSurfaceVariant),
+                          ),
+                          const SizedBox(height: AppSpacing.xxl),
+                          SizedBox(
+                            width: double.infinity,
+                            child: FilledButton.icon(
+                              onPressed: _isSigningOut ? null : _signOut,
+                              icon: _isSigningOut
+                                  ? const SizedBox.square(
+                                      dimension: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Icon(Icons.logout),
+                              label: const Text('Sign Out'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
