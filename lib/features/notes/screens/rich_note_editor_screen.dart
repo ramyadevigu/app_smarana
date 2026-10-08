@@ -21,6 +21,7 @@ import '../theme/note_card_colors.dart';
 import '../widgets/note_editor_action_sheets.dart';
 import '../widgets/note_tag_chip.dart';
 import '../widgets/note_table_embed_builder.dart';
+import '../../../widgets/app_navigation_drawer.dart';
 
 enum _FormattingColorTarget { highlight, text }
 
@@ -56,6 +57,7 @@ class RichNoteEditorScreen extends StatefulWidget {
     this.tagColors = const {},
     this.onTagColorsChanged,
     this.reminderStorage,
+    this.navigationDrawer,
   });
 
   final NoteEntry? note;
@@ -72,6 +74,7 @@ class RichNoteEditorScreen extends StatefulWidget {
   final Future<void> Function(Map<String, NoteCardColor> tagColors)?
   onTagColorsChanged;
   final ReminderStorage? reminderStorage;
+  final Widget? navigationDrawer;
 
   @override
   State<RichNoteEditorScreen> createState() => _RichNoteEditorScreenState();
@@ -2208,22 +2211,36 @@ class _RichNoteEditorScreenState extends State<RichNoteEditorScreen> {
         }
       },
       child: Scaffold(
+        drawer: widget.navigationDrawer,
         backgroundColor: noteSurface,
         resizeToAvoidBottomInset: true,
         appBar: AppBar(
-          leadingWidth: 48,
+          leadingWidth: widget.navigationDrawer == null ? 48 : 104,
           toolbarHeight: 54,
           titleSpacing: 0,
           backgroundColor: noteSurface,
           surfaceTintColor: Colors.transparent,
           elevation: 0,
           scrolledUnderElevation: 0,
-          leading: IconButton(
-            key: const ValueKey('note-editor-back'),
-            tooltip: 'Close editor',
-            icon: const Icon(Icons.arrow_back_rounded),
-            onPressed: _exitEditor,
-          ),
+          leading: widget.navigationDrawer == null
+              ? IconButton(
+                  key: const ValueKey('note-editor-back'),
+                  tooltip: 'Close editor',
+                  icon: const Icon(Icons.arrow_back_rounded),
+                  onPressed: _exitEditor,
+                )
+              : Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const AppNavigationMenuButton(),
+                    IconButton(
+                      key: const ValueKey('note-editor-back'),
+                      tooltip: 'Close editor',
+                      icon: const Icon(Icons.arrow_back_rounded),
+                      onPressed: _exitEditor,
+                    ),
+                  ],
+                ),
           actions: [
             IconButton(
               key: const ValueKey('note-editor-pin-button'),

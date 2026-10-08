@@ -9,6 +9,7 @@ import '../services/note_attachment_storage.dart';
 import '../theme/note_card_colors.dart';
 import '../theme/notebook_colors.dart';
 import '../widgets/note_tag_chip.dart';
+import '../../../widgets/app_navigation_drawer.dart';
 import 'rich_note_editor_screen.dart';
 
 enum NotebookViewMode { notes, list, kanban }
@@ -32,6 +33,7 @@ class NotebookDetailScreen extends StatefulWidget {
     this.initialNoteId,
     this.tagColors = const {},
     this.onTagColorsChanged,
+    this.navigationDrawer,
   });
 
   final Notebook notebook;
@@ -44,6 +46,7 @@ class NotebookDetailScreen extends StatefulWidget {
   final Map<String, NoteCardColor> tagColors;
   final Future<void> Function(Map<String, NoteCardColor> tagColors)?
   onTagColorsChanged;
+  final Widget? navigationDrawer;
 
   @override
   State<NotebookDetailScreen> createState() => _NotebookDetailScreenState();
@@ -104,6 +107,7 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
           notebooks: widget.notebooks.isEmpty ? [_notebook] : widget.notebooks,
           focusOnOpen: true,
           tagColors: _tagColors,
+          navigationDrawer: widget.navigationDrawer,
           onTagColorsChanged: _updateTagColors,
           reminderStorage: _reminderStorage,
           onDuplicate: _duplicateDraft,
@@ -160,6 +164,7 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
           note: note,
           notebooks: widget.notebooks.isEmpty ? [_notebook] : widget.notebooks,
           tagColors: _tagColors,
+          navigationDrawer: widget.navigationDrawer,
           onTagColorsChanged: _updateTagColors,
           reminderStorage: _reminderStorage,
           onDuplicate: _duplicateDraft,
@@ -397,7 +402,22 @@ class _NotebookDetailScreenState extends State<NotebookDetailScreen> {
     final notebookAccent = notebookAccentColor(theme, _notebook.colorValue);
 
     return Scaffold(
+      drawer: widget.navigationDrawer,
       appBar: AppBar(
+        leadingWidth: widget.navigationDrawer == null ? null : 104,
+        leading: widget.navigationDrawer == null
+            ? null
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const AppNavigationMenuButton(),
+                  IconButton(
+                    tooltip: 'Back',
+                    onPressed: () => Navigator.of(context).maybePop(),
+                    icon: const Icon(Icons.arrow_back_rounded),
+                  ),
+                ],
+              ),
         title: Row(
           children: [
             Icon(

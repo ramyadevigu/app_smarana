@@ -59,6 +59,7 @@ class CalendarScreen extends StatefulWidget {
     this.viewMode = CalendarViewMode.month,
     this.onViewModeChanged,
     this.appMenu,
+    this.navigationDrawer,
   });
 
   final ReminderStorage? storage;
@@ -66,6 +67,7 @@ class CalendarScreen extends StatefulWidget {
   final CalendarViewMode viewMode;
   final ValueChanged<CalendarViewMode>? onViewModeChanged;
   final Widget? appMenu;
+  final Widget? navigationDrawer;
 
   @override
   State<CalendarScreen> createState() => _CalendarScreenState();
@@ -474,8 +476,11 @@ class _CalendarScreenState extends State<CalendarScreen>
   Future<void> _openAddReminder() async {
     final reminder = await Navigator.of(context).push<Reminder>(
       MaterialPageRoute<Reminder>(
-        builder: (_) =>
-            AddReminderScreen(storage: _storage, initialDate: _selectedDate),
+        builder: (_) => AddReminderScreen(
+          storage: _storage,
+          initialDate: _selectedDate,
+          navigationDrawer: widget.navigationDrawer,
+        ),
       ),
     );
     if (reminder != null && mounted) {
@@ -486,8 +491,11 @@ class _CalendarScreenState extends State<CalendarScreen>
   Future<void> _openEditReminder(Reminder reminder) async {
     final updatedReminder = await Navigator.of(context).push<Reminder>(
       MaterialPageRoute<Reminder>(
-        builder: (_) =>
-            AddReminderScreen(reminder: reminder, storage: _storage),
+        builder: (_) => AddReminderScreen(
+          reminder: reminder,
+          storage: _storage,
+          navigationDrawer: widget.navigationDrawer,
+        ),
       ),
     );
     if (updatedReminder != null && mounted) {
@@ -552,6 +560,20 @@ class _CalendarScreenState extends State<CalendarScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      drawer: widget.navigationDrawer,
+      appBar: _isLoading || _hasLoadError
+          ? AppBar(
+              title: const Text('Calendar'),
+              leading: Builder(
+                builder: (context) => IconButton(
+                  key: const ValueKey('global-navigation-button'),
+                  tooltip: 'Open navigation menu',
+                  onPressed: () => Scaffold.of(context).openDrawer(),
+                  icon: const Icon(Icons.menu_rounded),
+                ),
+              ),
+            )
+          : null,
       body: SafeArea(child: _buildBody(context)),
       floatingActionButton: FloatingActionButton(
         heroTag: 'calendar-add-reminder',
@@ -746,37 +768,207 @@ class _CalendarScreenState extends State<CalendarScreen>
   }
 
   Widget _buildMonthView(BuildContext context, Key key) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final gridHeight = (constraints.maxHeight * 0.5)
+            .clamp(260.0, 360.0)
+            .toDouble();
+        const selectedContentMinimumHeight = 180.0;
+        final minimumContentHeight =
+            26 + gridHeight + selectedContentMinimumHeight;
+        final contentHeight = constraints.maxHeight < minimumContentHeight
+            ? minimumContentHeight
+            : constraints.maxHeight;
+        return SingleChildScrollView(
+          key: key,
+          child: SizedBox(
+            height: contentHeight,
+            child: Column(
+              children: [
+                _buildWeekdayHeader(context),
+                SizedBox(
+                  height: gridHeight,
+                  child: _buildMonthSwipeRegion(
+                    context,
+                    month: _displayedMonth,
+                    buildMonth: (month, selectedDate, isPreview) {
+                      final grid = _buildMonthGridCard(
+                        context,
+                        monthOnly: true,
+                        monthContext: month,
+                        selectedDateContext: selectedDate,
+                        occurrencesByDateContext: _occurrencesByDate,
+                        exposeGridKey: !isPreview,
+                        transparentSurface: true,
+                        key: ValueKey(
+                          'calendar-month-${month.year}-${month.month}',
+                        ),
+                      );
+                      if (isPreview) {
+                        return grid;
+                      }
+                      return AnimatedSwitcher(
+                        duration: _skipNextMonthSwitcherTransition
+                            ? Duration.zero
+                            : AppMotion.resolve(context, AppMotion.screen),
+                        switchInCurve: Curves.easeOutCubic,
+                        switchOutCurve: Curves.easeInCubic,
+                        transitionBuilder: _buildMonthTransition,
+                        child: grid,
+                      );
+                    },
+                  ),
+                ),
+                Expanded(child: _buildSelectedDayContent(context)),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSelectedDayContent(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final occurrences = _occurrencesFor(_selectedDate);
+    if (occurrences.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+          child: Column(
+            key: const ValueKey('calendar-empty-day'),
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.calendar_month_outlined,
+                size: 56,
+                color: colors.primary.withValues(alpha: 0.64),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'You have a free day',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Take it easy',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: colors.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final countLabel =
+        '${occurrences.length} ${occurrences.length == 1 ? 'reminder' : 'reminders'}';
     return Column(
-      key: key,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _buildWeekdayHeader(context),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(4, 8, 4, 4),
+          child: Text(
+            countLabel,
+            key: const ValueKey('calendar-selected-day-count'),
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: colors.onSurfaceVariant,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
         Expanded(
-          child: _buildMonthSwipeRegion(
-            context,
-            month: _displayedMonth,
-            buildMonth: (month, selectedDate, isPreview) {
-              final card = _buildMonthGridCard(
-                context,
-                monthOnly: true,
-                monthContext: month,
-                selectedDateContext: selectedDate,
-                occurrencesByDateContext: _occurrencesByDate,
-                exposeGridKey: !isPreview,
-                transparentSurface: true,
-                tapOpensDay: true,
-                key: ValueKey('calendar-month-${month.year}-${month.month}'),
+          child: ListView.separated(
+            key: const ValueKey('calendar-selected-day-events'),
+            padding: const EdgeInsets.fromLTRB(2, 0, 2, 80),
+            itemCount: occurrences.length,
+            separatorBuilder: (context, index) => Divider(
+              height: 1,
+              indent: 72,
+              color: colors.outlineVariant.withValues(alpha: 0.4),
+            ),
+            itemBuilder: (context, index) {
+              final occurrence = occurrences[index];
+              final reminder = occurrence.reminder;
+              final dark = theme.brightness == Brightness.dark;
+              final reminderColor = CalendarColors.forReminder(reminder.id)
+                  .foreground(dark);
+              final isAlarm =
+                  reminder.notificationMode ==
+                  ReminderNotificationMode.alarmAndNotification;
+              final time = MaterialLocalizations.of(context).formatTimeOfDay(
+                TimeOfDay.fromDateTime(occurrence.dateTime),
+                alwaysUse24HourFormat: true,
               );
-              if (isPreview) {
-                return card;
-              }
-              return AnimatedSwitcher(
-                duration: _skipNextMonthSwitcherTransition
-                    ? Duration.zero
-                    : AppMotion.resolve(context, AppMotion.screen),
-                switchInCurve: Curves.easeOutCubic,
-                switchOutCurve: Curves.easeInCubic,
-                transitionBuilder: _buildMonthTransition,
-                child: card,
+              final recurrence =
+                  reminder.recurrenceRule.type != RecurrenceType.none;
+
+              return Semantics(
+                key: ValueKey(
+                  'calendar-selected-reminder-${reminder.id}-'
+                  '${occurrence.dateTime.day}',
+                ),
+                button: true,
+                label:
+                    '${isAlarm ? 'Alarm' : 'Reminder'}, $time, '
+                    '${reminder.title}',
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () => _openEditReminder(reminder),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 11,
+                      ),
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            width: 56,
+                            child: Text(
+                              time,
+                              style: theme.textTheme.labelMedium?.copyWith(
+                                color: colors.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                          Icon(
+                            isAlarm
+                                ? Icons.alarm_outlined
+                                : Icons.notifications_none_outlined,
+                            size: 19,
+                            color: reminderColor,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              reminder.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodyMedium,
+                            ),
+                          ),
+                          if (recurrence)
+                            Padding(
+                              padding: const EdgeInsets.only(left: 8),
+                              child: Icon(
+                                Icons.repeat_rounded,
+                                size: 16,
+                                color: colors.onSurfaceVariant,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
               );
             },
           ),
@@ -1748,91 +1940,73 @@ class _CalendarScreenState extends State<CalendarScreen>
 
   Widget _buildCalendarHeader(BuildContext context) {
     final localizations = MaterialLocalizations.of(context);
-    return PremiumSurface(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      radius: AppRadius.compactCard,
-      elevation: AppElevation.subtle,
-      child: SizedBox(
-        height: 48,
-        child: Row(
-          children: [
-            if (_activeViewMode == CalendarViewMode.week ||
-                _activeViewMode == CalendarViewMode.day)
-              IconButton(
-                key: const ValueKey('calendar-hierarchy-back'),
-                tooltip: _activeViewMode == CalendarViewMode.day
-                    ? 'Back to Week'
-                    : 'Back to Month',
-                visualDensity: VisualDensity.compact,
-                onPressed: () => _selectViewMode(
-                  _activeViewMode == CalendarViewMode.day
-                      ? CalendarViewMode.week
-                      : CalendarViewMode.month,
-                ),
-                icon: const Icon(Icons.chevron_left),
+    final monthTitle = _activeViewMode == CalendarViewMode.year
+        ? '${_displayedMonth.year}'
+        : _calendarMonthNames[_displayedMonth.month - 1];
+    return SizedBox(
+      height: 48,
+      child: Row(
+        children: [
+          Builder(
+            builder: (context) => IconButton(
+              key: const ValueKey('global-navigation-button'),
+              tooltip: 'Open navigation menu',
+              visualDensity: VisualDensity.compact,
+              onPressed: () => Scaffold.of(context).openDrawer(),
+              icon: const Icon(Icons.menu_rounded),
+            ),
+          ),
+          if (_activeViewMode == CalendarViewMode.week ||
+              _activeViewMode == CalendarViewMode.day)
+            IconButton(
+              key: const ValueKey('calendar-hierarchy-back'),
+              tooltip: _activeViewMode == CalendarViewMode.day
+                  ? 'Back to Week'
+                  : 'Back to Month',
+              visualDensity: VisualDensity.compact,
+              onPressed: () => _selectViewMode(
+                _activeViewMode == CalendarViewMode.day
+                    ? CalendarViewMode.week
+                    : CalendarViewMode.month,
               ),
-            Expanded(
-              child: Semantics(
-                button: true,
-                label: _activeViewMode == CalendarViewMode.year
-                    ? 'Choose year ${_displayedMonth.year}'
-                    : 'Choose ${localizations.formatMonthYear(_displayedMonth)}',
-                child: InkWell(
-                  key: const ValueKey('calendar-select-date'),
-                  borderRadius: BorderRadius.circular(8),
-                  onTap: _pickDate,
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: AnimatedSwitcher(
-                      duration: AppMotion.resolve(
-                        context,
-                        AppMotion.interaction,
+              icon: const Icon(Icons.chevron_left),
+            ),
+          Expanded(
+            child: Semantics(
+              button: true,
+              label: _activeViewMode == CalendarViewMode.year
+                  ? 'Choose year ${_displayedMonth.year}'
+                  : 'Choose ${localizations.formatMonthYear(_displayedMonth)}',
+              child: InkWell(
+                key: const ValueKey('calendar-select-date'),
+                borderRadius: BorderRadius.circular(8),
+                onTap: _pickDate,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: AnimatedSwitcher(
+                    duration: AppMotion.resolve(context, AppMotion.interaction),
+                    child: Text(
+                      monthTitle,
+                      key: ValueKey(
+                        'calendar-month-title-${_displayedMonth.year}-'
+                        '${_displayedMonth.month}',
                       ),
-                      child: Text.rich(
-                        TextSpan(
-                          children: _activeViewMode == CalendarViewMode.year
-                              ? [TextSpan(text: '${_displayedMonth.year}')]
-                              : [
-                                  TextSpan(
-                                    text:
-                                        _calendarMonthNames[_displayedMonth
-                                                .month -
-                                            1],
-                                  ),
-                                  TextSpan(
-                                    text: ' ${_displayedMonth.year}',
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .labelMedium
-                                        ?.copyWith(
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .onSurfaceVariant,
-                                        ),
-                                  ),
-                                ],
-                        ),
-                        key: ValueKey(
-                          'calendar-month-title-${_displayedMonth.year}-'
-                          '${_displayedMonth.month}',
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleLarge
-                            ?.copyWith(fontWeight: FontWeight.w700),
-                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleMedium
+                          ?.copyWith(fontSize: 21, fontWeight: FontWeight.w600),
                     ),
                   ),
                 ),
               ),
             ),
-            CalendarViewSelector(
-              selectedMode: _activeViewMode,
-              onSelected: _selectViewMode,
-            ),
-            _buildMoreMenu(),
-          ],
-        ),
+          ),
+          CalendarViewSelector(
+            selectedMode: _activeViewMode,
+            onSelected: _selectViewMode,
+          ),
+          _buildMoreMenu(),
+        ],
       ),
     );
   }
@@ -1902,22 +2076,20 @@ class _CalendarScreenState extends State<CalendarScreen>
     const sundayFirstIndexes = [0, 1, 2, 3, 4, 5, 6];
     final style = Theme.of(context).textTheme.labelSmall?.copyWith(
       color: Theme.of(context).colorScheme.onSurfaceVariant,
-      fontWeight: FontWeight.w700,
+      fontWeight: FontWeight.w500,
     );
     return SizedBox(
-      height: compact ? 18 : 28,
+      height: compact ? 18 : 26,
       child: Row(
         children: [
           for (var index = 0; index < sundayFirstIndexes.length; index++)
             Expanded(
               child: Center(
                 child: Text(
-                  localizations.narrowWeekdays[sundayFirstIndexes[index]],
-                  style: style?.copyWith(
-                    color: index == 0 || index == 6
-                        ? Theme.of(context).colorScheme.tertiary
-                        : style.color,
-                  ),
+                  compact
+                      ? localizations.narrowWeekdays[sundayFirstIndexes[index]]
+                      : _calendarShortWeekdayNames[index],
+                  style: style?.copyWith(fontSize: compact ? 7 : 12),
                 ),
               ),
             ),
@@ -1944,50 +2116,54 @@ class _CalendarScreenState extends State<CalendarScreen>
       builder: (context, constraints) {
         final cellCount = twoWeekPreview ? 14 : _monthGridCellCount();
         final rowCount = cellCount ~/ 7;
-        final surfacePadding = compact ? 2.0 : 4.0;
+        final surfacePadding = transparentSurface
+            ? 0.0
+            : compact
+            ? 2.0
+            : 4.0;
         final cellExtent =
             (constraints.maxHeight - surfacePadding * 2) / rowCount;
         final firstGridDate = twoWeekPreview
             ? _weekStart(_selectedDate).subtract(const Duration(days: 7))
             : _monthGridStartDate(monthContext ?? _displayedMonth);
+        final grid = GridView.builder(
+          key: ValueKey(
+            twoWeekPreview
+                ? 'calendar-week-preview'
+                : exposeGridKey
+                ? 'calendar-month-grid'
+                : 'calendar-month-grid-preview',
+          ),
+          padding: EdgeInsets.zero,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: cellCount,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 7,
+            mainAxisExtent: cellExtent,
+          ),
+          itemBuilder: (context, index) {
+            final date = firstGridDate.add(Duration(days: index));
+            return _buildDateCell(
+              context,
+              date,
+              monthOnly: monthOnly,
+              compact: compact,
+              monthContext: monthContext,
+              selectedDateContext: selectedDateContext,
+              occurrencesByDateContext: occurrencesByDateContext,
+              eventAreaHeight: cellExtent * 0.2,
+              tapOpensDay: tapOpensDay,
+            );
+          },
+        );
+        if (transparentSurface) {
+          return grid;
+        }
         return PremiumSurface(
           padding: EdgeInsets.all(surfacePadding),
-          color: transparentSurface ? Colors.transparent : null,
-          borderColor: transparentSurface ? Colors.transparent : null,
-          radius: transparentSurface ? 0 : AppRadius.section,
-          elevation: transparentSurface
-              ? AppElevation.flat
-              : AppElevation.subtle,
-          child: GridView.builder(
-            key: ValueKey(
-              twoWeekPreview
-                  ? 'calendar-week-preview'
-                  : exposeGridKey
-                  ? 'calendar-month-grid'
-                  : 'calendar-month-grid-preview',
-            ),
-            padding: EdgeInsets.zero,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: cellCount,
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 7,
-              mainAxisExtent: cellExtent,
-            ),
-            itemBuilder: (context, index) {
-              final date = firstGridDate.add(Duration(days: index));
-              return _buildDateCell(
-                context,
-                date,
-                monthOnly: monthOnly,
-                compact: compact,
-                monthContext: monthContext,
-                selectedDateContext: selectedDateContext,
-                occurrencesByDateContext: occurrencesByDateContext,
-                eventAreaHeight: cellExtent * 0.2,
-                tapOpensDay: tapOpensDay,
-              );
-            },
-          ),
+          radius: AppRadius.section,
+          elevation: AppElevation.subtle,
+          child: grid,
         );
       },
     );
@@ -2124,8 +2300,8 @@ class _CalendarScreenState extends State<CalendarScreen>
     final markerExtent = compact
         ? 11.0
         : eventAreaHeight <= 12
-        ? 24.0
-        : 32.0;
+        ? (eventAreaHeight * 3.6).clamp(20.0, 34.0).toDouble()
+        : 36.0;
     final dateColor = !inDisplayedMonth
         ? colors.onSurfaceVariant.withValues(alpha: 0.45)
         : selected
@@ -2212,7 +2388,7 @@ class _CalendarScreenState extends State<CalendarScreen>
                             fontWeight: selected || today
                                 ? FontWeight.w700
                                 : FontWeight.w500,
-                            fontSize: compact ? 7 : null,
+                            fontSize: compact ? 7 : 16,
                             height: compact ? 1 : null,
                           ),
                   child: Text(
@@ -2301,7 +2477,8 @@ class _CalendarScreenState extends State<CalendarScreen>
     if (occurrences.isEmpty) {
       return const SizedBox.expand();
     }
-    if (compact) {
+    final count = occurrences.length;
+    if (count <= 3) {
       return Center(
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -2310,8 +2487,8 @@ class _CalendarScreenState extends State<CalendarScreen>
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 1),
                 child: Container(
-                  width: 3,
-                  height: 3,
+                  width: compact ? 2 : 3,
+                  height: compact ? 2 : 3,
                   decoration: BoxDecoration(
                     color: CalendarColors.forReminder(occurrence.reminder.id)
                         .foreground(theme.brightness == Brightness.dark),
@@ -2323,46 +2500,17 @@ class _CalendarScreenState extends State<CalendarScreen>
         ),
       );
     }
-    final count = occurrences.length;
-    final label = '$count ${count == 1 ? 'reminder' : 'reminders'}';
-    if (eventAreaHeight <= 12) {
-      return Center(
-        child: Text(
-          '$count',
-          maxLines: 1,
-          style: theme.textTheme.labelSmall?.copyWith(
-            fontSize: 8,
-            height: 1,
-            color: theme.colorScheme.onSurfaceVariant,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      );
-    }
-    return ClipRect(
-      child: Center(
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surfaceContainerHighest.withValues(
-              alpha: 0.72,
-            ),
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: Text(
-            label,
-            key: ValueKey('calendar-month-event-count-$count'),
-            maxLines: 1,
-            softWrap: false,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: theme.textTheme.labelSmall?.copyWith(
-              fontSize: 8,
-              height: 1,
-              color: theme.colorScheme.onSurfaceVariant,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
+
+    return Center(
+      child: Text(
+        '$count',
+        key: ValueKey('calendar-month-event-count-$count'),
+        maxLines: 1,
+        style: theme.textTheme.labelSmall?.copyWith(
+          fontSize: compact || eventAreaHeight < 10 ? 7 : 9,
+          height: 1,
+          color: theme.colorScheme.onSurfaceVariant,
+          fontWeight: FontWeight.w600,
         ),
       ),
     );

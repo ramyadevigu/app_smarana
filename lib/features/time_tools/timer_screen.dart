@@ -8,9 +8,10 @@ import '../../theme/app_design_tokens.dart';
 import '../../theme/premium_surface.dart';
 
 class TimerScreen extends StatefulWidget {
-  const TimerScreen({super.key, required this.appMenu});
+  const TimerScreen({super.key, required this.appMenu, this.navigationDrawer});
 
   final Widget appMenu;
+  final Widget? navigationDrawer;
 
   @override
   State<TimerScreen> createState() => _TimerScreenState();
@@ -203,7 +204,19 @@ class _TimerScreenState extends State<TimerScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Timers'), actions: [widget.appMenu]),
+      drawer: widget.navigationDrawer,
+      appBar: AppBar(
+        title: const Text('Timers'),
+        leading: Builder(
+          builder: (context) => IconButton(
+            key: const ValueKey('global-navigation-button'),
+            tooltip: 'Open navigation menu',
+            onPressed: () => Scaffold.of(context).openDrawer(),
+            icon: const Icon(Icons.menu_rounded),
+          ),
+        ),
+        actions: [widget.appMenu],
+      ),
       body: SafeArea(
         child: _isLoading
             ? const Center(child: CircularProgressIndicator())

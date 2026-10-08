@@ -6,9 +6,10 @@ import '../services/google_auth_service.dart';
 import '../widgets/google_profile_avatar.dart';
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key, required this.user});
+  const ProfileScreen({super.key, required this.user, this.navigationDrawer});
 
   final User user;
+  final Widget? navigationDrawer;
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -55,7 +56,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Profile')),
+      drawer: widget.navigationDrawer,
+      appBar: AppBar(
+        leadingWidth: widget.navigationDrawer == null ? null : 104,
+        title: const Text('Profile'),
+        leading: widget.navigationDrawer == null
+            ? null
+            : SizedBox(
+                width: 104,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Builder(
+                      builder: (context) => IconButton(
+                        key: const ValueKey('global-navigation-button'),
+                        tooltip: 'Open navigation menu',
+                        onPressed: () => Scaffold.of(context).openDrawer(),
+                        icon: const Icon(Icons.menu_rounded),
+                      ),
+                    ),
+                    if (Navigator.of(context).canPop())
+                      IconButton(
+                        tooltip: 'Back',
+                        onPressed: () => Navigator.of(context).maybePop(),
+                        icon: const Icon(Icons.arrow_back_rounded),
+                      ),
+                  ],
+                ),
+              ),
+      ),
       body: StreamBuilder<User?>(
         stream: GoogleAuthService.instance.authStateChanges,
         initialData: GoogleAuthService.instance.currentUser ?? widget.user,

@@ -23,6 +23,7 @@ class SettingsScreen extends StatefulWidget {
     this.selectedAccentColor = defaultAccentColor,
     this.onAccentColorChanged,
     this.preferencesStore,
+    this.navigationDrawer,
   });
 
   final ThemeMode selectedThemeMode;
@@ -32,6 +33,7 @@ class SettingsScreen extends StatefulWidget {
   final Color selectedAccentColor;
   final Future<void> Function(Color)? onAccentColorChanged;
   final ReminderPreferencesStore? preferencesStore;
+  final Widget? navigationDrawer;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -227,17 +229,54 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Widget? _navigationLeading(BuildContext context) {
+    if (widget.navigationDrawer == null) return null;
+    return SizedBox(
+      width: 104,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Builder(
+            builder: (context) => IconButton(
+              key: const ValueKey('global-navigation-button'),
+              tooltip: 'Open navigation menu',
+              onPressed: () => Scaffold.of(context).openDrawer(),
+              icon: const Icon(Icons.menu_rounded),
+            ),
+          ),
+          if (Navigator.of(context).canPop())
+            IconButton(
+              key: const ValueKey('settings-back-button'),
+              tooltip: 'Back',
+              onPressed: () => Navigator.of(context).maybePop(),
+              icon: const Icon(Icons.arrow_back_rounded),
+            ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Settings')),
+        drawer: widget.navigationDrawer,
+        appBar: AppBar(
+          leadingWidth: widget.navigationDrawer == null ? null : 104,
+          title: const Text('Settings'),
+          leading: _navigationLeading(context),
+        ),
         body: const Center(child: CircularProgressIndicator()),
       );
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
+      drawer: widget.navigationDrawer,
+      appBar: AppBar(
+        leadingWidth: widget.navigationDrawer == null ? null : 104,
+        title: const Text('Settings'),
+        leading: _navigationLeading(context),
+      ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
         children: [

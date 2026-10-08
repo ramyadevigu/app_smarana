@@ -11,12 +11,29 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:app_smarana/app/app.dart';
 import 'package:app_smarana/features/calender/calender_screen.dart';
 import 'package:app_smarana/features/notes/notes_screen.dart';
+import 'package:app_smarana/features/my_day/my_day_screen.dart';
 import 'package:app_smarana/features/reminders/reminders_screen.dart';
 import 'package:app_smarana/features/time_tools/stopwatch_screen.dart';
 import 'package:app_smarana/features/time_tools/timer_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  testWidgets('global drawer navigates to My Day', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(const AppSmarana());
+    for (var frame = 0; frame < 6; frame++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    await tester.tap(find.byKey(const ValueKey('global-navigation-button')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('navigation-myDay')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('navigation-myDay')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(MyDayScreen), findsOneWidget);
+  });
+
   testWidgets('preserves tab state while switching destinations', (
     WidgetTester tester,
   ) async {
@@ -45,12 +62,19 @@ void main() {
 
     expect(find.byType(CalendarScreen), findsOneWidget);
     expect(find.byType(RemindersScreen), findsNothing);
-    expect(find.byType(NavigationDestination), findsNWidgets(5));
+    expect(find.byType(NavigationDestination), findsNWidgets(6));
     final destinations = tester
         .widgetList<NavigationDestination>(find.byType(NavigationDestination))
         .map((destination) => destination.label)
         .toList();
-    expect(destinations, ['Calendar', 'Notes', 'Alarms', 'Stopwatch', 'Timer']);
+    expect(destinations, [
+      'Calendar',
+      'My Day',
+      'Notes',
+      'Alarms',
+      'Stopwatch',
+      'Timer',
+    ]);
     final navigationBar = tester.widget<NavigationBar>(
       find.byType(NavigationBar),
     );
@@ -66,6 +90,7 @@ void main() {
     );
     for (final key in [
       'nav-calendar',
+      'nav-my-day',
       'nav-notes',
       'nav-alarms',
       'nav-stopwatch',
@@ -90,7 +115,7 @@ void main() {
     await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();
     expect(find.text('Appearance'), findsOneWidget);
-    await tester.pageBack();
+    await tester.tap(find.byKey(const ValueKey('settings-back-button')));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const ValueKey('nav-notes')));

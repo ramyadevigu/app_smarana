@@ -18,6 +18,16 @@ void main() {
     );
   });
 
+  test('default theme uses black and white in both brightness modes', () {
+    final lightTheme = buildLightTheme();
+    final darkTheme = buildDarkTheme();
+
+    expect(lightTheme.colorScheme.primary, Colors.black);
+    expect(lightTheme.colorScheme.onPrimary, Colors.white);
+    expect(darkTheme.colorScheme.primary, Colors.white);
+    expect(darkTheme.colorScheme.onPrimary, Colors.black);
+  });
+
   testWidgets('component motion respects reduced-motion preferences', (
     tester,
   ) async {

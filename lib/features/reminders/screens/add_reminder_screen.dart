@@ -6,6 +6,7 @@ import '../models/reminder.dart';
 import '../services/reminder_storage.dart';
 import '../../../services/notification_service.dart';
 import '../../settings/services/reminder_preferences_store.dart';
+import '../../../widgets/app_navigation_drawer.dart';
 
 const _monthLabels = [
   'January',
@@ -27,6 +28,7 @@ class AddReminderScreen extends StatefulWidget {
   final ReminderStorage? storage;
   final ReminderPreferencesStore? preferencesStore;
   final DateTime? initialDate;
+  final Widget? navigationDrawer;
 
   const AddReminderScreen({
     super.key,
@@ -34,6 +36,7 @@ class AddReminderScreen extends StatefulWidget {
     this.storage,
     this.preferencesStore,
     this.initialDate,
+    this.navigationDrawer,
   });
 
   bool get isEditing => reminder != null;
@@ -710,15 +713,28 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
     return Form(
       key: _formKey,
       child: Scaffold(
+        drawer: widget.navigationDrawer,
         appBar: AppBar(
           toolbarHeight: 56,
-          leading: IconButton(
-            tooltip: 'Back',
-            onPressed: () => Navigator.of(context).maybePop(),
-            icon: const Icon(Icons.arrow_back_rounded),
-          ),
+          leadingWidth: widget.navigationDrawer == null ? 52 : 104,
+          leading: widget.navigationDrawer == null
+              ? IconButton(
+                  tooltip: 'Back',
+                  onPressed: () => Navigator.of(context).maybePop(),
+                  icon: const Icon(Icons.arrow_back_rounded),
+                )
+              : Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const AppNavigationMenuButton(),
+                    IconButton(
+                      tooltip: 'Back',
+                      onPressed: () => Navigator.of(context).maybePop(),
+                      icon: const Icon(Icons.arrow_back_rounded),
+                    ),
+                  ],
+                ),
           title: const SizedBox.shrink(),
-          leadingWidth: 52,
           actions: [
             IconButton(
               key: const ValueKey('save-reminder'),

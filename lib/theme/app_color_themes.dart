@@ -8,6 +8,7 @@ class AppColorTheme {
 }
 
 const List<AppColorTheme> appColorThemes = [
+  AppColorTheme(name: 'Black & White', primary: Color(0xFF000000)),
   AppColorTheme(name: 'Blue', primary: Color(0xFF1A73E8)),
   AppColorTheme(name: 'Teal', primary: Color(0xFF008577)),
   AppColorTheme(name: 'Green', primary: Color(0xFF188038)),

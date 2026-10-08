@@ -3,9 +3,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 class StopwatchScreen extends StatefulWidget {
-  const StopwatchScreen({super.key, required this.appMenu});
+  const StopwatchScreen({
+    super.key,
+    required this.appMenu,
+    this.navigationDrawer,
+  });
 
   final Widget appMenu;
+  final Widget? navigationDrawer;
 
   @override
   State<StopwatchScreen> createState() => _StopwatchScreenState();
@@ -102,7 +107,19 @@ class _StopwatchScreenState extends State<StopwatchScreen> {
     final colorScheme = theme.colorScheme;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Stopwatch'), actions: [widget.appMenu]),
+      drawer: widget.navigationDrawer,
+      appBar: AppBar(
+        title: const Text('Stopwatch'),
+        leading: Builder(
+          builder: (context) => IconButton(
+            key: const ValueKey('global-navigation-button'),
+            tooltip: 'Open navigation menu',
+            onPressed: () => Scaffold.of(context).openDrawer(),
+            icon: const Icon(Icons.menu_rounded),
+          ),
+        ),
+        actions: [widget.appMenu],
+      ),
       body: SafeArea(
         child: Column(
           children: [

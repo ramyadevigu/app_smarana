@@ -6,6 +6,11 @@ import '../features/auth/widgets/authentication_gate.dart';
 import '../features/calender/models/calendar_view_mode.dart';
 import '../features/calender/calender_screen.dart';
 import '../features/notes/notes_screen.dart';
+import '../features/my_day/my_day_screen.dart';
+import '../features/notes/models/note_workspace_models.dart';
+import '../features/auth/services/google_auth_service.dart';
+import '../features/auth/screens/profile_screen.dart';
+import '../features/notes/services/note_workspace_storage.dart';
 import '../features/reminders/screens/add_reminder_screen.dart';
 import '../features/reminders/screens/alarm_ringing_screen.dart';
 import '../features/reminders/models/reminder.dart';
@@ -20,6 +25,7 @@ import '../theme/app_backdrop.dart';
 import '../theme/app_design_tokens.dart';
 import '../theme/app_theme.dart';
 import '../theme/theme_preference_store.dart';
+import '../widgets/app_navigation_drawer.dart';
 
 enum _AppMenuAction { settings, help, feedback }
 
@@ -334,10 +340,20 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
+  final ValueNotifier<int> _noteWorkspaceRevision = ValueNotifier(0);
   final Set<int> _visitedTabs = {0};
+  final GlobalKey<NotesScreenState> _notesScreenKey =
+      GlobalKey<NotesScreenState>();
+  final NoteWorkspaceStorage _noteWorkspaceStorage = NoteWorkspaceStorage();
   final ReminderPreferencesStore _preferencesStore =
       const ReminderPreferencesStore();
   CalendarViewMode _calendarViewMode = CalendarViewMode.month;
+
+  @override
+  void dispose() {
+    _noteWorkspaceRevision.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -368,7 +384,7 @@ class _HomeScreenState extends State<HomeScreen> {
           constraints: const BoxConstraints(maxWidth: 1280),
           child: IndexedStack(
             index: _currentIndex,
-            children: List<Widget>.generate(5, _buildTab),
+            children: List<Widget>.generate(6, _buildTab),
           ),
         ),
       ),
@@ -392,6 +408,15 @@ class _HomeScreenState extends State<HomeScreen> {
               color: colorScheme.primary,
             ),
             label: 'Calendar',
+          ),
+          NavigationDestination(
+            key: ValueKey('nav-my-day'),
+            icon: Icon(Icons.wb_sunny_outlined),
+            selectedIcon: Icon(
+              Icons.wb_sunny_rounded,
+              color: colorScheme.primary,
+            ),
+            label: 'My Day',
           ),
           NavigationDestination(
             key: ValueKey('nav-notes'),
@@ -438,21 +463,159 @@ class _HomeScreenState extends State<HomeScreen> {
         viewMode: _calendarViewMode,
         onViewModeChanged: _changeCalendarViewMode,
         appMenu: _buildAppMenu(),
+        navigationDrawer: _buildNavigationDrawer(
+          AppNavigationDestination.calendar,
+        ),
       ),
-      1 => NotesScreen(
+      1 => MyDayScreen(
         appMenu: _buildAppMenu(),
+        navigationDrawer: _buildNavigationDrawer(
+          AppNavigationDestination.myDay,
+        ),
+      ),
+      2 => NotesScreen(
+        key: _notesScreenKey,
+        appMenu: _buildAppMenu(),
+        navigationDrawer: _buildNavigationDrawer(
+          AppNavigationDestination.notes,
+        ),
         onBackToSmarana: _returnToCalendar,
-        onNavigateToTab: _navigateToTab,
+        onWorkspaceChanged: _refreshNoteWorkspace,
         onOpenSettings: () => _handleAppMenuAction(_AppMenuAction.settings),
         onOpenHelp: () => _handleAppMenuAction(_AppMenuAction.help),
         onOpenFeedback: () => _handleAppMenuAction(_AppMenuAction.feedback),
       ),
-      2 => RemindersScreen(title: 'Alarms', appMenu: _buildAppMenu()),
-      3 => StopwatchScreen(appMenu: _buildAppMenu()),
-      4 => TimerScreen(appMenu: _buildAppMenu()),
+      3 => RemindersScreen(
+        title: 'Alarms',
+        appMenu: _buildAppMenu(),
+        navigationDrawer: _buildNavigationDrawer(
+          AppNavigationDestination.reminders,
+        ),
+      ),
+      4 => StopwatchScreen(
+        appMenu: _buildAppMenu(),
+        navigationDrawer: _buildNavigationDrawer(
+          AppNavigationDestination.stopwatch,
+        ),
+      ),
+      5 => TimerScreen(
+        appMenu: _buildAppMenu(),
+        navigationDrawer: _buildNavigationDrawer(
+          AppNavigationDestination.timer,
+        ),
+      ),
       _ => const SizedBox.shrink(),
     };
     return TickerMode(enabled: index == _currentIndex, child: tab);
+  }
+
+  Widget _buildNavigationDrawer(AppNavigationDestination selected) {
+    return AppNavigationDrawer(
+      selectedDestination: selected,
+      workspaceStorage: _noteWorkspaceStorage,
+      workspaceChanges: _noteWorkspaceRevision,
+      onDestinationSelected: _selectNavigationDestination,
+      onNotebookSelected: _openNotebookFromDrawer,
+      onNoteSelected: _openNoteFromDrawer,
+    );
+  }
+
+  void _selectNavigationDestination(AppNavigationDestination destination) {
+    switch (destination) {
+      case AppNavigationDestination.profile:
+        final user = GoogleAuthService.instance.currentUser;
+        if (user != null) {
+          Navigator.of(context).push<void>(
+            MaterialPageRoute<void>(
+              builder: (_) => ProfileScreen(
+                user: user,
+                navigationDrawer: _buildNavigationDrawer(
+                  AppNavigationDestination.profile,
+                ),
+              ),
+            ),
+          );
+        }
+        return;
+      case AppNavigationDestination.search:
+        _showSearch();
+        return;
+      case AppNavigationDestination.settings:
+        _handleAppMenuAction(_AppMenuAction.settings);
+        return;
+      case AppNavigationDestination.calendar:
+        _navigateToTab(0);
+        return;
+      case AppNavigationDestination.myDay:
+        _navigateToTab(1);
+        return;
+      case AppNavigationDestination.notes:
+        _navigateToTab(2);
+        return;
+      case AppNavigationDestination.reminders:
+        _navigateToTab(3);
+        return;
+      case AppNavigationDestination.stopwatch:
+        _navigateToTab(4);
+        return;
+      case AppNavigationDestination.timer:
+        _navigateToTab(5);
+        return;
+    }
+  }
+
+  void _openNotebookFromDrawer(String notebookId) {
+    _navigateToTab(2);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _notesScreenKey.currentState?.openNotebookById(notebookId);
+    });
+  }
+
+  void _openNoteFromDrawer(String notebookId, NoteEntry note) {
+    _navigateToTab(2);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _notesScreenKey.currentState?.openNoteById(notebookId, note.id);
+    });
+  }
+
+  void _refreshNoteWorkspace() {
+    _noteWorkspaceRevision.value++;
+  }
+
+  Future<void> _showSearch() async {
+    final controller = TextEditingController();
+    final query = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Search notes'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textInputAction: TextInputAction.search,
+          decoration: const InputDecoration(
+            hintText: 'Search titles and note content',
+            prefixIcon: Icon(Icons.search_rounded),
+          ),
+          onSubmitted: (value) => Navigator.of(context).pop(value),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(controller.text),
+            child: const Text('Search'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (query == null || query.trim().isEmpty) return;
+    _navigateToTab(2);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _notesScreenKey.currentState?.searchFor(query.trim());
+    });
   }
 
   Widget _buildAppMenu() {
@@ -496,6 +659,9 @@ class _HomeScreenState extends State<HomeScreen> {
         await Navigator.of(context).push<void>(
           MaterialPageRoute<void>(
             builder: (_) => SettingsScreen(
+              navigationDrawer: _buildNavigationDrawer(
+                AppNavigationDestination.settings,
+              ),
               selectedThemeMode: widget.selectedThemeMode,
               selectedAccentColor: widget.selectedAccentColor,
               selectedCalendarViewMode: _calendarViewMode,
@@ -568,12 +734,20 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _navigateToTab(int index) {
-    if (index < 0 || index >= 5) {
+    if (index < 0 || index >= 6) {
       return;
     }
+    _popToHome();
     setState(() {
       _visitedTabs.add(index);
       _currentIndex = index;
     });
+  }
+
+  void _popToHome() {
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      navigator.popUntil((route) => route.isFirst);
+    }
   }
 }

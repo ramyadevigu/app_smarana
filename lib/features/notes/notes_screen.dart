@@ -9,6 +9,7 @@ import '../../../theme/app_design_tokens.dart';
 import 'models/note_workspace_models.dart';
 import 'models/rich_note_draft.dart';
 import 'screens/rich_note_editor_screen.dart';
+import 'screens/notebook_detail_screen.dart';
 import 'services/note_attachment_storage.dart';
 import 'theme/note_card_colors.dart';
 import 'theme/notebook_colors.dart';
@@ -24,8 +25,10 @@ class NotesScreen extends StatefulWidget {
   const NotesScreen({
     super.key,
     this.appMenu,
+    this.navigationDrawer,
     this.onBackToSmarana,
     this.onNavigateToTab,
+    this.onWorkspaceChanged,
     this.onOpenSettings,
     this.onOpenHelp,
     this.onOpenFeedback,
@@ -34,8 +37,10 @@ class NotesScreen extends StatefulWidget {
   });
 
   final Widget? appMenu;
+  final Widget? navigationDrawer;
   final VoidCallback? onBackToSmarana;
   final ValueChanged<int>? onNavigateToTab;
+  final VoidCallback? onWorkspaceChanged;
   final Future<void> Function()? onOpenSettings;
   final Future<void> Function()? onOpenHelp;
   final Future<void> Function()? onOpenFeedback;
@@ -43,10 +48,10 @@ class NotesScreen extends StatefulWidget {
   final NoteWorkspaceStorage? workspaceStorage;
 
   @override
-  State<NotesScreen> createState() => _NotesScreenState();
+  State<NotesScreen> createState() => NotesScreenState();
 }
 
-class _NotesScreenState extends State<NotesScreen> {
+class NotesScreenState extends State<NotesScreen> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   late final NoteWorkspaceStorage _workspaceStorage;
@@ -55,6 +60,7 @@ class _NotesScreenState extends State<NotesScreen> {
   late List<Notebook> _notebooks;
   Map<String, Reminder> _remindersById = const {};
   Map<String, NoteCardColor> _tagColors = const {};
+  Future<void>? _workspaceLoadFuture;
   bool _isLoading = true;
   String? _storageError;
   String? _selectedLabel;
@@ -90,7 +96,9 @@ class _NotesScreenState extends State<NotesScreen> {
     if (widget.initialNotebooks != null) {
       _isLoading = false;
     } else {
-      unawaited(_loadWorkspace());
+      final load = _loadWorkspace();
+      _workspaceLoadFuture = load;
+      unawaited(load);
     }
   }
 
@@ -154,6 +162,7 @@ class _NotesScreenState extends State<NotesScreen> {
   Future<bool> _persistWorkspace() async {
     try {
       await _workspaceStorage.saveWorkspace(_notebooks, tagColors: _tagColors);
+      if (mounted) widget.onWorkspaceChanged?.call();
       if (mounted && _storageError != null) {
         setState(() {
           _storageError = null;
@@ -380,6 +389,60 @@ class _NotesScreenState extends State<NotesScreen> {
 
   Future<void> _openRecentNote(RecentNoteView recentNote) async {
     await _openNoteEditor(recentNote.note);
+  }
+
+  Future<void> openNotebookById(String notebookId) async {
+    await _waitForWorkspace();
+    if (!mounted) return;
+    final notebooks = _notebooks.where((notebook) => notebook.id == notebookId);
+    if (notebooks.isEmpty) return;
+    final notebook = notebooks.first;
+    await Navigator.of(context).push<NotebookDetailResult>(
+      MaterialPageRoute<NotebookDetailResult>(
+        builder: (_) => NotebookDetailScreen(
+          notebook: notebook,
+          notebooks: _notebooks,
+          navigationDrawer: widget.navigationDrawer,
+          reminderStorage: _reminderStorage,
+          tagColors: _tagColors,
+          onTagColorsChanged: _updateTagColors,
+          onNotebookChanged: _updateNotebook,
+          onNoteChanged: _saveNote,
+          onNoteDeleted: _deleteNote,
+        ),
+      ),
+    );
+  }
+
+  Future<void> openNoteById(String notebookId, String noteId) async {
+    await _waitForWorkspace();
+    if (!mounted) return;
+    final matches = _notebooks
+        .where((notebook) => notebook.id == notebookId)
+        .expand((notebook) => notebook.notes)
+        .where((note) => note.id == noteId);
+    if (matches.isNotEmpty) {
+      await _openNoteEditor(matches.first);
+    }
+  }
+
+  Future<void> _waitForWorkspace() async {
+    if (_isLoading) await _workspaceLoadFuture;
+  }
+
+  void _retryLoadWorkspace() {
+    final load = _loadWorkspace();
+    _workspaceLoadFuture = load;
+    unawaited(load);
+  }
+
+  void searchFor(String query) {
+    _searchController.text = query;
+    _searchController.selection = TextSelection.collapsed(offset: query.length);
+    setState(() {
+      _destination = _NotesDestination.notes;
+      _selectedLabel = null;
+    });
   }
 
   Future<void> _togglePinnedNote(RecentNoteView recentNote) async {
@@ -640,6 +703,7 @@ class _NotesScreenState extends State<NotesScreen> {
           tagColors: _tagColors,
           onTagColorsChanged: _updateTagColors,
           reminderStorage: _reminderStorage,
+          navigationDrawer: widget.navigationDrawer,
           onAutosave: (snapshot) async {
             if (snapshot.title.trim().isEmpty &&
                 snapshot.plainContent.trim().isEmpty &&
@@ -715,7 +779,7 @@ class _NotesScreenState extends State<NotesScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      drawer: _buildNavigationDrawer(context),
+      drawer: widget.navigationDrawer ?? _buildNavigationDrawer(context),
       appBar: AppBar(
         automaticallyImplyLeading: false,
         leadingWidth: 52,
@@ -792,7 +856,7 @@ class _NotesScreenState extends State<NotesScreen> {
                                 ),
                                 actions: [
                                   TextButton(
-                                    onPressed: _loadWorkspace,
+                                    onPressed: _retryLoadWorkspace,
                                     child: const Text('Retry'),
                                   ),
                                 ],

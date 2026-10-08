@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'app_colors.dart';
 import 'app_design_tokens.dart';
 
-const Color defaultAccentColor = Color(0xFF4773FA);
+const Color defaultAccentColor = Color(0xFF000000);
 
 ThemeData buildLightTheme([Color accentColor = defaultAccentColor]) =>
     _buildTheme(accentColor, brightness: Brightness.light);
@@ -17,7 +17,9 @@ final ThemeData darkTheme = buildDarkTheme();
 
 ThemeData _buildTheme(Color accentColor, {required Brightness brightness}) {
   final isLight = brightness == Brightness.light;
-  final primary = accentColor;
+  final primary = accentColor == defaultAccentColor && !isLight
+      ? AppColors.white
+      : accentColor;
   final onPrimary = AppColors.highContrastForeground(primary);
   final background = isLight
       ? AppColors.lightBackground

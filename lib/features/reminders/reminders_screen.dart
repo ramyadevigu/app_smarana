@@ -9,12 +9,14 @@ class RemindersScreen extends StatefulWidget {
   final ReminderStorage? storage;
   final String title;
   final Widget? appMenu;
+  final Widget? navigationDrawer;
 
   const RemindersScreen({
     super.key,
     this.storage,
     this.title = 'Reminders',
     this.appMenu,
+    this.navigationDrawer,
   });
 
   @override
@@ -60,7 +62,10 @@ class _RemindersScreenState extends State<RemindersScreen> {
   Future<void> _openAddReminder() async {
     final Reminder? reminder = await Navigator.of(context).push<Reminder>(
       MaterialPageRoute<Reminder>(
-        builder: (_) => AddReminderScreen(storage: _storage),
+        builder: (_) => AddReminderScreen(
+          storage: _storage,
+          navigationDrawer: widget.navigationDrawer,
+        ),
       ),
     );
 
@@ -146,8 +151,11 @@ class _RemindersScreenState extends State<RemindersScreen> {
   Future<void> _openEditReminder(Reminder reminder) async {
     final updatedReminder = await Navigator.of(context).push<Reminder>(
       MaterialPageRoute<Reminder>(
-        builder: (_) =>
-            AddReminderScreen(reminder: reminder, storage: _storage),
+        builder: (_) => AddReminderScreen(
+          reminder: reminder,
+          storage: _storage,
+          navigationDrawer: widget.navigationDrawer,
+        ),
       ),
     );
 
@@ -527,7 +535,19 @@ class _RemindersScreenState extends State<RemindersScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.title), actions: [?widget.appMenu]),
+      drawer: widget.navigationDrawer,
+      appBar: AppBar(
+        title: Text(widget.title),
+        leading: Builder(
+          builder: (context) => IconButton(
+            key: const ValueKey('global-navigation-button'),
+            tooltip: 'Open navigation menu',
+            onPressed: () => Scaffold.of(context).openDrawer(),
+            icon: const Icon(Icons.menu_rounded),
+          ),
+        ),
+        actions: [?widget.appMenu],
+      ),
       body: FutureBuilder<List<Reminder>>(
         future: _reminders,
         builder: (context, snapshot) {
